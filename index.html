@@ -350,6 +350,18 @@
 
         let contadorOS = 0;
 
+        function resizeCanvas(canvas) {
+            if(!canvas) return;
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            const width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 300;
+            const height = canvas.offsetHeight || canvas.parentElement.offsetHeight || 150;
+            canvas.width = width * ratio;
+            canvas.height = height * ratio;
+            const ctx = canvas.getContext("2d");
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.scale(ratio, ratio);
+        }
+
         document.addEventListener("DOMContentLoaded", () => {
             carregarLogoDoArmazenamento();
 
@@ -357,14 +369,6 @@
                 const cTec = document.getElementById('canvasTecnico');
                 const cCli = document.getElementById('canvasCliente');
                 const cExp = document.getElementById('canvasExpandido');
-                
-                function resizeCanvas(canvas) {
-                    if(!canvas) return;
-                    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-                    canvas.width = canvas.offsetWidth * ratio;
-                    canvas.height = canvas.offsetHeight * ratio;
-                    canvas.getContext("2d").scale(ratio, ratio);
-                }
 
                 setTimeout(() => {
                     resizeCanvas(cTec); resizeCanvas(cCli);
@@ -397,6 +401,7 @@
                 const isInterno = cbServInterno ? cbServInterno.checked : false;
                 const containerHoras = document.getElementById(`containerHoras_${id}`);
                 const containerDias = document.getElementById(`containerDias_${id}`);
+                const containerReagendar = document.getElementById(`containerReagendar_${id}`);
                 
                 const reSim = document.getElementById(`reSim_${id}`);
                 const reNao = document.getElementById(`reNao_${id}`);
@@ -406,15 +411,13 @@
                     if(containerDias) containerDias.style.display = 'grid';
                     calcDias(id);
                     
-                    // Desativa o reagendamento e força "Não"
-                    if(reSim) { reSim.checked = false; reSim.disabled = true; }
-                    if(reNao) { reNao.checked = true; reNao.disabled = true; }
+                    if(containerReagendar) containerReagendar.style.display = 'none';
+                    if(reNao) reNao.checked = true;
                 } else {
                     if(containerHoras) containerHoras.style.display = 'grid';
                     if(containerDias) containerDias.style.display = 'none';
                     
-                    if(reSim) reSim.disabled = false;
-                    if(reNao) reNao.disabled = false;
+                    if(containerReagendar) containerReagendar.style.display = 'block';
                 }
             });
             atualizarVisibilidadeClienteGeral();
@@ -429,6 +432,10 @@
                     if(padCliente) padCliente.clear();
                 } else {
                     containerCliente.style.display = 'block';
+                    setTimeout(() => {
+                        const cCli = document.getElementById('canvasCliente');
+                        if(cCli) resizeCanvas(cCli);
+                    }, 50);
                 }
             }
         }
@@ -443,12 +450,7 @@
             document.body.style.overflow = 'hidden';
 
             const cExp = document.getElementById('canvasExpandido');
-            if(cExp) {
-                const ratio = Math.max(window.devicePixelRatio || 1, 1);
-                cExp.width = cExp.offsetWidth * ratio;
-                cExp.height = cExp.offsetHeight * ratio;
-                cExp.getContext("2d").scale(ratio, ratio);
-            }
+            if(cExp) resizeCanvas(cExp);
             
             if(padExpandido) {
                 padExpandido.clear();
@@ -466,7 +468,10 @@
 
         function confirmarAssinaturaExpandida() {
             const padDestino = alvoAssinaturaAtual === 'tecnico' ? padTecnico : padCliente;
+            const canvasEl = alvoAssinaturaAtual === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
+            
             if (padExpandido && padDestino) {
+                resizeCanvas(canvasEl);
                 if (padExpandido.isEmpty()) {
                     padDestino.clear();
                     if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao();
@@ -497,7 +502,14 @@
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
-            if(tabId === 'historico') carregarHistorico();
+            if(tabId === 'historico') {
+                carregarHistorico();
+            } else if(tabId === 'novaOs') {
+                setTimeout(() => {
+                    resizeCanvas(document.getElementById('canvasTecnico'));
+                    resizeCanvas(document.getElementById('canvasCliente'));
+                }, 50);
+            }
             window.scrollTo(0, 0);
         }
 
@@ -562,7 +574,7 @@
                     <input type="text" id="liberacaoObs_${id}" value="Liberado para uso, teste operacional ok" class="w-full border border-gray-300 p-2 rounded mb-3 text-sm outline-none">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                         <div><span class="font-bold block mb-1">Status:</span> <label class="mr-3"><input type="radio" name="st_${id}" id="stOk_${id}" checked> OK</label> <label><input type="radio" name="st_${id}" id="stRes_${id}"> RESTRIÇÃO</label></div>
-                        <div><span class="font-bold block mb-1">Reagendar:</span> <label class="mr-3"><input type="radio" name="re_${id}" id="reSim_${id}"> Sim</label> <label><input type="radio" name="re_${id}" id="reNao_${id}" checked> Não</label></div>
+                        <div id="containerReagendar_${id}"><span class="font-bold block mb-1">Reagendar:</span> <label class="mr-3"><input type="radio" name="re_${id}" id="reSim_${id}"> Sim</label> <label><input type="radio" name="re_${id}" id="reNao_${id}" checked> Não</label></div>
                     </div>
                 </div>
 
@@ -698,15 +710,29 @@
             document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
             if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o));
             ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
-            if(padTecnico) { padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
-            if(padCliente) { 
-                padCliente.clear(); 
-                if(doc.assinaturaCliente) { 
-                    padCliente.fromDataURL(doc.assinaturaCliente); 
-                    bloquearEdicao(); 
-                } 
-            }
-            switchTab('novaOs'); mostrarToast('Documento restaurado.');
+            
+            switchTab('novaOs');
+            
+            setTimeout(() => {
+                const cTec = document.getElementById('canvasTecnico');
+                const cCli = document.getElementById('canvasCliente');
+                
+                if(cTec && padTecnico) {
+                    resizeCanvas(cTec);
+                    padTecnico.clear();
+                    if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico);
+                }
+                if(cCli && padCliente) {
+                    resizeCanvas(cCli);
+                    padCliente.clear();
+                    if(doc.assinaturaCliente) {
+                        padCliente.fromDataURL(doc.assinaturaCliente);
+                        bloquearEdicao();
+                    }
+                }
+            }, 100);
+
+            mostrarToast('Documento restaurado.');
             atualizarVisibilidadeCamposPorBloco();
         }
 
@@ -772,9 +798,12 @@
                 cy = docOS.lastAutoTable.finalY + 6;
                 docOS.setFont("helvetica", "bold"); docOS.text("LIBERAÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
                 cy+=4; docOS.text(`OBS: ${document.getElementById(`liberacaoObs_${id}`).value}`, 15, cy);
-                cy+=5; docOS.text(`Status: ${cb('stOk_'+id)} OK  ${cb('stRes_'+id)} RESTRIÇÃO`, 15, cy); docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy);
+                
+                cy+=5; 
+                docOS.text(`Status: ${cb('stOk_'+id)} OK  ${cb('stRes_'+id)} RESTRIÇÃO`, 15, cy); 
                 
                 if (!document.getElementById(`cbServInterno_${id}`).checked) {
+                    docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy);
                     cy+=10; docOS.text(`DATA: ${document.getElementById(`dt_${id}`).value.split('-').reverse().join('/')}`, 15, cy); docOS.text(`CHEGADA: ${document.getElementById(`hc_${id}`).value}`, 75, cy); docOS.text(`SAÍDA: ${document.getElementById(`hs_${id}`).value}`, 140, cy);
                     cy+=6; docOS.text(`TOTAL HORAS: ${document.getElementById(`th_${id}`).value}`, 15, cy);
                 } else {
