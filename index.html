@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gerador de Múltiplas Ordens de Serviço - ethikSERVICES</title>
+    <title>Gerador de Múltiplas Ordens de Serviço</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,7 +13,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+    <!-- PDF.js com proteção para telemóveis -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            if (typeof pdfjsLib !== 'undefined') {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            }
+        });
+    </script>
 
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; }
@@ -21,24 +30,34 @@
         canvas.sig-canvas { touch-action: none; width: 100%; height: 100%; display: block; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .locked-input { pointer-events: none; opacity: 0.6; background-color: #e5e7eb !important; }
+        
+        .locked-input {
+            pointer-events: none;
+            opacity: 0.6;
+            background-color: #e5e7eb !important;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body class="text-gray-800">
 
     <!-- Notificação Toast -->
-    <div id="toast" class="fixed bottom-4 right-4 text-white px-6 py-3 rounded shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2 bg-gray-800">
+    <div id="toast" class="fixed bottom-4 right-4 text-white px-6 py-3 rounded shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
         <span id="toastMsg">Mensagem</span>
     </div>
 
-    <!-- Modal Apagar Tudo -->
+    <!-- Modal Confirmação (Apagar Tudo) -->
     <div id="modalConfirm" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
         <div class="bg-white p-6 rounded-lg max-w-sm w-full shadow-2xl">
             <h3 class="text-xl font-bold mb-2 text-red-600">Atenção!</h3>
-            <p class="mb-6 text-gray-600">Deseja apagar todo o histórico?</p>
+            <p class="mb-6 text-gray-600">Tem a certeza que deseja apagar todo o histórico de Ordens de Serviço salvas?</p>
             <div class="flex justify-end gap-3">
-                <button onclick="fecharModal()" class="px-4 py-2 bg-gray-200 rounded-lg font-semibold">Cancelar</button>
-                <button onclick="confirmarLimpeza()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">Apagar Tudo</button>
+                <button onclick="fecharModal()" class="px-4 py-2 bg-gray-200 rounded-lg text-gray-800 font-semibold">Cancelar</button>
+                <button onclick="confirmarLimpeza()" class="px-4 py-2 bg-red-600 rounded-lg text-white font-semibold">Sim, apagar tudo</button>
             </div>
         </div>
     </div>
@@ -47,130 +66,161 @@
     <div id="modalExportar" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
         <div class="bg-white p-6 rounded-lg max-w-sm w-full shadow-2xl">
             <h3 class="text-xl font-bold mb-2 text-emerald-600">Salvar Backup</h3>
-            <input type="text" id="inputNomeBackup" class="w-full border px-3 py-2 rounded mb-4 text-sm" placeholder="Nome do ficheiro">
-            <div class="flex justify-end gap-3">
-                <button onclick="fecharModalExportar()" class="px-4 py-2 bg-gray-200 rounded-lg text-sm">Cancelar</button>
-                <button onclick="confirmarExportacao()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm">Baixar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal Preview PDF -->
-    <div id="modalPreviewPDF" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2">
-        <div class="bg-white rounded-lg w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden">
-            <div class="flex justify-between items-center p-3 bg-gray-50">
-                <h3 class="font-bold text-gray-800">Leitura do Documento</h3>
-                <div class="flex gap-2">
-                    <a id="linkPreviewExt" target="_blank" class="px-3 py-1.5 bg-blue-100 text-blue-700 rounded font-semibold text-xs">Download</a>
-                    <button onclick="fecharPreviewPDF()" class="px-3 py-1.5 bg-gray-800 text-white rounded font-bold text-xs">Fechar</button>
+            <p class="mb-4 text-sm text-gray-600">Escolha um nome para o seu ficheiro de backup.</p>
+            <div class="mb-6">
+                <div class="flex rounded-lg shadow-sm border border-gray-300 overflow-hidden">
+                    <input type="text" id="inputNomeBackup" class="flex-1 min-w-0 block w-full px-3 py-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm outline-none" placeholder="Ex: meu_backup">
+                    <span class="inline-flex items-center px-3 bg-gray-100 text-gray-500 text-sm font-mono border-l border-gray-300">.json</span>
                 </div>
             </div>
-            <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-300 p-2 overflow-y-auto flex flex-col items-center"></div>
+            <div class="flex justify-end gap-3">
+                <button onclick="fecharModalExportar()" class="px-4 py-2 bg-gray-200 rounded-lg text-gray-800 font-semibold text-sm">Cancelar</button>
+                <button onclick="confirmarExportacao()" class="px-4 py-2 bg-emerald-600 rounded-lg text-white font-semibold text-sm hover:bg-emerald-700">Baixar Ficheiro</button>
+            </div>
         </div>
     </div>
 
-    <!-- Modal Assinatura Expandida -->
+    <!-- Modal Pré-visualização do PDF -->
+    <div id="modalPreviewPDF" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
+        <div class="bg-white rounded-lg w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-gray-50 shrink-0">
+                <h3 class="text-base sm:text-lg font-bold text-gray-800 flex items-center gap-2">
+                    Leitura do Documento
+                </h3>
+                <div class="flex gap-2 sm:gap-3">
+                    <a id="linkPreviewExt" target="_blank" class="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg font-semibold text-xs sm:text-sm hover:bg-blue-200 flex items-center gap-1">Download</a>
+                    <button onclick="fecharPreviewPDF()" class="px-3 py-1.5 bg-gray-800 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-gray-900">Fechar</button>
+                </div>
+            </div>
+            <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-300 p-2 sm:p-6 overflow-y-auto flex flex-col items-center"></div>
+        </div>
+    </div>
+
+    <!-- Modal de Assinatura Ampliada -->
     <div id="modalAssinaturaExpandida" class="hidden fixed inset-0 bg-gray-900 z-50 flex flex-col">
-        <div class="bg-gray-800 p-4 text-white flex justify-between items-center shrink-0">
-            <h3 id="tituloModalAssinatura" class="font-bold text-lg">Área de Assinatura</h3>
-            <button onclick="fecharModalAssinatura()" class="text-white p-2 font-bold text-xl">✕</button>
+        <div class="bg-gray-800 p-4 text-white flex justify-between items-center shrink-0 shadow-md z-10">
+            <h3 id="tituloModalAssinatura" class="font-bold text-lg flex items-center gap-2">Área de Assinatura</h3>
+            <button onclick="fecharModalAssinatura()" class="text-gray-300 hover:text-white p-2">✕</button>
         </div>
         <div class="flex-1 bg-white relative w-full h-full overflow-hidden">
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                <span class="text-3xl font-bold text-gray-300 select-none">Assine Aqui</span>
+            </div>
             <canvas id="canvasExpandido" class="absolute inset-0 w-full h-full touch-none"></canvas>
         </div>
-        <div class="bg-gray-100 p-4 flex justify-between gap-3 shrink-0">
-            <button onclick="if(padExpandido) padExpandido.clear();" class="px-4 py-3 bg-red-100 text-red-600 font-bold rounded-lg w-1/3">Limpar</button>
-            <button onclick="confirmarAssinaturaExpandida()" class="px-4 py-3 bg-blue-600 text-white font-bold rounded-lg w-2/3">Confirmar</button>
+        <div class="bg-gray-100 p-4 pb-8 sm:pb-4 flex justify-between gap-3 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10">
+            <button onclick="limparPadExpandido()" class="px-4 py-3 bg-red-100 text-red-600 font-bold rounded-lg w-1/3 text-lg border border-red-200">Limpar</button>
+            <button onclick="confirmarAssinaturaExpandida()" class="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg w-2/3 text-lg shadow-md transition-colors">Confirmar</button>
         </div>
     </div>
 
     <!-- Barra de Navegação -->
-    <nav class="bg-gray-800 text-white p-3 shadow-md sticky top-0 z-40">
-        <div class="max-w-4xl mx-auto flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <div class="bg-white px-2 py-1 rounded shadow-sm">
-                    <img id="headerLogo" src="" alt="ethikSERVICES" class="h-8 object-contain" />
+    <nav class="bg-gray-800 text-white p-3 sm:p-4 shadow-md sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto flex justify-between items-center gap-2">
+            <div class="flex items-center min-w-0">
+                <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
+                    <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base font-bold text-gray-100">Multi-OS Pro</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-gray-100">Multi-OS Pro</h1>
             </div>
-            <div class="flex">
-                <button onclick="switchTab('novaOs')" class="px-3 py-1.5 bg-gray-700 rounded text-xs mr-2 font-medium">Doc. Atual</button>
-                <button onclick="switchTab('historico')" class="px-3 py-1.5 bg-gray-700 rounded text-xs font-medium">Histórico</button>
+            <div class="flex shrink-0">
+                <button onclick="switchTab('novaOs')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm mr-2 font-medium">Doc. Atual</button>
+                <button onclick="switchTab('historico')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm font-medium">Histórico</button>
             </div>
         </div>
     </nav>
 
-    <div class="max-w-4xl mx-auto p-4 mb-20">
+    <div class="max-w-4xl mx-auto p-4 mt-2 mb-20">
+        
+        <!-- FORMULÁRIO MULTI-OS -->
         <div id="novaOs" class="tab-content active">
-            <form id="osForm" class="bg-white p-4 sm:p-6 rounded-lg shadow-lg">
-                <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Ordens de Serviço - ethikSERVICES</h2>
-                <div id="listaOrdensServico" class="space-y-6"></div>
+            
+            <div id="configLogoCard" class="mb-6 bg-gradient-to-r from-emerald-50 to-green-50 p-4 sm:p-6 rounded-lg shadow-sm border border-emerald-200">
+                <h3 class="font-bold text-lg text-emerald-800 mb-1">Configuração Oficial do Logótipo</h3>
+                <p class="text-sm text-emerald-700 mb-3">Carregue a imagem <b>ethikSERVICES</b>. Ela será adicionada automaticamente a todos os documentos gerados.</p>
+                <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer bg-white border border-emerald-200 rounded p-1 shadow-sm">
+            </div>
 
-                <button type="button" onclick="adicionarBlocoOS()" class="w-full py-3 mt-4 bg-blue-50 text-blue-700 border-2 border-dashed border-blue-300 rounded-lg font-bold hover:bg-blue-100">
-                    + Adicionar Nova OS
-                </button>
+            <form id="osForm" class="bg-white p-4 sm:p-6 rounded-lg shadow-lg relative">
+                <div class="flex justify-between items-end mb-6 border-b pb-2">
+                    <h2 class="text-xl sm:text-2xl font-bold text-gray-700">Preenchimento de Ordens de Serviço</h2>
+                </div>
 
-                <div class="border-t-2 pt-6 mt-6">
-                    <div class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <div>
-                            <h4 class="font-bold text-amber-900">Conferência do Cliente</h4>
-                            <p class="text-sm text-amber-700">Ver rascunho em PDF.</p>
+                <div id="listaOrdensServico" class="space-y-8"></div>
+
+                <div class="mt-6 mb-8">
+                    <button type="button" onclick="adicionarBlocoOS()" class="w-full py-3 bg-blue-50 text-blue-700 border-2 border-dashed border-blue-300 rounded-lg font-bold text-base hover:bg-blue-100 transition-colors shadow-sm">
+                        + Adicionar Nova OS ao Documento
+                    </button>
+                </div>
+
+                <div class="border-t-2 border-gray-200 pt-6 mt-6">
+                    <div class="mb-6 p-4 sm:p-5 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
+                        <div class="text-center sm:text-left">
+                            <h4 class="font-bold text-amber-900 text-lg">Conferência do Cliente</h4>
+                            <p class="text-sm text-amber-700">Gere um rascunho do documento para o cliente ler e aprovar antes de assinar.</p>
                         </div>
-                        <button type="button" onclick="preVisualizarPDF()" id="btnPreview" class="w-full sm:w-auto px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow">
+                        <button type="button" onclick="preVisualizarPDF()" id="btnPreview" class="w-full sm:w-auto px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow-md transition-colors flex-shrink-0">
                             Ver Documento
                         </button>
                     </div>
 
-                    <h3 class="font-bold text-gray-800 mb-2">Assinaturas Finais</h3>
+                    <h3 class="font-bold text-lg text-gray-800 mb-2">Assinaturas Finais do Documento</h3>
+                    <p class="text-xs text-gray-500 mb-4">A assinatura do cliente bloqueia o formulário contra alterações.</p>
                     
-                    <div class="mb-4 bg-gray-50 p-4 rounded-lg border">
+                    <div class="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200 shadow-sm">
                         <label class="block text-sm font-bold text-gray-700 mb-1">Técnico Responsável</label>
-                        <input type="text" id="tecnico" value="Paulo Henrique Gomes" class="w-full border p-2.5 rounded mb-3 bg-white">
+                        <input type="text" id="tecnico" value="Paulo Henrique Gomes" class="w-full border border-gray-300 p-2.5 rounded mb-3 bg-white outline-none">
+                        
                         <p class="text-sm font-semibold text-gray-700 mb-2">Assinatura do Técnico:</p>
-                        <div class="canvas-container w-full h-32 relative bg-white" onclick="abrirModalAssinatura('tecnico')">
+                        <div class="canvas-container w-full h-32 sm:h-40 relative shadow-inner bg-white" onclick="abrirModalAssinatura('tecnico')">
                             <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-70">
-                                <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded text-xs font-bold">Tocar para Assinar</span>
+                                <div class="bg-blue-100/90 text-blue-800 px-4 py-2 rounded-full text-sm font-bold">Tocar para Assinar</div>
                             </div>
-                            <canvas id="canvasTecnico" class="sig-canvas pointer-events-none relative z-10"></canvas>
+                            <canvas id="canvasTecnico" class="sig-canvas pointer-events-none z-10 relative"></canvas>
                         </div>
-                        <div class="flex justify-end mt-2"><button type="button" onclick="if(padTecnico) padTecnico.clear();" class="text-red-500 text-xs font-semibold">Limpar Técnico</button></div>
+                        <div class="flex justify-end mt-2"><button type="button" onclick="limparAssinatura(padTecnico, false)" class="text-red-500 text-sm font-semibold">Limpar Técnico</button></div>
                     </div>
 
-                    <div id="secaoClienteContainer" class="mb-4 bg-gray-50 p-4 rounded-lg border">
-                        <label class="block text-sm font-bold text-gray-700 mb-1">Nome do Cliente</label>
-                        <input type="text" id="nomeClienteFinal" placeholder="Nome completo" class="w-full border p-2.5 rounded mb-3 bg-white">
-                        <div class="grid grid-cols-2 gap-2 mb-3">
-                            <input type="text" id="cargo" placeholder="Cargo" class="border p-2 rounded bg-white text-sm">
-                            <input type="text" id="setor" placeholder="Setor" class="border p-2 rounded bg-white text-sm">
+                    <div id="secaoClienteContainer" class="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200 shadow-sm">
+                        <label class="block text-sm font-bold text-gray-700 mb-1">Nome do Cliente (Assinante)</label>
+                        <input type="text" id="nomeClienteFinal" placeholder="Nome completo" class="w-full border border-gray-300 p-2.5 rounded mb-3 bg-white outline-none">
+                        <div class="grid grid-cols-2 gap-4 mb-3">
+                            <div><label class="block text-xs font-semibold text-gray-600 mb-1">Cargo</label><input type="text" id="cargo" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
+                            <div><label class="block text-xs font-semibold text-gray-600 mb-1">Setor</label><input type="text" id="setor" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
                         </div>
+                        
                         <p class="text-sm font-semibold text-gray-700 mb-2">Assinatura do Cliente:</p>
-                        <div class="canvas-container w-full h-32 relative bg-white" onclick="abrirModalAssinatura('cliente')">
+                        <div class="canvas-container w-full h-32 sm:h-40 relative shadow-inner bg-white" onclick="abrirModalAssinatura('cliente')">
                             <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-70">
-                                <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded text-xs font-bold">Tocar para Assinar</span>
+                                <div class="bg-blue-100/90 text-blue-800 px-4 py-2 rounded-full text-sm font-bold">Tocar para Assinar</div>
                             </div>
-                            <canvas id="canvasCliente" class="sig-canvas pointer-events-none relative z-10"></canvas>
+                            <canvas id="canvasCliente" class="sig-canvas pointer-events-none z-10 relative"></canvas>
                         </div>
                         <div class="flex justify-between items-center mt-2">
-                            <span id="lockStatus" class="text-xs font-bold text-gray-400">Editável</span>
-                            <button type="button" onclick="limparAssinaturaCliente()" class="text-red-500 text-xs font-bold">Limpar Cliente</button>
+                            <span id="lockStatus" class="text-xs font-bold text-gray-400">Formulário Editável</span>
+                            <button type="button" onclick="limparAssinatura(padCliente, true)" class="text-red-500 text-sm font-bold">Limpar Cliente</button>
                         </div>
                     </div>
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-3 mt-6">
-                    <button type="button" onclick="salvarDocumento()" class="w-full sm:w-1/3 bg-green-600 text-white font-bold py-3 rounded-lg shadow">💾 SALVAR O.S.</button>
-                    <button type="button" id="btnGerarPdf" onclick="gerarPDFConsolidado()" class="w-full sm:w-2/3 bg-gray-800 text-white font-bold py-3 rounded-lg shadow"><span id="btnTxt">📄 GERAR PDF</span></button>
+                    <button type="button" onclick="salvarDocumento()" class="w-full sm:w-1/3 bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg text-base shadow-xl">💾 SALVAR O.S.</button>
+                    <button type="button" id="btnGerarPdf" onclick="gerarPDFConsolidado()" class="w-full sm:w-2/3 bg-gray-800 hover:bg-gray-900 text-white font-bold py-4 rounded-lg text-base shadow-xl"><span id="btnTxt">📄 GERAR DOCUMENTO (PDF)</span></button>
                 </div>
             </form>
         </div>
 
+        <!-- HISTÓRICO -->
         <div id="historico" class="tab-content bg-white p-6 rounded-lg shadow-lg">
-            <div class="flex justify-between items-center mb-6 border-b pb-4">
-                <h2 class="text-xl font-bold text-gray-700">Histórico</h2>
-                <div class="flex gap-2">
-                    <button onclick="iniciarNovaOS()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-semibold">+ Novo</button>
-                    <button onclick="abrirModalExportar()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-semibold">Backup</button>
-                    <button onclick="abrirModal()" class="bg-red-50 text-red-600 px-3 py-1.5 rounded text-xs font-semibold border">Apagar</button>
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 border-b pb-4 gap-4">
+                <h2 class="text-2xl font-bold text-gray-700">Documentos Salvos</h2>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="iniciarNovaOS()" class="text-white bg-blue-600 px-3 py-1.5 rounded-lg text-sm font-semibold">+ Novo</button>
+                    <button onclick="abrirModalExportar()" class="text-white bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-semibold">📥 Backup</button>
+                    <label class="text-white bg-indigo-600 px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer">📤 Importar <input type="file" accept=".json" onchange="importarBackupJSON(event)" class="hidden"></label>
+                    <button onclick="resetarLogotipo()" class="text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg text-sm font-semibold border">Trocar Logo</button>
+                    <button onclick="abrirModal()" class="text-red-600 bg-red-50 px-3 py-1.5 rounded-lg text-sm font-semibold border">Apagar Tudo</button>
                 </div>
             </div>
             <div id="historicoList" class="space-y-3"></div>
@@ -179,201 +229,396 @@
 
     <script>
         let documentoAtualId = Date.now().toString();
-        let fixedLogoDataUrl = null;
+        let logoImgData = null, logoImgFormat = 'PNG', imgObject = null, objUrlPreview = null;
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
+        const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
+
+        function carregarLogoDoArmazenamento() {
+            try {
+                const logoSalvo = localStorage.getItem('oficialLogoApp');
+                if (logoSalvo) {
+                    logoImgData = logoSalvo;
+                    logoImgFormat = (logoSalvo.includes('image/jpeg') || logoSalvo.includes('image/jpg')) ? 'JPEG' : 'PNG';
+                    const img = new Image();
+                    img.src = logoSalvo;
+                    img.onload = () => {
+                        imgObject = img;
+                        const elLogo = document.getElementById('headerLogo');
+                        const elCont = document.getElementById('headerLogoContainer');
+                        const elCard = document.getElementById('configLogoCard');
+                        if(elLogo) elLogo.src = logoSalvo;
+                        if(elCont) elCont.classList.remove('hidden');
+                        if(elCard) elCard.style.display = 'none';
+                    };
+                } else {
+                    const elCard = document.getElementById('configLogoCard');
+                    const elCont = document.getElementById('headerLogoContainer');
+                    if(elCard) elCard.style.display = 'block';
+                    if(elCont) elCont.classList.add('hidden');
+                }
+            } catch(e) {}
+        }
+
+        function lerLogotipo(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    localStorage.setItem('oficialLogoApp', e.target.result);
+                    carregarLogoDoArmazenamento();
+                    mostrarToast('Logótipo gravado com sucesso!');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function resetarLogotipo() {
+            if(confirm("Deseja remover o logótipo atual?")) {
+                localStorage.removeItem('oficialLogoApp');
+                logoImgData = null; imgObject = null;
+                carregarLogoDoArmazenamento();
+                switchTab('novaOs');
+                mostrarToast('Logótipo removido.');
+            }
+        }
+
+        function obterHistoricoSalvo() {
+            try {
+                let dados = localStorage.getItem('osProData_v2');
+                if (dados) return JSON.parse(dados);
+                let legado = localStorage.getItem('osProData');
+                if (legado) { localStorage.setItem('osProData_v2', legado); return JSON.parse(legado); }
+            } catch(e) {}
+            return [];
+        }
+
+        function gravarHistoricoSalvo(historico) {
+            try { localStorage.setItem('osProData_v2', JSON.stringify(historico)); return true; } catch(e) { return false; }
+        }
+
+        function abrirModalExportar() {
+            let historico = obterHistoricoSalvo();
+            if(historico.length === 0) return mostrarToast('Nenhum documento salvo.', true);
+            document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`;
+            document.getElementById('modalExportar').classList.remove('hidden');
+        }
+
+        function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
+
+        function confirmarExportacao() {
+            let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${new Date().toISOString().split('T')[0]}`;
+            const blob = new Blob([JSON.stringify(obterHistoricoSalvo(), null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `${inputNome}.json`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            fecharModalExportar();
+            mostrarToast('Backup exportado com sucesso!');
+        }
+
+        function importarBackupJSON(event) {
+            const file = event.target.files[0]; if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importados = JSON.parse(e.target.result);
+                    if(Array.isArray(importados)) {
+                        let mapa = new Map();
+                        [...obterHistoricoSalvo(), ...importados].forEach(item => mapa.set(item.id, item));
+                        gravarHistoricoSalvo(Array.from(mapa.values()));
+                        carregarHistorico();
+                        mostrarToast('Backup importado com sucesso!');
+                    }
+                } catch(err) { mostrarToast('Ficheiro inválido.', true); }
+            };
+            reader.readAsText(file);
+        }
+
+        function mostrarToast(mensagem, isErro = false) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = mensagem;
+            toast.className = `fixed bottom-4 right-4 text-white px-6 py-3 rounded shadow-lg transition-opacity duration-300 z-50 flex items-center gap-2 ${isErro ? 'bg-red-600' : 'bg-gray-800'}`;
+            setTimeout(() => toast.classList.add('opacity-0'), 4000);
+            toast.classList.remove('opacity-0');
+        }
+
+        function abrirModal() { document.getElementById('modalConfirm').classList.remove('hidden'); }
+        function fecharModal() { document.getElementById('modalConfirm').classList.add('hidden'); }
+        function confirmarLimpeza() {
+            localStorage.removeItem('osProData_v2'); localStorage.removeItem('osProData');
+            carregarHistorico(); fecharModal(); mostrarToast('Histórico apagado.');
+        }
+
         let contadorOS = 0;
 
-        // Logótipo vetorial exato (ethikSERVICES) em alta definição
-        function gerarLogoFixo() {
-            const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 130" width="520" height="130">
-                <!-- Letra 'e' estilizada verde -->
-                <path d="M 62 15 C 33 15 12 36 12 65 C 12 94 33 115 62 115 C 82 115 97 104 105 88 L 86 78 C 81 89 73 97 62 97 C 44 97 32 83 32 65 C 32 47 44 33 62 33 C 73 33 81 40 86 50 L 105 40 C 97 24 82 15 62 15 Z" fill="#7ac142"/>
-                <path d="M 32 65 L 88 65" stroke="#7ac142" stroke-width="17" stroke-linecap="round"/>
-                <!-- Texto ethik verde -->
-                <text x="125" y="102" font-family="Arial, sans-serif" font-weight="bold" font-size="62" fill="#7ac142" letter-spacing="-1">ethik</text>
-                <!-- Texto SERVICES cinzento -->
-                <text x="290" y="102" font-family="Arial, sans-serif" font-weight="bold" font-size="62" fill="#a6a6a6" letter-spacing="-1">SERVICES</text>
-            </svg>`;
-            
-            const encodedSvg = encodeURIComponent(svgString);
-            fixedLogoDataUrl = `data:image/svg+xml;charset=utf-8,${encodedSvg}`;
-            
-            const headerLogo = document.getElementById('headerLogo');
-            if(headerLogo) headerLogo.src = fixedLogoDataUrl;
-        }
-
-        function mostrarToast(msg) {
-            const toast = document.getElementById('toast');
-            document.getElementById('toastMsg').textContent = msg;
-            toast.classList.remove('opacity-0');
-            setTimeout(() => toast.classList.add('opacity-0'), 3000);
-        }
-
         document.addEventListener("DOMContentLoaded", () => {
-            gerarLogoFixo();
-            setTimeout(() => {
-                try {
+            carregarLogoDoArmazenamento();
+
+            try {
+                const cTec = document.getElementById('canvasTecnico');
+                const cCli = document.getElementById('canvasCliente');
+                const cExp = document.getElementById('canvasExpandido');
+                
+                function resizeCanvas(canvas) {
+                    if(!canvas) return;
+                    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+                    canvas.width = canvas.offsetWidth * ratio;
+                    canvas.height = canvas.offsetHeight * ratio;
+                    canvas.getContext("2d").scale(ratio, ratio);
+                }
+
+                setTimeout(() => {
+                    resizeCanvas(cTec); resizeCanvas(cCli);
                     if (typeof SignaturePad !== 'undefined') {
-                        padTecnico = new SignaturePad(document.getElementById('canvasTecnico'), {minWidth:1, maxWidth:2.5});
-                        padCliente = new SignaturePad(document.getElementById('canvasCliente'), {minWidth:1, maxWidth:2.5});
-                        padExpandido = new SignaturePad(document.getElementById('canvasExpandido'), {minWidth:1.5, maxWidth:3});
+                        if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions);
+                        if(cCli) padCliente = new SignaturePad(cCli, signatureOptions);
+                        if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
                     }
-                } catch(e) {}
-            }, 200);
-            adicionarBlocoOS();
+                }, 150);
+            } catch(e) {}
+
+            adicionarBlocoOS(); 
             carregarHistorico();
+            atualizarVisibilidadeCamposPorBloco();
         });
 
-        function resizeCanvasElement(canvas) {
-            if(!canvas) return;
-            const ratio = Math.max(window.devicePixelRatio || 1, 1);
-            canvas.width = canvas.offsetWidth * ratio;
-            canvas.height = canvas.offsetHeight * ratio;
-            canvas.getContext("2d").scale(ratio, ratio);
+        function verificarServicoInternoGlobal() {
+            const blocos = document.querySelectorAll('.os-bloco');
+            if (blocos.length === 0) return false;
+            const primeiraId = blocos[0].getAttribute('data-id');
+            const cbServInterno = document.getElementById(`cbServInterno_${primeiraId}`);
+            return cbServInterno ? cbServInterno.checked : false;
+        }
+
+        function atualizarVisibilidadeCamposPorBloco() {
+            const blocos = document.querySelectorAll('.os-bloco');
+            blocos.forEach(b => {
+                const id = b.getAttribute('data-id');
+                const cbServInterno = document.getElementById(`cbServInterno_${id}`);
+                const isInterno = cbServInterno ? cbServInterno.checked : false;
+                const containerHoras = document.getElementById(`containerHoras_${id}`);
+                const containerDias = document.getElementById(`containerDias_${id}`);
+                
+                if (isInterno) {
+                    if(containerHoras) containerHoras.style.display = 'none';
+                    if(containerDias) containerDias.style.display = 'grid';
+                    calcDias(id);
+                } else {
+                    if(containerHoras) containerHoras.style.display = 'grid';
+                    if(containerDias) containerDias.style.display = 'none';
+                }
+            });
+            atualizarVisibilidadeClienteGeral();
+        }
+
+        function atualizarVisibilidadeClienteGeral() {
+            const isInterno = verificarServicoInternoGlobal();
+            const containerCliente = document.getElementById('secaoClienteContainer');
+            if (containerCliente) {
+                if (isInterno) {
+                    containerCliente.style.display = 'none';
+                    if(padCliente) padCliente.clear();
+                } else {
+                    containerCliente.style.display = 'block';
+                }
+            }
         }
 
         function abrirModalAssinatura(alvo) {
             alvoAssinaturaAtual = alvo;
-            document.getElementById('tituloModalAssinatura').textContent = alvo === 'tecnico' ? 'Assinatura do Técnico' : 'Assinatura do Cliente';
-            document.getElementById('modalAssinaturaExpandida').classList.remove('hidden');
-            setTimeout(() => {
-                resizeCanvasElement(document.getElementById('canvasExpandido'));
-                if(padExpandido) {
-                    padExpandido.clear();
-                    let fonte = alvo === 'tecnico' ? padTecnico : padCliente;
-                    if(fonte && !fonte.isEmpty()) padExpandido.fromDataURL(fonte.toDataURL());
-                }
-            }, 100);
+            const titulo = alvo === 'tecnico' ? 'Assinatura do Técnico' : 'Assinatura do Cliente';
+            document.getElementById('tituloModalAssinatura').textContent = titulo;
+            
+            const modal = document.getElementById('modalAssinaturaExpandida');
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+
+            const cExp = document.getElementById('canvasExpandido');
+            if(cExp) {
+                const ratio = Math.max(window.devicePixelRatio || 1, 1);
+                cExp.width = cExp.offsetWidth * ratio;
+                cExp.height = cExp.offsetHeight * ratio;
+                cExp.getContext("2d").scale(ratio, ratio);
+            }
+            
+            if(padExpandido) {
+                padExpandido.clear();
+                const padFonte = alvo === 'tecnico' ? padTecnico : padCliente;
+                if (padFonte && !padFonte.isEmpty()) padExpandido.fromDataURL(padFonte.toDataURL());
+            }
         }
 
-        function fecharModalAssinatura() { document.getElementById('modalAssinaturaExpandida').classList.add('hidden'); }
+        function fecharModalAssinatura() {
+            document.getElementById('modalAssinaturaExpandida').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        function limparPadExpandido() { if(padExpandido) padExpandido.clear(); }
 
         function confirmarAssinaturaExpandida() {
-            let destino = alvoAssinaturaAtual === 'tecnico' ? padTecnico : padCliente;
-            if(padExpandido && destino) {
-                if(padExpandido.isEmpty()) {
-                    destino.clear();
-                    if(alvoAssinaturaAtual === 'cliente') desbloquearEdicao();
+            const padDestino = alvoAssinaturaAtual === 'tecnico' ? padTecnico : padCliente;
+            if (padExpandido && padDestino) {
+                if (padExpandido.isEmpty()) {
+                    padDestino.clear();
+                    if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao();
                 } else {
-                    destino.fromDataURL(padExpandido.toDataURL());
-                    if(alvoAssinaturaAtual === 'cliente') bloquearEdicao();
+                    padDestino.fromDataURL(padExpandido.toDataURL());
+                    if (alvoAssinaturaAtual === 'cliente') bloquearEdicao();
                 }
             }
             fecharModalAssinatura();
         }
 
-        function bloquearEdicao() {
-            document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico select, #tecnico, #nomeClienteFinal, #cargo, #setor').forEach(el => {
-                el.disabled = true; el.classList.add('locked-input');
+        function toggleLock(locked) {
+            document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico select, #listaOrdensServico button, #tecnico, #nomeClienteFinal, #cargo, #setor').forEach(el => {
+                el.disabled = locked;
+                locked ? el.classList.add('locked-input') : el.classList.remove('locked-input');
             });
-            document.getElementById('lockStatus').textContent = "BLOQUEADO";
+            const ls = document.getElementById('lockStatus');
+            if(ls) {
+                ls.textContent = locked ? "🔒 FORMULÁRIO BLOQUEADO" : "🔓 Formulário Editável";
+                ls.className = locked ? "text-xs font-bold text-red-600" : "text-xs font-bold text-gray-400";
+            }
         }
 
-        function desbloquearEdicao() {
-            document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico select, #tecnico, #nomeClienteFinal, #cargo, #setor').forEach(el => {
-                el.disabled = false; el.classList.remove('locked-input');
-            });
-            document.getElementById('lockStatus').textContent = "Editável";
-        }
+        function bloquearEdicao() { toggleLock(true); mostrarToast('Documento bloqueado (Cliente Assinou).'); }
+        function desbloquearEdicao() { toggleLock(false); }
+        function limparAssinatura(pad, isCliente = false) { if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); }
 
-        function limparAssinaturaCliente() { if(padCliente) padCliente.clear(); desbloquearEdicao(); }
-
-        function switchTab(id) {
+        function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            if(id === 'historico') carregarHistorico();
-            window.scrollTo(0,0);
+            document.getElementById(tabId).classList.add('active');
+            if(tabId === 'historico') carregarHistorico();
+            window.scrollTo(0, 0);
         }
 
         function iniciarNovaOS() {
-            if(!confirm("Iniciar documento novo?")) return;
+            if(!confirm("Iniciar documento em branco?")) return;
             documentoAtualId = Date.now().toString();
             document.getElementById('listaOrdensServico').innerHTML = '';
             contadorOS = 0; adicionarBlocoOS();
             document.getElementById('tecnico').value = 'Paulo Henrique Gomes';
-            ['nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = '');
-            if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
-            desbloquearEdicao(); switchTab('novaOs');
-        }
-
-        function atualizarVisibilidadeReagendar(id) {
-            const cbServInterno = document.getElementById(`cbServInterno_${id}`);
-            const containerReagendar = document.getElementById(`containerReagendar_${id}`);
-            if(cbServInterno && containerReagendar) {
-                containerReagendar.style.display = cbServInterno.checked ? 'none' : 'block';
-            }
+            ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
+            if(padTecnico) padTecnico.clear();
+            if(padCliente) padCliente.clear();
+            desbloquearEdicao();
+            switchTab('novaOs');
+            atualizarVisibilidadeCamposPorBloco();
         }
 
         function adicionarBlocoOS(dados = null) {
             contadorOS++; const id = contadorOS;
-            const hoje = new Date().toISOString().split('T')[0];
-            const div = document.createElement('div');
-            div.className = "os-bloco border-2 border-gray-200 p-4 rounded-xl bg-gray-50 mb-4";
-            div.setAttribute('data-id', id);
-            div.innerHTML = `
-                <div class="flex justify-between items-center mb-3 border-b pb-2">
-                    <h3 class="font-bold text-blue-700">OS #${id}</h3>
-                    ${id > 1 ? '<button type="button" onclick="this.closest(\'.os-bloco\').remove();" class="text-red-600 text-xs bg-red-50 px-2 py-1 rounded">Remover</button>' : ''}
+            const container = document.getElementById('listaOrdensServico');
+            const dataHoje = new Date().toISOString().split('T')[0];
+            
+            const bloco = document.createElement('div');
+            bloco.className = "os-bloco border-2 border-gray-200 p-4 sm:p-5 rounded-xl bg-gray-50/50 shadow-sm relative transition-all mb-4";
+            bloco.setAttribute('data-id', id);
+            
+            bloco.innerHTML = `
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 class="font-bold text-lg text-blue-700">Ordem de Serviço #${id}</h3>
+                    ${id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco();" class="text-red-600 text-xs font-bold bg-red-50 px-2 py-1 rounded border border-red-200">Remover OS</button>` : ''}
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                    <div><label class="text-xs font-semibold">Cliente *</label><input type="text" id="cliente_${id}" class="w-full border p-2 rounded bg-white text-sm" required></div>
-                    <div><label class="text-xs font-semibold">OS Nº *</label><input type="text" id="osNum_${id}" value="${Math.floor(Math.random()*900000)+100000}" class="w-full border p-2 rounded bg-white text-sm"></div>
-                    <div><label class="text-xs font-semibold">Equipamento</label><input type="text" id="equipamento_${id}" class="w-full border p-2 rounded bg-white text-sm"></div>
-                    <div><label class="text-xs font-semibold">Modelo</label><input type="text" id="modelo_${id}" class="w-full border border-gray-300 p-2 rounded bg-white text-sm"></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div><label class="block text-sm font-semibold mb-1">Cliente *</label><input type="text" id="cliente_${id}" required class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
+                    <div><label class="block text-sm font-semibold mb-1">OS Nº *</label><input type="text" id="osNum_${id}" value="${Math.floor(Math.random()*900000)+100000}" required class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
+                    <div><label class="block text-sm font-semibold mb-1">Equipamento</label><input type="text" id="equipamento_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
+                    <div><label class="block text-sm font-semibold mb-1">Modelo</label><input type="text" id="modelo_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
+                    <div><label class="block text-sm font-semibold mb-1">Nº de Série</label><input type="text" id="serie_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
+                    <div><label class="block text-sm font-semibold mb-1">TAG</label><input type="text" id="tag_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
                 </div>
-                <div class="mb-3">
-                    <label class="text-xs font-semibold mb-1 block">Tipo de Serviço</label>
-                    <div class="grid grid-cols-2 gap-2 text-xs bg-white p-2 rounded border">
-                        <label><input type="checkbox" id="cbServInterno_${id}" checked onchange="atualizarVisibilidadeReagendar(${id})"> Serv. Interno</label>
-                        <label><input type="checkbox" id="cbServExterno_${id}" onchange="atualizarVisibilidadeReagendar(${id})"> Serv. Externo</label>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold mb-2">Tipo de Serviço</label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm bg-white p-3 rounded border border-gray-200">
+                        <label class="flex items-center gap-1"><input type="checkbox" id="cbOrcamento_${id}"> Orçamento</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="cbInstalacao_${id}"> Instalação</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="cbServInterno_${id}" checked onchange="atualizarVisibilidadeCamposPorBloco()"> Serv. Interno</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="cbServExterno_${id}" onchange="atualizarVisibilidadeCamposPorBloco()"> Serv. Externo</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="cbGarantia_${id}"> Garantia</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="cbSemGarantia_${id}" checked> Sem Garantia</label>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <label class="text-xs font-semibold mb-1 block">Descrição</label>
-                    <textarea id="descricao_${id}" rows="2" class="w-full border p-2 rounded bg-white text-sm"></textarea>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold mb-1">Descrição do Serviço</label>
+                    <textarea id="descricao_${id}" rows="3" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></textarea>
                 </div>
-                <div class="mb-3">
-                    <label class="text-xs font-semibold mb-1 block">Peças</label>
-                    <div id="pecasContainer_${id}" class="space-y-1 mb-1"></div>
-                    <button type="button" onclick="addPecaRow(${id})" class="text-xs bg-white border px-2 py-1 rounded">+ Peça</button>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold mb-2">Peças Utilizadas</label>
+                    <div id="pecasContainer_${id}" class="space-y-2 mb-2"></div>
+                    <button type="button" onclick="addPecaRow(${id})" class="px-2 py-1 bg-white border border-gray-300 rounded text-xs font-semibold">+ Adicionar Peça</button>
                 </div>
-                <div class="mb-3 bg-white p-3 rounded border">
-                    <label class="text-xs font-bold mb-1 block">Liberação</label>
+                <div class="mb-4 bg-white p-3 rounded border border-gray-200">
+                    <label class="block text-xs font-bold mb-1">Liberação</label>
+                    <input type="text" id="liberacaoObs_${id}" value="Liberado para uso, teste operacional ok" class="w-full border border-gray-300 p-2 rounded mb-3 text-sm outline-none">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                         <div><span class="font-bold block mb-1">Status:</span> <label class="mr-3"><input type="radio" name="st_${id}" id="stOk_${id}" checked> OK</label> <label><input type="radio" name="st_${id}" id="stRes_${id}"> RESTRIÇÃO</label></div>
-                        <div id="containerReagendar_${id}" style="display:none;"><span class="font-bold block mb-1">Reagendar:</span> <label class="mr-3"><input type="radio" name="re_${id}" id="reSim_${id}"> Sim</label> <label><input type="radio" name="re_${id}" id="reNao_${id}" checked> Não</label></div>
+                        <div><span class="font-bold block mb-1">Reagendar:</span> <label class="mr-3"><input type="radio" name="re_${id}" id="reSim_${id}"> Sim</label> <label><input type="radio" name="re_${id}" id="reNao_${id}" checked> Não</label></div>
                     </div>
                 </div>
-                <div class="grid grid-cols-3 gap-2 text-xs">
-                    <div><label class="font-bold">Data</label><input type="date" id="dt_${id}" value="${hoje}" class="w-full border p-1.5 rounded bg-white"></div>
-                    <div><label class="font-bold">Chegada</label><input type="time" id="hc_${id}" class="w-full border p-1.5 rounded bg-white"></div>
-                    <div><label class="font-bold">Saída</label><input type="time" id="hs_${id}" class="w-full border p-1.5 rounded bg-white"></div>
+
+                <div id="containerHoras_${id}" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-4">
+                    <div><label class="block text-xs font-bold mb-1">Data</label><input type="date" id="dt_${id}" value="${dataHoje}" class="w-full border border-gray-300 p-2 rounded text-xs bg-white"></div>
+                    <div><label class="block text-xs font-bold mb-1">Chegada</label><input type="time" id="hc_${id}" class="w-full border border-gray-300 p-2 rounded text-xs bg-white" onchange="calcH(${id})"></div>
+                    <div><label class="block text-xs font-bold mb-1">Saída</label><input type="time" id="hs_${id}" class="w-full border border-gray-300 p-2 rounded text-xs bg-white" onchange="calcH(${id})"></div>
+                    <div><label class="block text-xs font-bold mb-1">Total</label><input type="text" id="th_${id}" class="w-full border border-gray-300 p-2 rounded text-xs bg-gray-100 font-semibold" readonly></div>
+                </div>
+
+                <div id="containerDias_${id}" class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm mb-4" style="display:none;">
+                    <div><label class="block text-xs font-bold mb-1">Data Início</label><input type="date" id="dtInicio_${id}" value="${dataHoje}" class="w-full border border-gray-300 p-2 rounded text-xs bg-white" onchange="calcDias(${id})"></div>
+                    <div><label class="block text-xs font-bold mb-1">Data Final</label><input type="date" id="dtFim_${id}" value="${dataHoje}" class="w-full border border-gray-300 p-2 rounded text-xs bg-white" onchange="calcDias(${id})"></div>
+                    <div><label class="block text-xs font-bold mb-1">Total de Dias</label><input type="text" id="totalDias_${id}" value="1 dia(s)" class="w-full border border-gray-300 p-2 rounded text-xs bg-gray-100 font-semibold" readonly></div>
+                </div>
+
+                <div class="mt-4 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                    <label class="block text-sm font-bold text-blue-800 mb-1">Anexar Ficheiro PDF</label>
+                    <input type="file" id="anexo_${id}" accept=".pdf" class="block w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white bg-white border border-blue-200 p-1">
                 </div>
             `;
-            document.getElementById('listaOrdensServico').appendChild(div);
-            addPecaRow(id); addPecaRow(id);
-            atualizarVisibilidadeReagendar(id);
+            container.appendChild(bloco);
 
             if (dados) {
-                ['cliente','osNum','equipamento','modelo','descricao','dt','hc','hs'].forEach(k => {
+                ['cliente','osNum','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => {
                     if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || '';
                 });
-                ['cbServInterno','cbServExterno','stOk','stRes','reSim','reNao'].forEach(k => {
+                ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','cbSemGarantia','stOk','stRes','reSim','reNao'].forEach(k => {
                     if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k];
                 });
-                atualizarVisibilidadeReagendar(id);
-            }
+                if(dados.pecas && dados.pecas.length > 0) {
+                    dados.pecas.forEach(p => {
+                        const pContainer = document.getElementById(`pecasContainer_${id}`);
+                        const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
+                        row.innerHTML = `<input type="number" placeholder="Qtd" value="${p.q}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${p.n}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${p.c}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
+                        pContainer.appendChild(row);
+                    });
+                } else { addPecaRow(id); addPecaRow(id); }
+            } else { addPecaRow(id); addPecaRow(id); }
+
+            atualizarVisibilidadeCamposPorBloco();
         }
 
         function addPecaRow(id) {
             const container = document.getElementById(`pecasContainer_${id}`);
-            const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item";
-            row.innerHTML = `<input type="number" placeholder="Qtd" class="w-16 border p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome da Peça" class="flex-1 border p-1 rounded text-xs n bg-white">`;
+            const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
+            row.innerHTML = `<input type="number" placeholder="Qtd" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
             container.appendChild(row);
         }
 
-        function obterHistoricoSalvo() {
-            try { return JSON.parse(localStorage.getItem('osProData_v2') || '[]'); } catch(e) { return []; }
+        function calcH(id) {
+            const hc = document.getElementById(`hc_${id}`).value, hs = document.getElementById(`hs_${id}`).value;
+            if(hc && hs) {
+                let [ch, cm] = hc.split(':').map(Number), [sh, sm] = hs.split(':').map(Number);
+                let t = (sh*60+sm) - (ch*60+cm); if(t<0) t+=1440;
+                document.getElementById(`th_${id}`).value = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+            }
+        }
+
+        function calcDias(id) {
+            const d1 = new Date(document.getElementById(`dtInicio_${id}`).value);
+            const d2 = new Date(document.getElementById(`dtFim_${id}`).value);
+            let diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
+            if (isNaN(diffDays) || diffDays < 1) diffDays = 1;
+            document.getElementById(`totalDias_${id}`).value = `${diffDays} dia(s)`;
         }
 
         function salvarDocumento() {
@@ -386,207 +631,249 @@
                     assinaturaCliente: padCliente && !padCliente.isEmpty() ? padCliente.toDataURL() : null,
                     ordens: []
                 };
+
                 document.querySelectorAll('.os-bloco').forEach(b => {
-                    let id = b.getAttribute('data-id');
-                    let o = {
-                        cliente: document.getElementById(`cliente_${id}`).value,
-                        osNum: document.getElementById(`osNum_${id}`).value,
-                        equipamento: document.getElementById(`equipamento_${id}`).value,
-                        modelo: document.getElementById(`modelo_${id}`).value,
-                        descricao: document.getElementById(`descricao_${id}`).value,
-                        cbServInterno: document.getElementById(`cbServInterno_${id}`).checked,
-                        cbServExterno: document.getElementById(`cbServExterno_${id}`).checked,
-                        stOk: document.getElementById(`stOk_${id}`).checked,
-                        stRes: document.getElementById(`stRes_${id}`).checked,
-                        reSim: document.getElementById(`reSim_${id}`).checked,
-                        reNao: document.getElementById(`reNao_${id}`).checked,
-                        dt: document.getElementById(`dt_${id}`).value,
-                        hc: document.getElementById(`hc_${id}`).value,
-                        hs: document.getElementById(`hs_${id}`).value,
-                        pecas: []
+                    const id = b.getAttribute('data-id');
+                    let ordem = {
+                        cliente: document.getElementById(`cliente_${id}`).value, osNum: document.getElementById(`osNum_${id}`).value,
+                        equipamento: document.getElementById(`equipamento_${id}`).value, modelo: document.getElementById(`modelo_${id}`).value,
+                        serie: document.getElementById(`serie_${id}`).value, tag: document.getElementById(`tag_${id}`).value,
+                        cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked,
+                        cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked,
+                        cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbSemGarantia: document.getElementById(`cbSemGarantia_${id}`).checked,
+                        descricao: document.getElementById(`descricao_${id}`).value, pecas: [],
+                        liberacaoObs: document.getElementById(`liberacaoObs_${id}`).value, stOk: document.getElementById(`stOk_${id}`).checked,
+                        stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked,
+                        reNao: document.getElementById(`reNao_${id}`).checked, dt: document.getElementById(`dt_${id}`).value,
+                        hc: document.getElementById(`hc_${id}`).value, hs: document.getElementById(`hs_${id}`).value, th: document.getElementById(`th_${id}`).value,
+                        dtInicio: document.getElementById(`dtInicio_${id}`).value, dtFim: document.getElementById(`dtFim_${id}`).value, totalDias: document.getElementById(`totalDias_${id}`).value
                     };
-                    b.querySelectorAll('.peca-row-item').forEach(r => {
-                        let q = r.querySelector('.q').value, n = r.querySelector('.n').value;
-                        if(q || n) o.pecas.push({q, n});
+                    b.querySelectorAll('.peca-row-item').forEach(row => {
+                        let q = row.querySelector('.q').value, n = row.querySelector('.n').value, c = row.querySelector('.c').value;
+                        if(q || n || c) ordem.pecas.push({ q, n, c });
                     });
-                    dados.ordens.push(o);
+                    dados.ordens.push(ordem);
                 });
-                let h = obterHistoricoSalvo();
-                let idx = h.findIndex(d => d.id === dados.id);
-                if(idx >= 0) h[idx] = dados; else h.unshift(dados);
-                localStorage.setItem('osProData_v2', JSON.stringify(h));
+
+                let historico = obterHistoricoSalvo();
+                let index = historico.findIndex(d => d.id === dados.id);
+                if(index >= 0) historico[index] = dados; else historico.unshift(dados);
+                gravarHistoricoSalvo(historico);
                 mostrarToast('Salvo com sucesso!');
-            } catch(e) { mostrarToast('Erro ao salvar.'); }
+            } catch(e) { mostrarToast('Erro ao salvar.', true); }
         }
 
         function carregarHistorico() {
             const list = document.getElementById('historicoList'); let h = obterHistoricoSalvo();
-            if(h.length === 0) return list.innerHTML = '<p class="text-gray-500 text-center text-sm">Nenhum documento.</p>';
-            list.innerHTML = h.map(doc => `
-                <div class="border p-3 rounded-lg bg-gray-50 flex justify-between items-center text-sm">
-                    <div>
-                        <p class="font-bold text-blue-800">OS: ${doc.ordens[0]?.osNum || 'N/A'}</p>
-                        <p class="text-xs text-gray-600">${doc.ordens[0]?.cliente || 'Cliente'}</p>
+            if(!h || h.length === 0) return list.innerHTML = '<p class="text-gray-500 italic text-center">Nenhum documento salvo.</p>';
+            list.innerHTML = h.map(doc => {
+                let primeiraOS = (doc.ordens && doc.ordens[0]) ? doc.ordens[0] : {};
+                return `
+                <div class="border p-4 rounded-xl bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shadow-sm mb-3 border-l-4 border-l-blue-600">
+                    <div class="mb-3 sm:mb-0">
+                        <p class="font-bold text-blue-800 text-lg">OS Ref: ${primeiraOS.osNum || 'N/A'}</p>
+                        <p class="text-sm font-semibold text-gray-700">${primeiraOS.cliente || doc.nomeClienteFinal || 'Desconhecido'}</p>
+                        <p class="text-xs text-gray-500 mt-1">Atualizado: ${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-PT') : ''}</p>
                     </div>
-                    <div class="flex gap-2">
-                        <button onclick="carregarDoc('${doc.id}')" class="px-3 py-1 bg-blue-600 text-white rounded text-xs">Abrir</button>
-                        <button onclick="apagarDoc('${doc.id}')" class="px-3 py-1 bg-red-100 text-red-600 rounded text-xs">Excluir</button>
+                    <div class="flex gap-2 w-full sm:w-auto">
+                        <button onclick="carregarDocumentoParaEdicao('${doc.id}')" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold text-sm">Abrir</button>
+                        <button onclick="apagarDocumento('${doc.id}')" class="flex-1 px-4 py-2 bg-red-100 text-red-600 rounded-lg font-semibold text-sm">Excluir</button>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
 
-        function carregarDoc(id) {
+        function carregarDocumentoParaEdicao(id) {
             let doc = obterHistoricoSalvo().find(d => d.id === id); if(!doc) return;
-            documentoAtualId = doc.id;
-            document.getElementById('listaOrdensServico').innerHTML = '';
-            contadorOS = 0;
-            doc.ordens.forEach(o => adicionarBlocoOS(o));
-            document.getElementById('tecnico').value = doc.tecnico || '';
-            document.getElementById('nomeClienteFinal').value = doc.nomeClienteFinal || '';
-            document.getElementById('cargo').value = doc.cargo || '';
-            document.getElementById('setor').value = doc.setor || '';
+            desbloquearEdicao(); documentoAtualId = doc.id;
+            document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
+            if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o));
+            ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
             if(padTecnico) { padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
             if(padCliente) { padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
-            switchTab('novaOs');
-            mostrarToast('Carregado!');
+            switchTab('novaOs'); mostrarToast('Documento restaurado.');
+            atualizarVisibilidadeCamposPorBloco();
         }
 
-        function apagarDoc(id) {
-            if(!confirm("Apagar?")) return;
-            localStorage.setItem('osProData_v2', JSON.stringify(obterHistoricoSalvo().filter(d => d.id !== id)));
-            carregarHistorico();
+        function apagarDocumento(id) {
+            if(!confirm("Tem certeza que deseja apagar?")) return;
+            gravarHistoricoSalvo(obterHistoricoSalvo().filter(d => d.id !== id));
+            if(id === documentoAtualId) iniciarNovaOS(); carregarHistorico();
         }
 
         async function construirPDFBytes() {
-            const blocos = document.querySelectorAll('.os-bloco');
-            if(blocos.length === 0) throw new Error('Adicione uma OS.');
-            for(let b of blocos) if(!document.getElementById(`cliente_${b.getAttribute('data-id')}`).value.trim()) throw new Error('Preencha o nome do cliente.');
+            const blocosOS = document.querySelectorAll('.os-bloco');
+            if (blocosOS.length === 0) throw new Error('Adicione pelo menos uma OS.');
+            for (let b of blocosOS) if(!document.getElementById(`cliente_${b.getAttribute('data-id')}`).value.trim()) throw new Error(`Preencha o cliente da OS!`);
 
+            const isServicoInterno = verificarServicoInternoGlobal();
             const { jsPDF } = window.jspdf;
-            const { PDFDocument } = window.PDFLib;
+            const { PDFDocument, rgb, StandardFonts } = window.PDFLib;
             const masterPdf = await PDFDocument.create();
+            
+            let finalW = 0, finalH = 0;
+            if (imgObject && logoImgData) {
+                let ratio = Math.min(45 / imgObject.width, 15 / imgObject.height);
+                finalW = imgObject.width * ratio; finalH = imgObject.height * ratio;
+            }
 
-            for(let b of blocos) {
-                let id = b.getAttribute('data-id');
+            for (let idx = 0; idx < blocosOS.length; idx++) {
+                const b = blocosOS[idx]; const id = b.getAttribute('data-id');
                 const docOS = new jsPDF();
                 
-                // Adicionar logótipo exato em cima
-                if(fixedLogoDataUrl) {
-                    docOS.addImage(fixedLogoDataUrl, 'PNG', 15, 10, 48, 12);
+                docOS.setFont("helvetica", "bold"); docOS.setFontSize(13);
+                docOS.text("RELATÓRIO DE ORDEM DE SERVIÇO", 105, 18, { align: "center" });
+                
+                let cy = Math.max(30, 10 + finalH + 6);
+                docOS.setFontSize(9); docOS.setFont("helvetica", "normal");
+                docOS.text(`CLIENTE: ${document.getElementById(`cliente_${id}`).value}`, 15, cy);
+                docOS.text(`OS Nº: ${document.getElementById(`osNum_${id}`).value}`, 140, cy);
+                cy += 6; docOS.text(`EQUIP: ${document.getElementById(`equipamento_${id}`).value}`, 15, cy); docOS.text(`MODELO: ${document.getElementById(`modelo_${id}`).value}`, 140, cy);
+                cy += 6; docOS.text(`SÉRIE: ${document.getElementById(`serie_${id}`).value}`, 15, cy); docOS.text(`TAG: ${document.getElementById(`tag_${id}`).value}`, 140, cy);
+                
+                cy += 8; const cb = (eid) => document.getElementById(eid).checked ? "[X]" : "[ ]";
+                docOS.text(`${cb('cbOrcamento_'+id)} ORÇAMENTO`, 15, cy); docOS.text(`${cb('cbInstalacao_'+id)} INSTALAÇÃO`, 65, cy); docOS.text(`${cb('cbServInterno_'+id)} SERV INTERNO`, 115, cy);
+                cy += 6; docOS.text(`${cb('cbGarantia_'+id)} GARANTIA`, 15, cy); docOS.text(`${cb('cbSemGarantia_'+id)} SEM GARANTIA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
+
+                cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
+                cy += 4; docOS.rect(15, cy, 180, 20); docOS.text(docOS.splitTextToSize(document.getElementById(`descricao_${id}`).value, 175), 17, cy+5);
+
+                cy += 25; docOS.setFont("helvetica", "bold"); docOS.text("PEÇAS", 15, cy); cy+=4;
+                let tb = [];
+                const pRows = b.querySelectorAll('.peca-row-item');
+                for(let i=0; i<pRows.length; i+=2) {
+                    let r1=pRows[i], r2=pRows[i+1];
+                    let r1q=r1.querySelector('.q').value, r1n=r1.querySelector('.n').value, r1c=r1.querySelector('.c').value;
+                    let r2q=r2?r2.querySelector('.q').value:'', r2n=r2?r2.querySelector('.n').value:'', r2c=r2?r2.querySelector('.c').value:'';
+                    if(r1q||r1n||r1c||r2q||r2n||r2c) tb.push([r1q,r1n,r1c,r2q,r2n,r2c]);
+                }
+                if(tb.length===0) tb.push(['','','','','','']);
+                
+                docOS.autoTable({ 
+                    startY: cy, margin: { left: 15, top: 35 }, theme: 'grid', styles: { fontSize: 8, cellPadding: 2 }, 
+                    head: [['Qtd', 'Nome', 'Cód', 'Qtd', 'Nome', 'Cód']], body: tb
+                });
+                
+                cy = docOS.lastAutoTable.finalY + 6;
+                docOS.setFont("helvetica", "bold"); docOS.text("LIBERAÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
+                cy+=4; docOS.text(`OBS: ${document.getElementById(`liberacaoObs_${id}`).value}`, 15, cy);
+                cy+=5; docOS.text(`Status: ${cb('stOk_'+id)} OK  ${cb('stRes_'+id)} RESTRIÇÃO`, 15, cy); docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy);
+                
+                if (!document.getElementById(`cbServInterno_${id}`).checked) {
+                    cy+=10; docOS.text(`DATA: ${document.getElementById(`dt_${id}`).value.split('-').reverse().join('/')}`, 15, cy); docOS.text(`CHEGADA: ${document.getElementById(`hc_${id}`).value}`, 75, cy); docOS.text(`SAÍDA: ${document.getElementById(`hs_${id}`).value}`, 140, cy);
+                    cy+=6; docOS.text(`TOTAL HORAS: ${document.getElementById(`th_${id}`).value}`, 15, cy);
+                } else {
+                    cy+=10; 
+                    docOS.text(`DATA INÍCIO: ${document.getElementById(`dtInicio_${id}`).value.split('-').reverse().join('/')}`, 15, cy); 
+                    docOS.text(`DATA FINAL: ${document.getElementById(`dtFim_${id}`).value.split('-').reverse().join('/')}`, 75, cy); 
+                    docOS.text(`TOTAL DE DIAS: ${document.getElementById(`totalDias_${id}`).value}`, 140, cy);
                 }
 
-                docOS.setFont("helvetica", "bold"); docOS.setFontSize(12);
-                docOS.text("ORDEM DE SERVIÇO", 105, 18, {align:"center"});
-                
-                docOS.setFontSize(9); docOS.setFont("helvetica", "normal");
-                docOS.text(`CLIENTE: ${document.getElementById(`cliente_${id}`).value}`, 15, 28);
-                docOS.text(`OS Nº: ${document.getElementById(`osNum_${id}`).value}`, 140, 28);
-                docOS.text(`EQUIPAMENTO: ${document.getElementById(`equipamento_${id}`).value}`, 15, 35);
-                docOS.text(`MODELO: ${document.getElementById(`modelo_${id}`).value}`, 140, 35);
+                const paginasDestaOS = docOS.internal.getNumberOfPages();
+                for (let i = 1; i <= paginasDestaOS; i++) {
+                    docOS.setPage(i);
+                    if (imgObject && logoImgData) docOS.addImage(logoImgData, logoImgFormat, 15, 10, finalW, finalH);
+                }
 
-                const isInterno = document.getElementById(`cbServInterno_${id}`).checked;
-                const tipoServicoTxt = isInterno ? "Tipo: Serviço Interno" : "Tipo: Serviço Externo";
-                docOS.text(tipoServicoTxt, 15, 42);
+                const osBuffer = docOS.output('arraybuffer');
+                const osPdfLib = await PDFDocument.load(osBuffer);
+                const osPages = await masterPdf.copyPages(osPdfLib, osPdfLib.getPageIndices());
+                osPages.forEach((p) => masterPdf.addPage(p));
 
-                docOS.text("DESCRIÇÃO:", 15, 49);
-                docOS.rect(15, 52, 180, 20);
-                docOS.text(docOS.splitTextToSize(document.getElementById(`descricao_${id}`).value, 175), 17, 58);
-
-                let tb = [];
-                b.querySelectorAll('.peca-row-item').forEach(r => {
-                    let q = r.querySelector('.q').value, n = r.querySelector('.n').value;
-                    if(q || n) tb.push([q, n]);
-                });
-                if(tb.length === 0) tb.push(['', '']);
-
-                docOS.autoTable({ startY: 76, head: [['Qtd', 'Peça']], body: tb });
-
-                let finalBuffer = docOS.output('arraybuffer');
-                let loaded = await PDFDocument.load(finalBuffer);
-                let pages = await masterPdf.copyPages(loaded, loaded.getPageIndices());
-                pages.forEach(p => masterPdf.addPage(p));
+                const fileInput = document.getElementById(`anexo_${id}`);
+                if (fileInput.files.length > 0) {
+                    const anexoPdf = await PDFDocument.load(await fileInput.files[0].arrayBuffer());
+                    const anexoPages = await masterPdf.copyPages(anexoPdf, anexoPdf.getPageIndices());
+                    anexoPages.forEach((p) => masterPdf.addPage(p));
+                }
             }
 
-            // Página de Assinaturas
             const docSig = new jsPDF();
-            if(fixedLogoDataUrl) {
-                docSig.addImage(fixedLogoDataUrl, 'PNG', 15, 10, 48, 12);
+            if (imgObject && logoImgData) docSig.addImage(logoImgData, logoImgFormat, 15, 10, finalW, finalH);
+            let fy = Math.max(35, 10 + finalH + 10);
+
+            docSig.setFont("helvetica", "bold"); docSig.setFontSize(12); docSig.text(isServicoInterno ? "ASSINATURA DO TÉCNICO" : "ASSINATURAS GERAIS", 105, 20, {align:"center"});
+            docSig.setFontSize(9); docSig.setFont("helvetica", "normal"); 
+            docSig.text(isServicoInterno ? "Documento consolidado de Serviço Interno." : "Documento consolidado de Ordens de Serviço.", 15, fy);
+            fy+=20; 
+
+            if (isServicoInterno) {
+                docSig.line(60, fy+15, 150, fy+15);
+                if(padTecnico && !padTecnico.isEmpty()) docSig.addImage(padTecnico.toDataURL(), 'PNG', 75, fy-8, 60, 20);
+                fy+=18; docSig.text("TÉCNICO RESPONSÁVEL", 105, fy, {align:"center"});
+                fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value}`, 60, fy);
+            } else {
+                docSig.line(15, fy+15, 95, fy+15); docSig.line(110, fy+15, 195, fy+15);
+                if(padTecnico && !padTecnico.isEmpty()) docSig.addImage(padTecnico.toDataURL(), 'PNG', 25, fy-8, 50, 20);
+                if(padCliente && !padCliente.isEmpty()) docSig.addImage(padCliente.toDataURL(), 'PNG', 120, fy-8, 50, 20);
+                fy+=18; docSig.text("TÉCNICO", 40, fy); docSig.text("CLIENTE", 140, fy);
+                fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value}`, 15, fy); docSig.text(`Nome: ${document.getElementById('nomeClienteFinal').value}`, 110, fy);
             }
-            docSig.setFont("helvetica", "bold"); docSig.setFontSize(12);
-            docSig.text("ASSINATURAS", 105, 20, {align:"center"});
-            docSig.setFont("helvetica", "normal"); docSig.setFontSize(9);
-            docSig.text(`Técnico: ${document.getElementById('tecnico').value}`, 15, 40);
-            docSig.text(`Cliente: ${document.getElementById('nomeClienteFinal').value}`, 15, 50);
 
-            if(padTecnico && !padTecnico.isEmpty()) docSig.addImage(padTecnico.toDataURL(), 'PNG', 15, 60, 50, 20);
-            if(padCliente && !padCliente.isEmpty()) docSig.addImage(padCliente.toDataURL(), 'PNG', 110, 60, 50, 20);
+            const sigBuffer = docSig.output('arraybuffer');
+            const sigPdfLib = await PDFDocument.load(sigBuffer);
+            const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices());
+            sigPages.forEach((p) => masterPdf.addPage(p));
 
-            let sigBuffer = docSig.output('arraybuffer');
-            let sigLoaded = await PDFDocument.load(sigBuffer);
-            let sigPages = await masterPdf.copyPages(sigLoaded, sigLoaded.getPageIndices());
-            sigPages.forEach(p => masterPdf.addPage(p));
+            const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica);
+            const todasAsPaginas = masterPdf.getPages();
+            todasAsPaginas.forEach((pagina, idx) => {
+                const { width } = pagina.getSize();
+                const texto = `Página ${idx + 1} de ${todasAsPaginas.length}`;
+                pagina.drawText(texto, { x: width - fonteNormal.widthOfTextAtSize(texto, 8) - 15, y: 15, size: 8, font: fonteNormal, color: rgb(0.5, 0.5, 0.5) });
+            });
 
             return await masterPdf.save();
         }
 
         async function preVisualizarPDF() {
+            const btn = document.getElementById('btnPreview');
             try {
-                mostrarToast('A gerar...');
-                const bytes = await construirPDFBytes();
-                const blob = new Blob([bytes], {type: 'application/pdf'});
-                const url = URL.createObjectURL(blob);
-                document.getElementById('linkPreviewExt').href = url;
-                
-                const pdf = await pdfjsLib.getDocument({data: bytes}).promise;
-                const container = document.getElementById('pdfRenderContainer');
-                container.innerHTML = '';
-                for(let i=1; i<=pdf.numPages; i++) {
-                    let page = await pdf.getPage(i);
-                    let viewport = page.getViewport({scale: 1.2});
-                    let canvas = document.createElement('canvas');
-                    canvas.width = viewport.width; canvas.height = viewport.height;
-                    canvas.className = 'mb-4 bg-white shadow border w-full max-w-2xl';
-                    await page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise;
+                btn.disabled = true; btn.innerHTML = 'A Renderizar...';
+                const bytesPdf = await construirPDFBytes();
+                const blob = new Blob([bytesPdf], { type: 'application/pdf' });
+                if(objUrlPreview) URL.revokeObjectURL(objUrlPreview);
+                objUrlPreview = URL.createObjectURL(blob);
+                document.getElementById('linkPreviewExt').href = objUrlPreview; 
+                document.getElementById('linkPreviewExt').download = "rascunho_os.pdf";
+
+                const pdf = await pdfjsLib.getDocument({data: bytesPdf}).promise;
+                const container = document.getElementById('pdfRenderContainer'); container.innerHTML = ''; 
+
+                for(let num = 1; num <= pdf.numPages; num++) {
+                    const page = await pdf.getPage(num);
+                    const viewport = page.getViewport({scale: window.innerWidth > 600 ? 1.5 : 1.2}); 
+                    const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                    canvas.height = viewport.height; canvas.width = viewport.width;
+                    canvas.className = 'w-full max-w-3xl mb-4 bg-white shadow-xl border border-gray-300';
+                    await page.render({canvasContext: ctx, viewport: viewport}).promise;
                     container.appendChild(canvas);
                 }
                 document.getElementById('modalPreviewPDF').classList.remove('hidden');
-            } catch(e) { mostrarToast(e.message || 'Erro ao gerar.'); }
+            } catch (err) { mostrarToast(err.message || 'Erro ao pre-visualizar.', true); } 
+            finally { btn.disabled = false; btn.innerHTML = 'Ver Documento'; }
         }
 
         function fecharPreviewPDF() { document.getElementById('modalPreviewPDF').classList.add('hidden'); }
 
         async function gerarPDFConsolidado() {
+            const btn = document.getElementById('btnGerarPdf'); const btnTxt = document.getElementById('btnTxt');
             try {
                 salvarDocumento();
-                mostrarToast('A baixar PDF...');
-                const bytes = await construirPDFBytes();
-                const blob = new Blob([bytes], {type: 'application/pdf'});
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `OS_${Date.now()}.pdf`;
-                a.click();
-                mostrarToast('PDF Gerado!');
-            } catch(e) { mostrarToast(e.message || 'Erro ao gerar PDF.'); }
-        }
+                btn.disabled = true; btnTxt.innerText = "A COMPILAR PDF...";
+                const bytesPdfFinal = await construirPDFBytes();
+                const primeiraOs = document.querySelector('.os-bloco');
+                const pId = primeiraOs.getAttribute('data-id');
+                const pOs = document.getElementById(`osNum_${pId}`).value.trim();
+                const pCliente = document.getElementById(`cliente_${pId}`).value.trim();
 
-        function abrirModal() { document.getElementById('modalConfirm').classList.remove('hidden'); }
-        function fecharModal() { document.getElementById('modalConfirm').classList.add('hidden'); }
-        function confirmarLimpeza() {
-            localStorage.removeItem('osProData_v2');
-            carregarHistorico();
-            fecharModal();
-            mostrarToast('Apagado!');
-        }
-        function abrirModalExportar() { document.getElementById('modalExportar').classList.remove('hidden'); }
-        function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
-        function confirmarExportacao() {
-            const blob = new Blob([JSON.stringify(obterHistoricoSalvo(), null, 2)], {type: 'application/json'});
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'backup_os.json';
-            a.click();
-            fecharModalExportar();
+                const blob = new Blob([bytesPdfFinal], { type: 'application/pdf' });
+                const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+                link.download = `OS_${pOs}_${pCliente.replace(/[^a-z0-9]/gi,'_')}.pdf`;
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                mostrarToast('PDF Gerado com sucesso!');
+            } catch (err) { mostrarToast(err.message || 'Erro ao gerar PDF.', true); } 
+            finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR DOCUMENTO (PDF)"; }
         }
     </script>
 </body>
