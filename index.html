@@ -229,7 +229,7 @@
 
     <script>
         let documentoAtualId = Date.now().toString();
-        let logoImgData = null, imgObject = null, objUrlPreview = null;
+        let logoImgData = null, logoImgFormat = 'PNG', imgObject = null, objUrlPreview = null;
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
@@ -238,6 +238,7 @@
                 const logoSalvo = localStorage.getItem('oficialLogoApp');
                 if (logoSalvo) {
                     logoImgData = logoSalvo;
+                    logoImgFormat = (logoSalvo.includes('image/jpeg') || logoSalvo.includes('image/jpg')) ? 'JPEG' : 'PNG';
                     const img = new Image();
                     img.src = logoSalvo;
                     img.onload = () => {
@@ -274,7 +275,7 @@
         function resetarLogotipo() {
             if(confirm("Deseja remover o logótipo atual?")) {
                 localStorage.removeItem('oficialLogoApp');
-                logoImgData = null; imgObject = null;
+                logoImgData = null; logoImgFormat = 'PNG'; imgObject = null;
                 carregarLogoDoArmazenamento();
                 switchTab('novaOs');
                 mostrarToast('Logótipo removido.');
@@ -402,21 +403,17 @@
                 const containerHoras = document.getElementById(`containerHoras_${id}`);
                 const containerDias = document.getElementById(`containerDias_${id}`);
                 const containerReagendar = document.getElementById(`containerReagendar_${id}`);
-                
-                const reSim = document.getElementById(`reSim_${id}`);
                 const reNao = document.getElementById(`reNao_${id}`);
 
                 if (isInterno) {
                     if(containerHoras) containerHoras.style.display = 'none';
                     if(containerDias) containerDias.style.display = 'grid';
                     calcDias(id);
-                    
                     if(containerReagendar) containerReagendar.style.display = 'none';
                     if(reNao) reNao.checked = true;
                 } else {
                     if(containerHoras) containerHoras.style.display = 'grid';
                     if(containerDias) containerDias.style.display = 'none';
-                    
                     if(containerReagendar) containerReagendar.style.display = 'block';
                 }
             });
