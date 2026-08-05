@@ -141,7 +141,7 @@
                 <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer bg-white border border-emerald-200 rounded p-1 shadow-sm">
             </div>
 
-            <form id="osForm" class="bg-white p-4 sm:p-6 rounded-lg shadow-lg relative">
+            <form id="osForm" class="bg-white p-4 sm:p-6 rounded-lg shadow-lg relative" onsubmit="event.preventDefault();">
                 <div class="flex justify-between items-end mb-6 border-b pb-2">
                     <h2 class="text-xl sm:text-2xl font-bold text-gray-700">Preenchimento de Ordens de Serviço</h2>
                 </div>
@@ -229,7 +229,7 @@
 
     <script>
         let documentoAtualId = Date.now().toString();
-        let logoImgData = null, logoImgFormat = 'PNG', imgObject = null, objUrlPreview = null;
+        let logoImgData = null, imgObject = null, objUrlPreview = null;
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
@@ -238,7 +238,6 @@
                 const logoSalvo = localStorage.getItem('oficialLogoApp');
                 if (logoSalvo) {
                     logoImgData = logoSalvo;
-                    logoImgFormat = (logoSalvo.includes('image/jpeg') || logoSalvo.includes('image/jpg')) ? 'JPEG' : 'PNG';
                     const img = new Image();
                     img.src = logoSalvo;
                     img.onload = () => {
@@ -399,13 +398,23 @@
                 const containerHoras = document.getElementById(`containerHoras_${id}`);
                 const containerDias = document.getElementById(`containerDias_${id}`);
                 
+                const reSim = document.getElementById(`reSim_${id}`);
+                const reNao = document.getElementById(`reNao_${id}`);
+
                 if (isInterno) {
                     if(containerHoras) containerHoras.style.display = 'none';
                     if(containerDias) containerDias.style.display = 'grid';
                     calcDias(id);
+                    
+                    // Desativa o reagendamento e força "Não"
+                    if(reSim) { reSim.checked = false; reSim.disabled = true; }
+                    if(reNao) { reNao.checked = true; reNao.disabled = true; }
                 } else {
                     if(containerHoras) containerHoras.style.display = 'grid';
                     if(containerDias) containerDias.style.display = 'none';
+                    
+                    if(reSim) reSim.disabled = false;
+                    if(reNao) reNao.disabled = false;
                 }
             });
             atualizarVisibilidadeClienteGeral();
@@ -690,7 +699,13 @@
             if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o));
             ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
             if(padTecnico) { padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
-            if(padCliente) { padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
+            if(padCliente) { 
+                padCliente.clear(); 
+                if(doc.assinaturaCliente) { 
+                    padCliente.fromDataURL(doc.assinaturaCliente); 
+                    bloquearEdicao(); 
+                } 
+            }
             switchTab('novaOs'); mostrarToast('Documento restaurado.');
             atualizarVisibilidadeCamposPorBloco();
         }
@@ -772,7 +787,7 @@
                 const paginasDestaOS = docOS.internal.getNumberOfPages();
                 for (let i = 1; i <= paginasDestaOS; i++) {
                     docOS.setPage(i);
-                    if (imgObject && logoImgData) docOS.addImage(logoImgData, logoImgFormat, 15, 10, finalW, finalH);
+                    if (imgObject && logoImgData) docOS.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH);
                 }
 
                 const osBuffer = docOS.output('arraybuffer');
@@ -789,7 +804,7 @@
             }
 
             const docSig = new jsPDF();
-            if (imgObject && logoImgData) docSig.addImage(logoImgData, logoImgFormat, 15, 10, finalW, finalH);
+            if (imgObject && logoImgData) docSig.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH);
             let fy = Math.max(35, 10 + finalH + 10);
 
             docSig.setFont("helvetica", "bold"); docSig.setFontSize(12); docSig.text(isServicoInterno ? "ASSINATURA DO TÉCNICO" : "ASSINATURAS GERAIS", 105, 20, {align:"center"});
@@ -799,13 +814,24 @@
 
             if (isServicoInterno) {
                 docSig.line(60, fy+15, 150, fy+15);
-                if(padTecnico && !padTecnico.isEmpty()) docSig.addImage(padTecnico.toDataURL(), 'PNG', 75, fy-8, 60, 20);
+                if(padTecnico && !padTecnico.isEmpty()) {
+                    const imgDataTec = padTecnico.toDataURL();
+                    if (imgDataTec) {
+                        docSig.addImage(imgDataTec, 'PNG', 75, fy-8, 60, 20);
+                    }
+                }
                 fy+=18; docSig.text("TÉCNICO RESPONSÁVEL", 105, fy, {align:"center"});
                 fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value}`, 60, fy);
             } else {
                 docSig.line(15, fy+15, 95, fy+15); docSig.line(110, fy+15, 195, fy+15);
-                if(padTecnico && !padTecnico.isEmpty()) docSig.addImage(padTecnico.toDataURL(), 'PNG', 25, fy-8, 50, 20);
-                if(padCliente && !padCliente.isEmpty()) docSig.addImage(padCliente.toDataURL(), 'PNG', 120, fy-8, 50, 20);
+                if(padTecnico && !padTecnico.isEmpty()) {
+                    const imgDataTec = padTecnico.toDataURL();
+                    if(imgDataTec) docSig.addImage(imgDataTec, 'PNG', 25, fy-8, 50, 20);
+                }
+                if(padCliente && !padCliente.isEmpty()) {
+                    const imgDataCli = padCliente.toDataURL();
+                    if(imgDataCli) docSig.addImage(imgDataCli, 'PNG', 120, fy-8, 50, 20);
+                }
                 fy+=18; docSig.text("TÉCNICO", 40, fy); docSig.text("CLIENTE", 140, fy);
                 fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value}`, 15, fy); docSig.text(`Nome: ${document.getElementById('nomeClienteFinal').value}`, 110, fy);
             }
