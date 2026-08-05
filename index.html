@@ -841,7 +841,9 @@
 
             docSig.setFont("helvetica", "bold"); docSig.setFontSize(12); docSig.text(isServicoInterno ? "ASSINATURA DO TÉCNICO" : "ASSINATURAS GERAIS", 105, 20, {align:"center"});
             docSig.setFontSize(9); docSig.setFont("helvetica", "normal"); 
-            docSig.text(isServicoInterno ? "Documento consolidado de Serviço Interno." : "Documento consolidado de Ordens de Serviço.", 15, fy);
+            
+            // Aqui foi atualizada a frase solicitada para a última página:
+            docSig.text("Este documento consolida as OS e os respetivos anexos presentes nas páginas anteriores.", 15, fy);
             fy+=20; 
 
             if (isServicoInterno) {
