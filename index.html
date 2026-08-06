@@ -8,7 +8,6 @@
     <!-- Ícones para o atalho do telemóvel -->
     <link rel="icon" type="image/png" href="icone.png">
     <link rel="apple-touch-icon" href="icone.png">
-    <!-- Cor da barra superior do telemóvel -->
     <meta name="theme-color" content="#1f2937">
 
     <!-- Tailwind CSS -->
@@ -19,6 +18,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    
+    <!-- Biblioteca LocalForage (Ponte para IndexedDB - Salva dados ilimitados no dispositivo) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
 
     <!-- PDF.js com proteção para telemóveis -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -36,17 +38,12 @@
         canvas.sig-canvas { touch-action: none; width: 100%; height: 100%; display: block; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        
-        .locked-input {
-            pointer-events: none;
-            opacity: 0.6;
-            background-color: #e5e7eb !important;
-        }
-
+        .locked-input { pointer-events: none; opacity: 0.6; background-color: #e5e7eb !important; }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .error-field { border-color: #ef4444 !important; border-width: 2px !important; background-color: #fef2f2 !important; }
     </style>
 </head>
 <body class="text-gray-800">
@@ -127,7 +124,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v2.2</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v3.0 (iDB)</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="switchTab('novaOs')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm mr-2 font-medium">Doc. Atual</button>
@@ -234,14 +231,39 @@
     </div>
 
     <script>
+        // Inicialização do IndexedDB via localforage
+        localforage.config({
+            name: 'MultiOSProDB',
+            storeName: 'app_data',
+            description: 'Armazenamento offline robusto para Multi-OS Pro'
+        });
+
         let documentoAtualId = Date.now().toString();
-        let logoImgData = null, logoImgFormat = 'PNG', imgObject = null, objUrlPreview = null;
+        let logoImgData = null, logoImgFormat = 'PNG', imgObject = null;
+        let objUrlPreview = null, urlDownloadGerado = null; // Controle de memória (anti memory-leak)
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
-        function carregarLogoDoArmazenamento() {
+        // Função de migração do armazenamento frágil (localStorage) para a base robusta (IndexedDB)
+        async function migrarDadosLegados() {
             try {
-                const logoSalvo = localStorage.getItem('oficialLogoApp');
+                const logoAntigo = localStorage.getItem('oficialLogoApp');
+                if (logoAntigo) {
+                    await localforage.setItem('oficialLogoApp', logoAntigo);
+                    localStorage.removeItem('oficialLogoApp'); // Liberta espaço
+                }
+                const histAntigo = localStorage.getItem('osProData_v2');
+                if (histAntigo) {
+                    await localforage.setItem('historico_os', JSON.parse(histAntigo));
+                    localStorage.removeItem('osProData_v2'); // Liberta espaço
+                    localStorage.removeItem('osProData'); // Restos antigos
+                }
+            } catch(e) { console.error("Erro na migração de dados.", e); }
+        }
+
+        async function carregarLogoDoArmazenamento() {
+            try {
+                const logoSalvo = await localforage.getItem('oficialLogoApp');
                 if (logoSalvo) {
                     logoImgData = logoSalvo;
                     logoImgFormat = (logoSalvo.includes('image/jpeg') || logoSalvo.includes('image/jpg')) ? 'JPEG' : 'PNG';
@@ -262,48 +284,51 @@
                     if(elCard) elCard.style.display = 'block';
                     if(elCont) elCont.classList.add('hidden');
                 }
-            } catch(e) {}
+            } catch(e) { console.error("Erro ao carregar logótipo.", e); }
         }
 
-        function lerLogotipo(event) {
+        async function lerLogotipo(event) {
             const file = event.target.files[0];
             if (file) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
-                    localStorage.setItem('oficialLogoApp', e.target.result);
-                    carregarLogoDoArmazenamento();
-                    mostrarToast('Logótipo gravado com sucesso!');
+                reader.onload = async function(e) {
+                    await localforage.setItem('oficialLogoApp', e.target.result);
+                    await carregarLogoDoArmazenamento();
+                    mostrarToast('Logótipo gravado com sucesso na Base de Dados!');
                 };
                 reader.readAsDataURL(file);
             }
         }
 
-        function resetarLogotipo() {
+        async function resetarLogotipo() {
             if(confirm("Deseja remover o logótipo atual?")) {
-                localStorage.removeItem('oficialLogoApp');
+                await localforage.removeItem('oficialLogoApp');
                 logoImgData = null; logoImgFormat = 'PNG'; imgObject = null;
-                carregarLogoDoArmazenamento();
+                await carregarLogoDoArmazenamento();
                 switchTab('novaOs');
                 mostrarToast('Logótipo removido.');
             }
         }
 
-        function obterHistoricoSalvo() {
+        async function obterHistoricoSalvo() {
             try {
-                let dados = localStorage.getItem('osProData_v2');
-                if (dados) return JSON.parse(dados);
-                let legado = localStorage.getItem('osProData');
-                if (legado) { localStorage.setItem('osProData_v2', legado); return JSON.parse(legado); }
-            } catch(e) {}
-            return [];
+                let dados = await localforage.getItem('historico_os');
+                return dados || [];
+            } catch(e) { return []; }
         }
 
-        function gravarHistoricoSalvo(historico) {
-            try { localStorage.setItem('osProData_v2', JSON.stringify(historico)); return true; } catch(e) { return false; }
+        async function gravarHistoricoSalvo(historico) {
+            try { 
+                await localforage.setItem('historico_os', historico); 
+                return true; 
+            } catch(e) { 
+                mostrarToast('Erro ao gravar na base de dados.', true);
+                return false; 
+            }
         }
 
-        function abrirModalExportar() {
-            let historico = obterHistoricoSalvo();
+        async function abrirModalExportar() {
+            let historico = await obterHistoricoSalvo();
             if(historico.length === 0) return mostrarToast('Nenhum documento salvo.', true);
             document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`;
             document.getElementById('modalExportar').classList.remove('hidden');
@@ -311,13 +336,18 @@
 
         function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
 
-        function confirmarExportacao() {
+        async function confirmarExportacao() {
             let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${new Date().toISOString().split('T')[0]}`;
-            const blob = new Blob([JSON.stringify(obterHistoricoSalvo(), null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = `${inputNome}.json`;
+            const historico = await obterHistoricoSalvo();
+            const blob = new Blob([JSON.stringify(historico, null, 2)], { type: 'application/json' });
+            
+            // Libertar memória anterior se existir
+            if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado);
+            urlDownloadGerado = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a'); a.href = urlDownloadGerado; a.download = `${inputNome}.json`;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            
             fecharModalExportar();
             mostrarToast('Backup exportado com sucesso!');
         }
@@ -325,17 +355,24 @@
         function importarBackupJSON(event) {
             const file = event.target.files[0]; if(!file) return;
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 try {
                     const importados = JSON.parse(e.target.result);
-                    if(Array.isArray(importados)) {
-                        let mapa = new Map();
-                        [...obterHistoricoSalvo(), ...importados].forEach(item => mapa.set(item.id, item));
-                        gravarHistoricoSalvo(Array.from(mapa.values()));
-                        carregarHistorico();
-                        mostrarToast('Backup importado com sucesso!');
-                    }
-                } catch(err) { mostrarToast('Ficheiro inválido.', true); }
+                    // Validação de Integridade do JSON Importado (Prevenção de Corrupção)
+                    if(!Array.isArray(importados)) throw new Error("O ficheiro não contém uma lista de documentos.");
+                    if(importados.length > 0 && !importados[0].hasOwnProperty('id')) throw new Error("A estrutura dos dados é inválida.");
+
+                    let historicoAtual = await obterHistoricoSalvo();
+                    let mapa = new Map();
+                    [...historicoAtual, ...importados].forEach(item => mapa.set(item.id, item));
+                    
+                    await gravarHistoricoSalvo(Array.from(mapa.values()));
+                    await carregarHistorico();
+                    mostrarToast('Backup importado com sucesso!');
+                } catch(err) { 
+                    mostrarToast('Ficheiro JSON inválido ou corrompido.', true); 
+                    console.error(err);
+                }
             };
             reader.readAsText(file);
         }
@@ -350,9 +387,11 @@
 
         function abrirModal() { document.getElementById('modalConfirm').classList.remove('hidden'); }
         function fecharModal() { document.getElementById('modalConfirm').classList.add('hidden'); }
-        function confirmarLimpeza() {
-            localStorage.removeItem('osProData_v2'); localStorage.removeItem('osProData');
-            carregarHistorico(); fecharModal(); mostrarToast('Histórico apagado.');
+        async function confirmarLimpeza() {
+            await localforage.removeItem('historico_os');
+            await carregarHistorico(); 
+            fecharModal(); 
+            mostrarToast('Histórico apagado da Base de Dados.');
         }
 
         let contadorOS = 0;
@@ -369,8 +408,10 @@
             ctx.scale(ratio, ratio);
         }
 
-        document.addEventListener("DOMContentLoaded", () => {
-            carregarLogoDoArmazenamento();
+        // Sistema de inicialização Asyncronous
+        document.addEventListener("DOMContentLoaded", async () => {
+            await migrarDadosLegados();
+            await carregarLogoDoArmazenamento();
 
             try {
                 const cTec = document.getElementById('canvasTecnico');
@@ -388,7 +429,7 @@
             } catch(e) {}
 
             adicionarBlocoOS(); 
-            carregarHistorico();
+            await carregarHistorico();
             atualizarVisibilidadeCamposPorBloco();
         });
 
@@ -502,11 +543,11 @@
         function desbloquearEdicao() { toggleLock(false); }
         function limparAssinatura(pad, isCliente = false) { if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); }
 
-        function switchTab(tabId) {
+        async function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
             if(tabId === 'historico') {
-                carregarHistorico();
+                await carregarHistorico();
             } else if(tabId === 'novaOs') {
                 setTimeout(() => {
                     resizeCanvas(document.getElementById('canvasTecnico'));
@@ -545,8 +586,8 @@
                     ${id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco();" class="text-red-600 text-xs font-bold bg-red-50 px-2 py-1 rounded border border-red-200">Remover OS</button>` : ''}
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div><label class="block text-sm font-semibold mb-1">Cliente *</label><input type="text" id="cliente_${id}" required class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
-                    <div><label class="block text-sm font-semibold mb-1">OS Nº *</label><input type="text" id="osNum_${id}" value="${Math.floor(Math.random()*900000)+100000}" required class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
+                    <div><label class="block text-sm font-semibold mb-1">Cliente *</label><input type="text" id="cliente_${id}" required class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:ring-2 focus:ring-blue-500 transition"></div>
+                    <div><label class="block text-sm font-semibold mb-1">OS Nº *</label><input type="text" id="osNum_${id}" value="${Math.floor(Math.random()*900000)+100000}" required class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:ring-2 focus:ring-blue-500 transition"></div>
                     <div><label class="block text-sm font-semibold mb-1">Equipamento</label><input type="text" id="equipamento_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
                     <div><label class="block text-sm font-semibold mb-1">Modelo</label><input type="text" id="modelo_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
                     <div><label class="block text-sm font-semibold mb-1">Nº de Série</label><input type="text" id="serie_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
@@ -645,7 +686,31 @@
             document.getElementById(`totalDias_${id}`).value = `${diffDays} dia(s)`;
         }
 
-        function salvarDocumento() {
+        // --- SISTEMA DE VALIDAÇÃO DE CAMPOS ---
+        function validarCamposObrigatorios() {
+            let valido = true;
+            document.querySelectorAll('.error-field').forEach(el => el.classList.remove('error-field'));
+            
+            const blocos = document.querySelectorAll('.os-bloco');
+            if(blocos.length === 0) return false;
+
+            blocos.forEach(b => {
+                const id = b.getAttribute('data-id');
+                const cCliente = document.getElementById(`cliente_${id}`);
+                const cOsNum = document.getElementById(`osNum_${id}`);
+                
+                if (!cCliente.value.trim()) { cCliente.classList.add('error-field'); valido = false; }
+                if (!cOsNum.value.trim()) { cOsNum.classList.add('error-field'); valido = false; }
+            });
+            return valido;
+        }
+
+        async function salvarDocumento() {
+            if (!validarCamposObrigatorios()) {
+                mostrarToast('Preencha os campos obrigatórios em destaque!', true);
+                return false;
+            }
+
             try {
                 let dados = {
                     id: documentoAtualId, dataAtualizacao: new Date().toISOString(),
@@ -679,17 +744,24 @@
                     dados.ordens.push(ordem);
                 });
 
-                let historico = obterHistoricoSalvo();
+                let historico = await obterHistoricoSalvo();
                 let index = historico.findIndex(d => d.id === dados.id);
                 if(index >= 0) historico[index] = dados; else historico.unshift(dados);
-                gravarHistoricoSalvo(historico);
-                mostrarToast('Salvo com sucesso!');
-            } catch(e) { mostrarToast('Erro ao salvar.', true); }
+                
+                await gravarHistoricoSalvo(historico);
+                mostrarToast('Salvo com sucesso na Base de Dados!');
+                return true;
+            } catch(e) { 
+                mostrarToast('Erro ao salvar.', true); 
+                return false;
+            }
         }
 
-        function carregarHistorico() {
-            const list = document.getElementById('historicoList'); let h = obterHistoricoSalvo();
+        async function carregarHistorico() {
+            const list = document.getElementById('historicoList'); 
+            let h = await obterHistoricoSalvo();
             if(!h || h.length === 0) return list.innerHTML = '<p class="text-gray-500 italic text-center">Nenhum documento salvo.</p>';
+            
             list.innerHTML = h.map(doc => {
                 let primeiraOS = (doc.ordens && doc.ordens[0]) ? doc.ordens[0] : {};
                 return `
@@ -707,8 +779,10 @@
             }).join('');
         }
 
-        function carregarDocumentoParaEdicao(id) {
-            let doc = obterHistoricoSalvo().find(d => d.id === id); if(!doc) return;
+        async function carregarDocumentoParaEdicao(id) {
+            let historico = await obterHistoricoSalvo();
+            let doc = historico.find(d => d.id === id); if(!doc) return;
+            
             desbloquearEdicao(); documentoAtualId = doc.id;
             document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
             if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o));
@@ -739,17 +813,20 @@
             atualizarVisibilidadeCamposPorBloco();
         }
 
-        function apagarDocumento(id) {
+        async function apagarDocumento(id) {
             if(!confirm("Tem certeza que deseja apagar?")) return;
-            gravarHistoricoSalvo(obterHistoricoSalvo().filter(d => d.id !== id));
-            if(id === documentoAtualId) iniciarNovaOS(); carregarHistorico();
+            let historico = await obterHistoricoSalvo();
+            await gravarHistoricoSalvo(historico.filter(d => d.id !== id));
+            if(id === documentoAtualId) iniciarNovaOS(); 
+            await carregarHistorico();
         }
 
         async function construirPDFBytes() {
-            const blocosOS = document.querySelectorAll('.os-bloco');
-            if (blocosOS.length === 0) throw new Error('Adicione pelo menos uma OS.');
-            for (let b of blocosOS) if(!document.getElementById(`cliente_${b.getAttribute('data-id')}`).value.trim()) throw new Error(`Preencha o cliente da OS!`);
+            if (!validarCamposObrigatorios()) {
+                throw new Error("Preencha os campos obrigatórios em destaque!");
+            }
 
+            const blocosOS = document.querySelectorAll('.os-bloco');
             const isServicoInterno = verificarServicoInternoGlobal();
             const { jsPDF } = window.jspdf;
             const { PDFDocument, rgb, StandardFonts } = window.PDFLib;
@@ -782,7 +859,6 @@
                 cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
                 cy += 4; 
                 
-                // --- CAIXA DE DESCRIÇÃO EXPANSÍVEL PERFEITA ---
                 docOS.autoTable({
                     startY: cy,
                     margin: { left: 15, right: 15 },
@@ -799,7 +875,6 @@
                     columnStyles: { 0: { cellWidth: 180 } }
                 });
                 
-                // Posição Y atualiza exatamente logo abaixo da descrição, evitando qualquer colisão
                 cy = docOS.lastAutoTable.finalY + 8;
 
                 docOS.setFont("helvetica", "bold"); docOS.text("PEÇAS", 15, cy); cy+=4;
@@ -914,9 +989,12 @@
             try {
                 btn.disabled = true; btn.innerHTML = 'A Renderizar...';
                 const bytesPdf = await construirPDFBytes();
-                const blob = new Blob([bytesPdf], { type: 'application/pdf' });
+                
+                // Anti memory leak (Libertar RAM do ficheiro anterior)
                 if(objUrlPreview) URL.revokeObjectURL(objUrlPreview);
+                const blob = new Blob([bytesPdf], { type: 'application/pdf' });
                 objUrlPreview = URL.createObjectURL(blob);
+                
                 document.getElementById('linkPreviewExt').href = objUrlPreview; 
                 document.getElementById('linkPreviewExt').download = "rascunho_os.pdf";
 
@@ -942,7 +1020,9 @@
         async function gerarPDFConsolidado() {
             const btn = document.getElementById('btnGerarPdf'); const btnTxt = document.getElementById('btnTxt');
             try {
-                salvarDocumento();
+                const salvouComSucesso = await salvarDocumento();
+                if(!salvouComSucesso) return; // Se a validação falhou, cancela a geração
+
                 btn.disabled = true; btnTxt.innerText = "A COMPILAR PDF...";
                 const bytesPdfFinal = await construirPDFBytes();
                 const primeiraOs = document.querySelector('.os-bloco');
@@ -951,7 +1031,12 @@
                 const pCliente = document.getElementById(`cliente_${pId}`).value.trim();
 
                 const blob = new Blob([bytesPdfFinal], { type: 'application/pdf' });
-                const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+                
+                // Anti memory leak (Libertar RAM do ficheiro anterior)
+                if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado);
+                urlDownloadGerado = URL.createObjectURL(blob);
+
+                const link = document.createElement('a'); link.href = urlDownloadGerado;
                 link.download = `OS_${pOs}_${pCliente.replace(/[^a-z0-9]/gi,'_')}.pdf`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 mostrarToast('PDF Gerado com sucesso!');
@@ -961,4 +1046,5 @@
     </script>
 </body>
 </html>
+
 
