@@ -8,7 +8,7 @@
     <!-- Ícones para o atalho do telemóvel -->
     <link rel="icon" type="image/png" href="icone.png">
     <link rel="apple-touch-icon" href="icone.png">
-    <!-- Cor da barra superior do telemóvel (opcional, deixa com aspeto de app) -->
+    <!-- Cor da barra superior do telemóvel -->
     <meta name="theme-color" content="#1f2937">
 
     <!-- Tailwind CSS -->
@@ -127,7 +127,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-gray-100">Multi-OS Pro</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v2.1</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="switchTab('novaOs')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm mr-2 font-medium">Doc. Atual</button>
@@ -782,8 +782,8 @@
                 cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
                 cy += 4; 
                 
-                // NOVA LÓGICA PARA A DESCRIÇÃO: 
-                // Utiliza o autoTable para garantir que o quadro expande e que não se sobrepõe a outras áreas.
+                // --- NOVA CAIXA EXPANSÍVEL DE DESCRIÇÃO ---
+                // Agora o quadro molda-se perfeitamente ao tamanho do texto!
                 docOS.autoTable({
                     startY: cy,
                     margin: { left: 15, right: 15 },
@@ -792,13 +792,15 @@
                     styles: {
                         lineWidth: 0.2,
                         lineColor: [0, 0, 0],
-                        textColor: [50, 50, 50],
+                        textColor: [0, 0, 0], // Texto sempre escuro
                         fontSize: 9,
-                        cellPadding: 3
-                    }
+                        cellPadding: 4,
+                        valign: 'middle'
+                    },
+                    columnStyles: { 0: { cellWidth: 180 } }
                 });
                 
-                // A posição (cy) avança consoante o tamanho real que a descrição ocupou
+                // cy avança para a linha exata onde a descrição terminou!
                 cy = docOS.lastAutoTable.finalY + 8;
 
                 docOS.setFont("helvetica", "bold"); docOS.text("PEÇAS", 15, cy); cy+=4;
@@ -821,11 +823,11 @@
                 docOS.setFont("helvetica", "bold"); docOS.text("LIBERAÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
                 
                 cy+=4; 
-                // Preparar texto de OBS para quebrar linha se for longo
+                // Texto de observações agora respeita a margem se for comprido
                 let obsText = `OBS: ${document.getElementById(`liberacaoObs_${id}`).value}`;
                 let obsLines = docOS.splitTextToSize(obsText, 180);
                 docOS.text(obsLines, 15, cy);
-                cy += (obsLines.length * 4) + 1; // Avança a altura baseada nas linhas da observação
+                cy += (obsLines.length * 4) + 1;
                 
                 cy+=5; 
                 docOS.text(`Status: ${cb('stOk_'+id)} OK  ${cb('stRes_'+id)} RESTRIÇÃO`, 15, cy); 
