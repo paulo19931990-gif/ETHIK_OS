@@ -780,9 +780,28 @@
                 cy += 6; docOS.text(`${cb('cbGarantia_'+id)} GARANTIA`, 15, cy); docOS.text(`${cb('cbSemGarantia_'+id)} SEM GARANTIA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
 
                 cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
-                cy += 4; docOS.rect(15, cy, 180, 20); docOS.text(docOS.splitTextToSize(document.getElementById(`descricao_${id}`).value, 175), 17, cy+5);
+                cy += 4; 
+                
+                // NOVA LÓGICA PARA A DESCRIÇÃO: 
+                // Utiliza o autoTable para garantir que o quadro expande e que não se sobrepõe a outras áreas.
+                docOS.autoTable({
+                    startY: cy,
+                    margin: { left: 15, right: 15 },
+                    body: [[document.getElementById(`descricao_${id}`).value || ' ']],
+                    theme: 'plain',
+                    styles: {
+                        lineWidth: 0.2,
+                        lineColor: [0, 0, 0],
+                        textColor: [50, 50, 50],
+                        fontSize: 9,
+                        cellPadding: 3
+                    }
+                });
+                
+                // A posição (cy) avança consoante o tamanho real que a descrição ocupou
+                cy = docOS.lastAutoTable.finalY + 8;
 
-                cy += 25; docOS.setFont("helvetica", "bold"); docOS.text("PEÇAS", 15, cy); cy+=4;
+                docOS.setFont("helvetica", "bold"); docOS.text("PEÇAS", 15, cy); cy+=4;
                 let tb = [];
                 const pRows = b.querySelectorAll('.peca-row-item');
                 for(let i=0; i<pRows.length; i+=2) {
@@ -794,13 +813,19 @@
                 if(tb.length===0) tb.push(['','','','','','']);
                 
                 docOS.autoTable({ 
-                    startY: cy, margin: { left: 15, top: 35 }, theme: 'grid', styles: { fontSize: 8, cellPadding: 2 }, 
+                    startY: cy, margin: { left: 15, right: 15 }, theme: 'grid', styles: { fontSize: 8, cellPadding: 2 }, 
                     head: [['Qtd', 'Nome', 'Cód', 'Qtd', 'Nome', 'Cód']], body: tb
                 });
                 
                 cy = docOS.lastAutoTable.finalY + 6;
                 docOS.setFont("helvetica", "bold"); docOS.text("LIBERAÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
-                cy+=4; docOS.text(`OBS: ${document.getElementById(`liberacaoObs_${id}`).value}`, 15, cy);
+                
+                cy+=4; 
+                // Preparar texto de OBS para quebrar linha se for longo
+                let obsText = `OBS: ${document.getElementById(`liberacaoObs_${id}`).value}`;
+                let obsLines = docOS.splitTextToSize(obsText, 180);
+                docOS.text(obsLines, 15, cy);
+                cy += (obsLines.length * 4) + 1; // Avança a altura baseada nas linhas da observação
                 
                 cy+=5; 
                 docOS.text(`Status: ${cb('stOk_'+id)} OK  ${cb('stRes_'+id)} RESTRIÇÃO`, 15, cy); 
@@ -842,7 +867,6 @@
             docSig.setFont("helvetica", "bold"); docSig.setFontSize(12); docSig.text(isServicoInterno ? "ASSINATURA DO TÉCNICO" : "ASSINATURAS GERAIS", 105, 20, {align:"center"});
             docSig.setFontSize(9); docSig.setFont("helvetica", "normal"); 
             
-            // Aqui foi atualizada a frase solicitada para a última página:
             docSig.text("Este documento consolida as OS e os respetivos anexos presentes nas páginas anteriores.", 15, fy);
             fy+=20; 
 
@@ -938,3 +962,5 @@
     </script>
 </body>
 </html>
+
+
