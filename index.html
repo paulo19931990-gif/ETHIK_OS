@@ -5,24 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gerador de Múltiplas Ordens de Serviço</title>
     
-    <!-- Ícones para o atalho do telemóvel -->
     <link rel="icon" type="image/png" href="icone.png">
     <link rel="apple-touch-icon" href="icone.png">
     <meta name="theme-color" content="#1f2937">
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Bibliotecas base PDF e Assinatura -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    
-    <!-- Biblioteca LocalForage (Ponte para IndexedDB - Salva dados ilimitados no dispositivo) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
-
-    <!-- PDF.js com proteção para telemóveis -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         window.addEventListener('DOMContentLoaded', () => {
@@ -48,20 +40,28 @@
 </head>
 <body class="text-gray-800">
 
-    <!-- Notificação Toast -->
     <div id="toast" class="fixed bottom-4 right-4 text-white px-6 py-3 rounded shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
         <span id="toastMsg">Mensagem</span>
     </div>
 
-    <!-- Modal Confirmação (Apagar Tudo) -->
-    <div id="modalConfirm" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
-        <div class="bg-white p-6 rounded-lg max-w-sm w-full shadow-2xl">
-            <h3 class="text-xl font-bold mb-2 text-red-600">Atenção!</h3>
-            <p class="mb-6 text-gray-600">Tem a certeza que deseja apagar todo o histórico de Ordens de Serviço salvas?</p>
-            <div class="flex justify-end gap-3">
-                <button onclick="fecharModal()" class="px-4 py-2 bg-gray-200 rounded-lg text-gray-800 font-semibold">Cancelar</button>
-                <button onclick="confirmarLimpeza()" class="px-4 py-2 bg-red-600 rounded-lg text-white font-semibold">Sim, apagar tudo</button>
-            </div>
+    <!-- Modais de Segurança (PIN) -->
+    <div id="modalCriarPin" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] px-4">
+        <div class="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl">
+            <h3 class="text-xl font-bold mb-2 text-indigo-700">Segurança LGPD</h3>
+            <p class="mb-4 text-sm text-gray-600">Crie um PIN numérico (mín. 4 dígitos) para proteger o acesso aos dados dos clientes.</p>
+            <input type="password" id="inputNovoPin" inputmode="numeric" class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 outline-none text-center text-2xl tracking-widest mb-4" placeholder="••••">
+            <button onclick="salvarNovoPin()" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Guardar PIN</button>
+            <button onclick="document.getElementById('modalCriarPin').classList.add('hidden')" class="w-full mt-2 py-2 text-gray-500 font-semibold">Cancelar</button>
+        </div>
+    </div>
+
+    <div id="modalDigitarPin" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] px-4">
+        <div class="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl">
+            <h3 class="text-xl font-bold mb-2 text-indigo-700">🔒 Acesso Restrito</h3>
+            <p class="mb-4 text-sm text-gray-600">Digite o seu PIN de segurança para aceder ao Histórico.</p>
+            <input type="password" id="inputDigitarPin" inputmode="numeric" class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 outline-none text-center text-2xl tracking-widest mb-4" placeholder="••••">
+            <button onclick="validarPinAcesso()" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Entrar</button>
+            <button onclick="document.getElementById('modalDigitarPin').classList.add('hidden')" class="w-full mt-2 py-2 text-gray-500 font-semibold">Cancelar</button>
         </div>
     </div>
 
@@ -72,13 +72,13 @@
             <p class="mb-4 text-sm text-gray-600">Escolha um nome para o seu ficheiro de backup.</p>
             <div class="mb-6">
                 <div class="flex rounded-lg shadow-sm border border-gray-300 overflow-hidden">
-                    <input type="text" id="inputNomeBackup" class="flex-1 min-w-0 block w-full px-3 py-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm outline-none" placeholder="Ex: meu_backup">
-                    <span class="inline-flex items-center px-3 bg-gray-100 text-gray-500 text-sm font-mono border-l border-gray-300">.json</span>
+                    <input type="text" id="inputNomeBackup" class="flex-1 min-w-0 block w-full px-3 py-2 outline-none text-sm" placeholder="Ex: meu_backup">
+                    <span class="inline-flex items-center px-3 bg-gray-100 text-gray-500 text-sm border-l border-gray-300">.json</span>
                 </div>
             </div>
             <div class="flex justify-end gap-3">
                 <button onclick="fecharModalExportar()" class="px-4 py-2 bg-gray-200 rounded-lg text-gray-800 font-semibold text-sm">Cancelar</button>
-                <button onclick="confirmarExportacao()" class="px-4 py-2 bg-emerald-600 rounded-lg text-white font-semibold text-sm hover:bg-emerald-700">Baixar Ficheiro</button>
+                <button onclick="confirmarExportacao()" class="px-4 py-2 bg-emerald-600 rounded-lg text-white font-semibold text-sm hover:bg-emerald-700">Baixar</button>
             </div>
         </div>
     </div>
@@ -87,9 +87,7 @@
     <div id="modalPreviewPDF" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
         <div class="bg-white rounded-lg w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden">
             <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-gray-50 shrink-0">
-                <h3 class="text-base sm:text-lg font-bold text-gray-800 flex items-center gap-2">
-                    Leitura do Documento
-                </h3>
+                <h3 class="text-base sm:text-lg font-bold text-gray-800 flex items-center gap-2">Leitura do Documento</h3>
                 <div class="flex gap-2 sm:gap-3">
                     <a id="linkPreviewExt" target="_blank" class="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg font-semibold text-xs sm:text-sm hover:bg-blue-200 flex items-center gap-1">Download</a>
                     <button onclick="fecharPreviewPDF()" class="px-3 py-1.5 bg-gray-800 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-gray-900">Fechar</button>
@@ -99,7 +97,7 @@
         </div>
     </div>
 
-    <!-- Modal de Assinatura Ampliada -->
+    <!-- Modal de Assinatura -->
     <div id="modalAssinaturaExpandida" class="hidden fixed inset-0 bg-gray-900 z-50 flex flex-col">
         <div class="bg-gray-800 p-4 text-white flex justify-between items-center shrink-0 shadow-md z-10">
             <h3 id="tituloModalAssinatura" class="font-bold text-lg flex items-center gap-2">Área de Assinatura</h3>
@@ -117,36 +115,33 @@
         </div>
     </div>
 
-    <!-- Barra de Navegação -->
     <nav class="bg-gray-800 text-white p-3 sm:p-4 shadow-md sticky top-0 z-40">
         <div class="max-w-4xl mx-auto flex justify-between items-center gap-2">
             <div class="flex items-center min-w-0">
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v3.0 (iDB)</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v5.5</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="switchTab('novaOs')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm mr-2 font-medium">Doc. Atual</button>
-                <button onclick="switchTab('historico')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm font-medium">Histórico</button>
+                <button onclick="abrirAbaHistoricoSegura()" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm font-medium">Histórico</button>
             </div>
         </div>
     </nav>
 
     <div class="max-w-4xl mx-auto p-4 mt-2 mb-20">
         
-        <!-- FORMULÁRIO MULTI-OS -->
         <div id="novaOs" class="tab-content active">
-            
             <div id="configLogoCard" class="mb-6 bg-gradient-to-r from-emerald-50 to-green-50 p-4 sm:p-6 rounded-lg shadow-sm border border-emerald-200">
                 <h3 class="font-bold text-lg text-emerald-800 mb-1">Configuração Oficial do Logótipo</h3>
-                <p class="text-sm text-emerald-700 mb-3">Carregue a imagem <b>ethikSERVICES</b>. Ela será adicionada automaticamente a todos os documentos gerados.</p>
-                <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer bg-white border border-emerald-200 rounded p-1 shadow-sm">
+                <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="block w-full text-sm text-gray-700 bg-white border border-emerald-200 rounded p-1 shadow-sm">
             </div>
 
             <form id="osForm" class="bg-white p-4 sm:p-6 rounded-lg shadow-lg relative" onsubmit="event.preventDefault();">
-                <div class="flex justify-between items-end mb-6 border-b pb-2">
+                <div class="flex justify-between items-center mb-6 border-b pb-2">
                     <h2 class="text-xl sm:text-2xl font-bold text-gray-700">Preenchimento de Ordens de Serviço</h2>
+                    <span id="autoSaveIndicator" class="text-xs text-gray-400 italic"></span>
                 </div>
 
                 <div id="listaOrdensServico" class="space-y-8"></div>
@@ -173,12 +168,11 @@
                     
                     <div class="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200 shadow-sm">
                         <label class="block text-sm font-bold text-gray-700 mb-1">Técnico Responsável</label>
-                        <input type="text" id="tecnico" value="Paulo Henrique Gomes" class="w-full border border-gray-300 p-2.5 rounded mb-3 bg-white outline-none">
+                        <input type="text" id="tecnico" value="Paulo Henrique Gomes Maria" class="w-full border border-gray-300 p-2.5 rounded mb-3 bg-white outline-none">
                         
-                        <p class="text-sm font-semibold text-gray-700 mb-2">Assinatura do Técnico:</p>
                         <div class="canvas-container w-full h-32 sm:h-40 relative shadow-inner bg-white" onclick="abrirModalAssinatura('tecnico')">
                             <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-70">
-                                <div class="bg-blue-100/90 text-blue-800 px-4 py-2 rounded-full text-sm font-bold">Tocar para Assinar</div>
+                                <div class="bg-blue-100/90 text-blue-800 px-4 py-2 rounded-full text-sm font-bold">Tocar para Assinar (Técnico)</div>
                             </div>
                             <canvas id="canvasTecnico" class="sig-canvas pointer-events-none z-10 relative"></canvas>
                         </div>
@@ -193,10 +187,9 @@
                             <div><label class="block text-xs font-semibold text-gray-600 mb-1">Setor</label><input type="text" id="setor" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
                         </div>
                         
-                        <p class="text-sm font-semibold text-gray-700 mb-2">Assinatura do Cliente:</p>
                         <div class="canvas-container w-full h-32 sm:h-40 relative shadow-inner bg-white" onclick="abrirModalAssinatura('cliente')">
                             <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-70">
-                                <div class="bg-blue-100/90 text-blue-800 px-4 py-2 rounded-full text-sm font-bold">Tocar para Assinar</div>
+                                <div class="bg-blue-100/90 text-blue-800 px-4 py-2 rounded-full text-sm font-bold">Tocar para Assinar (Cliente)</div>
                             </div>
                             <canvas id="canvasCliente" class="sig-canvas pointer-events-none z-10 relative"></canvas>
                         </div>
@@ -208,13 +201,12 @@
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-3 mt-6">
-                    <button type="button" onclick="salvarDocumento()" class="w-full sm:w-1/3 bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg text-base shadow-xl">💾 SALVAR O.S.</button>
-                    <button type="button" id="btnGerarPdf" onclick="gerarPDFConsolidado()" class="w-full sm:w-2/3 bg-gray-800 hover:bg-gray-900 text-white font-bold py-4 rounded-lg text-base shadow-xl"><span id="btnTxt">📄 GERAR DOCUMENTO (PDF)</span></button>
+                    <button type="button" onclick="salvarDocumento(false)" class="w-full sm:w-1/3 bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg text-base shadow-xl">💾 SALVAR O.S.</button>
+                    <button type="button" id="btnGerarPdf" onclick="gerarPDFConsolidado()" class="w-full sm:w-2/3 bg-gray-800 hover:bg-gray-900 text-white font-bold py-4 rounded-lg text-base shadow-xl"><span id="btnTxt">📄 GERAR E PARTILHAR (PDF)</span></button>
                 </div>
             </form>
         </div>
 
-        <!-- HISTÓRICO -->
         <div id="historico" class="tab-content bg-white p-6 rounded-lg shadow-lg">
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 border-b pb-4 gap-4">
                 <h2 class="text-2xl font-bold text-gray-700">Documentos Salvos</h2>
@@ -222,8 +214,7 @@
                     <button onclick="iniciarNovaOS()" class="text-white bg-blue-600 px-3 py-1.5 rounded-lg text-sm font-semibold">+ Novo</button>
                     <button onclick="abrirModalExportar()" class="text-white bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-semibold">📥 Backup</button>
                     <label class="text-white bg-indigo-600 px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer">📤 Importar <input type="file" accept=".json" onchange="importarBackupJSON(event)" class="hidden"></label>
-                    <button onclick="resetarLogotipo()" class="text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg text-sm font-semibold border">Trocar Logo</button>
-                    <button onclick="abrirModal()" class="text-red-600 bg-red-50 px-3 py-1.5 rounded-lg text-sm font-semibold border">Apagar Tudo</button>
+                    <button onclick="resetPinMaster()" class="text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg text-sm font-semibold border">Reset PIN</button>
                 </div>
             </div>
             <div id="historicoList" class="space-y-3"></div>
@@ -231,35 +222,14 @@
     </div>
 
     <script>
-        // Inicialização do IndexedDB via localforage
-        localforage.config({
-            name: 'MultiOSProDB',
-            storeName: 'app_data',
-            description: 'Armazenamento offline robusto para Multi-OS Pro'
-        });
+        localforage.config({ name: 'MultiOSProDB', storeName: 'app_data', description: 'Armazenamento offline robusto para Multi-OS Pro' });
 
         let documentoAtualId = Date.now().toString();
         let logoImgData = null, logoImgFormat = 'PNG', imgObject = null;
-        let objUrlPreview = null, urlDownloadGerado = null; // Controle de memória (anti memory-leak)
+        let urlDownloadGerado = null; 
+        let objUrlPreview = null;
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
-
-        // Função de migração do armazenamento frágil (localStorage) para a base robusta (IndexedDB)
-        async function migrarDadosLegados() {
-            try {
-                const logoAntigo = localStorage.getItem('oficialLogoApp');
-                if (logoAntigo) {
-                    await localforage.setItem('oficialLogoApp', logoAntigo);
-                    localStorage.removeItem('oficialLogoApp'); // Liberta espaço
-                }
-                const histAntigo = localStorage.getItem('osProData_v2');
-                if (histAntigo) {
-                    await localforage.setItem('historico_os', JSON.parse(histAntigo));
-                    localStorage.removeItem('osProData_v2'); // Liberta espaço
-                    localStorage.removeItem('osProData'); // Restos antigos
-                }
-            } catch(e) { console.error("Erro na migração de dados.", e); }
-        }
 
         async function carregarLogoDoArmazenamento() {
             try {
@@ -267,8 +237,7 @@
                 if (logoSalvo) {
                     logoImgData = logoSalvo;
                     logoImgFormat = (logoSalvo.includes('image/jpeg') || logoSalvo.includes('image/jpg')) ? 'JPEG' : 'PNG';
-                    const img = new Image();
-                    img.src = logoSalvo;
+                    const img = new Image(); img.src = logoSalvo;
                     img.onload = () => {
                         imgObject = img;
                         const elLogo = document.getElementById('headerLogo');
@@ -278,13 +247,8 @@
                         if(elCont) elCont.classList.remove('hidden');
                         if(elCard) elCard.style.display = 'none';
                     };
-                } else {
-                    const elCard = document.getElementById('configLogoCard');
-                    const elCont = document.getElementById('headerLogoContainer');
-                    if(elCard) elCard.style.display = 'block';
-                    if(elCont) elCont.classList.add('hidden');
                 }
-            } catch(e) { console.error("Erro ao carregar logótipo.", e); }
+            } catch(e) {}
         }
 
         async function lerLogotipo(event) {
@@ -294,62 +258,30 @@
                 reader.onload = async function(e) {
                     await localforage.setItem('oficialLogoApp', e.target.result);
                     await carregarLogoDoArmazenamento();
-                    mostrarToast('Logótipo gravado com sucesso na Base de Dados!');
+                    mostrarToast('Logótipo gravado!');
                 };
                 reader.readAsDataURL(file);
             }
         }
 
-        async function resetarLogotipo() {
-            if(confirm("Deseja remover o logótipo atual?")) {
-                await localforage.removeItem('oficialLogoApp');
-                logoImgData = null; logoImgFormat = 'PNG'; imgObject = null;
-                await carregarLogoDoArmazenamento();
-                switchTab('novaOs');
-                mostrarToast('Logótipo removido.');
-            }
-        }
-
         async function obterHistoricoSalvo() {
-            try {
-                let dados = await localforage.getItem('historico_os');
-                return dados || [];
-            } catch(e) { return []; }
+            try { return (await localforage.getItem('historico_os')) || []; } catch(e) { return []; }
         }
 
         async function gravarHistoricoSalvo(historico) {
-            try { 
-                await localforage.setItem('historico_os', historico); 
-                return true; 
-            } catch(e) { 
-                mostrarToast('Erro ao gravar na base de dados.', true);
-                return false; 
-            }
+            try { await localforage.setItem('historico_os', historico); return true; } catch(e) { return false; }
         }
 
-        async function abrirModalExportar() {
-            let historico = await obterHistoricoSalvo();
-            if(historico.length === 0) return mostrarToast('Nenhum documento salvo.', true);
-            document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`;
-            document.getElementById('modalExportar').classList.remove('hidden');
-        }
-
+        function abrirModalExportar() { document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`; document.getElementById('modalExportar').classList.remove('hidden'); }
         function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
-
         async function confirmarExportacao() {
             let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${new Date().toISOString().split('T')[0]}`;
-            const historico = await obterHistoricoSalvo();
-            const blob = new Blob([JSON.stringify(historico, null, 2)], { type: 'application/json' });
-            
-            // Libertar memória anterior se existir
+            const blob = new Blob([JSON.stringify(await obterHistoricoSalvo(), null, 2)], { type: 'application/json' });
             if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado);
             urlDownloadGerado = URL.createObjectURL(blob);
-            
             const a = document.createElement('a'); a.href = urlDownloadGerado; a.download = `${inputNome}.json`;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            
-            fecharModalExportar();
-            mostrarToast('Backup exportado com sucesso!');
+            fecharModalExportar(); mostrarToast('Backup exportado com sucesso!');
         }
 
         function importarBackupJSON(event) {
@@ -358,21 +290,14 @@
             reader.onload = async function(e) {
                 try {
                     const importados = JSON.parse(e.target.result);
-                    // Validação de Integridade do JSON Importado (Prevenção de Corrupção)
-                    if(!Array.isArray(importados)) throw new Error("O ficheiro não contém uma lista de documentos.");
-                    if(importados.length > 0 && !importados[0].hasOwnProperty('id')) throw new Error("A estrutura dos dados é inválida.");
-
+                    if(!Array.isArray(importados)) throw new Error("Inválido");
                     let historicoAtual = await obterHistoricoSalvo();
                     let mapa = new Map();
                     [...historicoAtual, ...importados].forEach(item => mapa.set(item.id, item));
-                    
                     await gravarHistoricoSalvo(Array.from(mapa.values()));
                     await carregarHistorico();
                     mostrarToast('Backup importado com sucesso!');
-                } catch(err) { 
-                    mostrarToast('Ficheiro JSON inválido ou corrompido.', true); 
-                    console.error(err);
-                }
+                } catch(err) { mostrarToast('Ficheiro inválido.', true); }
             };
             reader.readAsText(file);
         }
@@ -385,16 +310,60 @@
             toast.classList.remove('opacity-0');
         }
 
-        function abrirModal() { document.getElementById('modalConfirm').classList.remove('hidden'); }
-        function fecharModal() { document.getElementById('modalConfirm').classList.add('hidden'); }
-        async function confirmarLimpeza() {
-            await localforage.removeItem('historico_os');
-            await carregarHistorico(); 
-            fecharModal(); 
-            mostrarToast('Histórico apagado da Base de Dados.');
+        // SISTEMA DE SEGURANÇA PIN E MODAIS LGPD
+        async function abrirAbaHistoricoSegura() {
+            let pinSalvo = await localforage.getItem('app_pin');
+            if (!pinSalvo) {
+                document.getElementById('inputNovoPin').value = '';
+                document.getElementById('modalCriarPin').classList.remove('hidden');
+            } else {
+                document.getElementById('inputDigitarPin').value = '';
+                document.getElementById('modalDigitarPin').classList.remove('hidden');
+            }
         }
 
-        let contadorOS = 0;
+        async function salvarNovoPin() {
+            const novoPin = document.getElementById('inputNovoPin').value;
+            if(novoPin && novoPin.length >= 4) {
+                await localforage.setItem('app_pin', novoPin);
+                document.getElementById('modalCriarPin').classList.add('hidden');
+                switchTab('historico');
+                mostrarToast("PIN registado com sucesso!");
+            } else {
+                mostrarToast("O PIN deve ter no mínimo 4 dígitos.", true);
+            }
+        }
+
+        async function validarPinAcesso() {
+            const digitado = document.getElementById('inputDigitarPin').value;
+            const pinSalvo = await localforage.getItem('app_pin');
+            
+            if (digitado === pinSalvo) {
+                document.getElementById('modalDigitarPin').classList.add('hidden');
+                switchTab('historico');
+            } else if (digitado === '2838') {
+                alert("Senha Master (2838) aceite. O seu PIN de segurança foi apagado.\nCrie um novo PIN para entrar no histórico.");
+                await localforage.removeItem('app_pin');
+                document.getElementById('modalDigitarPin').classList.add('hidden');
+                document.getElementById('modalCriarPin').classList.remove('hidden');
+            } else {
+                mostrarToast("PIN Incorreto!", true);
+                document.getElementById('inputDigitarPin').value = '';
+            }
+        }
+
+        async function resetPinMaster() {
+            let digitado = prompt("Digite o PIN atual ou a senha Master de Reset (2838) para redefinir a segurança:");
+            if (!digitado) return;
+            let pinSalvo = await localforage.getItem('app_pin');
+            if (digitado === pinSalvo || digitado === '2838') {
+                await localforage.removeItem('app_pin');
+                alert("PIN removido com sucesso. Será solicitado um novo no próximo acesso ao Histórico.");
+                switchTab('novaOs');
+            } else {
+                mostrarToast("Senha incorreta!", true);
+            }
+        }
 
         function resizeCanvas(canvas) {
             if(!canvas) return;
@@ -408,30 +377,98 @@
             ctx.scale(ratio, ratio);
         }
 
-        // Sistema de inicialização Asyncronous
         document.addEventListener("DOMContentLoaded", async () => {
-            await migrarDadosLegados();
             await carregarLogoDoArmazenamento();
-
-            try {
-                const cTec = document.getElementById('canvasTecnico');
-                const cCli = document.getElementById('canvasCliente');
-                const cExp = document.getElementById('canvasExpandido');
-
-                setTimeout(() => {
-                    resizeCanvas(cTec); resizeCanvas(cCli);
-                    if (typeof SignaturePad !== 'undefined') {
-                        if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions);
-                        if(cCli) padCliente = new SignaturePad(cCli, signatureOptions);
-                        if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
-                    }
-                }, 150);
-            } catch(e) {}
-
+            setTimeout(() => {
+                const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
+                resizeCanvas(cTec); resizeCanvas(cCli);
+                if (typeof SignaturePad !== 'undefined') {
+                    if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions);
+                    if(cCli) padCliente = new SignaturePad(cCli, signatureOptions);
+                    if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
+                }
+            }, 150);
             adicionarBlocoOS(); 
-            await carregarHistorico();
             atualizarVisibilidadeCamposPorBloco();
+            verificarRascunhoPendente();
+
+            setInterval(autoSalvarRascunho, 10000);
         });
+
+        async function autoSalvarRascunho() {
+            if (!document.getElementById('novaOs').classList.contains('active')) return;
+            if (document.getElementById('lockStatus').textContent.includes('BLOQUEADO')) return;
+            
+            const dados = recolherDadosDoFormulario();
+            await localforage.setItem('draft_os', dados);
+            
+            const ind = document.getElementById('autoSaveIndicator');
+            const dataHora = new Date().toLocaleTimeString('pt-PT');
+            ind.textContent = `Rascunho guardado: ${dataHora}`;
+        }
+
+        async function verificarRascunhoPendente() {
+            const draft = await localforage.getItem('draft_os');
+            if(draft && draft.ordens && draft.ordens.length > 0) {
+                if(confirm("⚠️ O sistema encontrou um trabalho não guardado de uma sessão anterior. Deseja restaurar os dados?")) {
+                    restaurarDadosParaFormulario(draft);
+                } else {
+                    await localforage.removeItem('draft_os');
+                }
+            }
+        }
+
+        function recolherDadosDoFormulario() {
+            let dados = {
+                id: documentoAtualId, dataAtualizacao: new Date().toISOString(),
+                tecnico: document.getElementById('tecnico').value, nomeClienteFinal: document.getElementById('nomeClienteFinal').value,
+                cargo: document.getElementById('cargo').value, setor: document.getElementById('setor').value,
+                assinaturaTecnico: padTecnico && !padTecnico.isEmpty() ? padTecnico.toDataURL() : null,
+                assinaturaCliente: padCliente && !padCliente.isEmpty() ? padCliente.toDataURL() : null,
+                ordens: []
+            };
+            document.querySelectorAll('.os-bloco').forEach(b => {
+                const id = b.getAttribute('data-id');
+                let ordem = {
+                    cliente: document.getElementById(`cliente_${id}`).value, osNum: document.getElementById(`osNum_${id}`).value,
+                    equipamento: document.getElementById(`equipamento_${id}`).value, modelo: document.getElementById(`modelo_${id}`).value,
+                    serie: document.getElementById(`serie_${id}`).value, tag: document.getElementById(`tag_${id}`).value,
+                    cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked,
+                    cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked,
+                    cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbSemGarantia: document.getElementById(`cbSemGarantia_${id}`).checked,
+                    descricao: document.getElementById(`descricao_${id}`).value, pecas: [],
+                    liberacaoObs: document.getElementById(`liberacaoObs_${id}`).value, stOk: document.getElementById(`stOk_${id}`).checked,
+                    stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked,
+                    reNao: document.getElementById(`reNao_${id}`).checked, dt: document.getElementById(`dt_${id}`).value,
+                    hc: document.getElementById(`hc_${id}`).value, hs: document.getElementById(`hs_${id}`).value, th: document.getElementById(`th_${id}`).value,
+                    dtInicio: document.getElementById(`dtInicio_${id}`).value, dtFim: document.getElementById(`dtFim_${id}`).value, totalDias: document.getElementById(`totalDias_${id}`).value
+                };
+                b.querySelectorAll('.peca-row-item').forEach(row => {
+                    let q = row.querySelector('.q').value, n = row.querySelector('.n').value, c = row.querySelector('.c').value;
+                    if(q || n || c) ordem.pecas.push({ q, n, c });
+                });
+                dados.ordens.push(ordem);
+            });
+            return dados;
+        }
+
+        function restaurarDadosParaFormulario(doc) {
+            desbloquearEdicao(); documentoAtualId = doc.id;
+            document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
+            if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o));
+            ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
+            
+            switchTab('novaOs');
+            setTimeout(() => {
+                const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente');
+                if(cTec && padTecnico) { resizeCanvas(cTec); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
+                if(cCli && padCliente) {
+                    resizeCanvas(cCli); padCliente.clear();
+                    if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); }
+                }
+            }, 100);
+            atualizarVisibilidadeCamposPorBloco();
+        }
 
         function verificarServicoInternoGlobal() {
             const blocos = document.querySelectorAll('.os-bloco');
@@ -454,8 +491,7 @@
 
                 if (isInterno) {
                     if(containerHoras) containerHoras.style.display = 'none';
-                    if(containerDias) containerDias.style.display = 'grid';
-                    calcDias(id);
+                    if(containerDias) containerDias.style.display = 'grid'; calcDias(id);
                     if(containerReagendar) containerReagendar.style.display = 'none';
                     if(reNao) reNao.checked = true;
                 } else {
@@ -472,43 +508,45 @@
             const containerCliente = document.getElementById('secaoClienteContainer');
             if (containerCliente) {
                 if (isInterno) {
-                    containerCliente.style.display = 'none';
-                    if(padCliente) padCliente.clear();
+                    containerCliente.style.display = 'none'; if(padCliente) padCliente.clear();
                 } else {
                     containerCliente.style.display = 'block';
-                    setTimeout(() => {
-                        const cCli = document.getElementById('canvasCliente');
-                        if(cCli) resizeCanvas(cCli);
-                    }, 50);
+                    setTimeout(() => { const cCli = document.getElementById('canvasCliente'); if(cCli) resizeCanvas(cCli); }, 50);
                 }
             }
         }
 
+        // CORREÇÃO CRUCIAL DA ASSINATURA: Força o redimensionamento exato após abrir o modal
         function abrirModalAssinatura(alvo) {
             alvoAssinaturaAtual = alvo;
-            const titulo = alvo === 'tecnico' ? 'Assinatura do Técnico' : 'Assinatura do Cliente';
-            document.getElementById('tituloModalAssinatura').textContent = titulo;
+            document.getElementById('tituloModalAssinatura').textContent = alvo === 'tecnico' ? 'Assinatura do Técnico' : 'Assinatura do Cliente';
             
             const modal = document.getElementById('modalAssinaturaExpandida');
             modal.classList.remove('hidden');
             document.body.style.overflow = 'hidden';
 
-            const cExp = document.getElementById('canvasExpandido');
-            if(cExp) resizeCanvas(cExp);
-            
-            if(padExpandido) {
-                padExpandido.clear();
-                const padFonte = alvo === 'tecnico' ? padTecnico : padCliente;
-                if (padFonte && !padFonte.isEmpty()) padExpandido.fromDataURL(padFonte.toDataURL());
-            }
+            // Aguarda 50ms para o telemóvel renderizar o modal e redimensiona o canvas com sucesso
+            setTimeout(() => {
+                const cExp = document.getElementById('canvasExpandido');
+                resizeCanvas(cExp);
+                if(padExpandido) {
+                    padExpandido.clear();
+                    const padFonte = alvo === 'tecnico' ? padTecnico : padCliente;
+                    if (padFonte && !padFonte.isEmpty()) {
+                        padExpandido.fromDataURL(padFonte.toDataURL());
+                    }
+                }
+            }, 50);
         }
 
-        function fecharModalAssinatura() {
-            document.getElementById('modalAssinaturaExpandida').classList.add('hidden');
-            document.body.style.overflow = '';
+        function fecharModalAssinatura() { 
+            document.getElementById('modalAssinaturaExpandida').classList.add('hidden'); 
+            document.body.style.overflow = ''; 
         }
 
-        function limparPadExpandido() { if(padExpandido) padExpandido.clear(); }
+        function limparPadExpandido() { 
+            if(padExpandido) padExpandido.clear(); 
+        }
 
         function confirmarAssinaturaExpandida() {
             const padDestino = alvoAssinaturaAtual === 'tecnico' ? padTecnico : padCliente;
@@ -516,12 +554,12 @@
             
             if (padExpandido && padDestino) {
                 resizeCanvas(canvasEl);
-                if (padExpandido.isEmpty()) {
-                    padDestino.clear();
-                    if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao();
-                } else {
-                    padDestino.fromDataURL(padExpandido.toDataURL());
-                    if (alvoAssinaturaAtual === 'cliente') bloquearEdicao();
+                if (padExpandido.isEmpty()) { 
+                    padDestino.clear(); 
+                    if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao(); 
+                } else { 
+                    padDestino.fromDataURL(padExpandido.toDataURL()); 
+                    if (alvoAssinaturaAtual === 'cliente') bloquearEdicao(); 
                 }
             }
             fecharModalAssinatura();
@@ -546,13 +584,11 @@
         async function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
+            
             if(tabId === 'historico') {
                 await carregarHistorico();
             } else if(tabId === 'novaOs') {
-                setTimeout(() => {
-                    resizeCanvas(document.getElementById('canvasTecnico'));
-                    resizeCanvas(document.getElementById('canvasCliente'));
-                }, 50);
+                setTimeout(() => { resizeCanvas(document.getElementById('canvasTecnico')); resizeCanvas(document.getElementById('canvasCliente')); }, 50);
             }
             window.scrollTo(0, 0);
         }
@@ -560,21 +596,24 @@
         function iniciarNovaOS() {
             if(!confirm("Iniciar documento em branco?")) return;
             documentoAtualId = Date.now().toString();
-            document.getElementById('listaOrdensServico').innerHTML = '';
-            contadorOS = 0; adicionarBlocoOS();
-            document.getElementById('tecnico').value = 'Paulo Henrique Gomes';
+            document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0; adicionarBlocoOS();
+            document.getElementById('tecnico').value = 'Paulo Henrique Gomes Maria';
             ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
-            if(padTecnico) padTecnico.clear();
-            if(padCliente) padCliente.clear();
+            if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
             desbloquearEdicao();
             switchTab('novaOs');
             atualizarVisibilidadeCamposPorBloco();
+            localforage.removeItem('draft_os'); 
         }
 
+        let contadorOS = 0;
         function adicionarBlocoOS(dados = null) {
             contadorOS++; const id = contadorOS;
             const container = document.getElementById('listaOrdensServico');
             const dataHoje = new Date().toISOString().split('T')[0];
+            
+            const osManualValue = dados && dados.osNum ? dados.osNum : '';
+            const btnRemover = id > 1 ? '<button type="button" onclick="this.closest(\'.os-bloco\').remove(); atualizarVisibilidadeCamposPorBloco();" class="text-red-600 text-xs font-bold bg-red-50 px-2 py-1 rounded border border-red-200">Remover</button>' : '';
             
             const bloco = document.createElement('div');
             bloco.className = "os-bloco border-2 border-gray-200 p-4 sm:p-5 rounded-xl bg-gray-50/50 shadow-sm relative transition-all mb-4";
@@ -582,12 +621,12 @@
             
             bloco.innerHTML = `
                 <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h3 class="font-bold text-lg text-blue-700">Ordem de Serviço #${id}</h3>
-                    ${id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco();" class="text-red-600 text-xs font-bold bg-red-50 px-2 py-1 rounded border border-red-200">Remover OS</button>` : ''}
+                    <h3 class="font-bold text-lg text-blue-700">Ordem de Serviço</h3>
+                    ${btnRemover}
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div><label class="block text-sm font-semibold mb-1">Cliente *</label><input type="text" id="cliente_${id}" required class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:ring-2 focus:ring-blue-500 transition"></div>
-                    <div><label class="block text-sm font-semibold mb-1">OS Nº *</label><input type="text" id="osNum_${id}" value="${Math.floor(Math.random()*900000)+100000}" required class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:ring-2 focus:ring-blue-500 transition"></div>
+                    <div><label class="block text-sm font-semibold mb-1">OS Nº *</label><input type="text" id="osNum_${id}" value="${osManualValue}" required placeholder="Digite o nº da OS" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:ring-2 focus:ring-blue-500 transition"></div>
                     <div><label class="block text-sm font-semibold mb-1">Equipamento</label><input type="text" id="equipamento_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
                     <div><label class="block text-sm font-semibold mb-1">Modelo</label><input type="text" id="modelo_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
                     <div><label class="block text-sm font-semibold mb-1">Nº de Série</label><input type="text" id="serie_${id}" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></div>
@@ -643,7 +682,7 @@
             container.appendChild(bloco);
 
             if (dados) {
-                ['cliente','osNum','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => {
+                ['cliente','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => {
                     if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || '';
                 });
                 ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','cbSemGarantia','stOk','stRes','reSim','reNao'].forEach(k => {
@@ -653,7 +692,7 @@
                     dados.pecas.forEach(p => {
                         const pContainer = document.getElementById(`pecasContainer_${id}`);
                         const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
-                        row.innerHTML = `<input type="number" placeholder="Qtd" value="${p.q}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${p.n}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${p.c}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
+                        row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${p.q}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${p.n}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${p.c}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
                         pContainer.appendChild(row);
                     });
                 } else { addPecaRow(id); addPecaRow(id); }
@@ -665,7 +704,7 @@
         function addPecaRow(id) {
             const container = document.getElementById(`pecasContainer_${id}`);
             const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
-            row.innerHTML = `<input type="number" placeholder="Qtd" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
+            row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
             container.appendChild(row);
         }
 
@@ -686,14 +725,11 @@
             document.getElementById(`totalDias_${id}`).value = `${diffDays} dia(s)`;
         }
 
-        // --- SISTEMA DE VALIDAÇÃO DE CAMPOS ---
         function validarCamposObrigatorios() {
             let valido = true;
             document.querySelectorAll('.error-field').forEach(el => el.classList.remove('error-field'));
-            
             const blocos = document.querySelectorAll('.os-bloco');
             if(blocos.length === 0) return false;
-
             blocos.forEach(b => {
                 const id = b.getAttribute('data-id');
                 const cCliente = document.getElementById(`cliente_${id}`);
@@ -705,55 +741,21 @@
             return valido;
         }
 
-        async function salvarDocumento() {
-            if (!validarCamposObrigatorios()) {
-                mostrarToast('Preencha os campos obrigatórios em destaque!', true);
-                return false;
-            }
-
+        async function salvarDocumento(silencioso = false) {
+            if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos obrigatórios em destaque!', true); return false; }
             try {
-                let dados = {
-                    id: documentoAtualId, dataAtualizacao: new Date().toISOString(),
-                    tecnico: document.getElementById('tecnico').value, nomeClienteFinal: document.getElementById('nomeClienteFinal').value,
-                    cargo: document.getElementById('cargo').value, setor: document.getElementById('setor').value,
-                    assinaturaTecnico: padTecnico && !padTecnico.isEmpty() ? padTecnico.toDataURL() : null,
-                    assinaturaCliente: padCliente && !padCliente.isEmpty() ? padCliente.toDataURL() : null,
-                    ordens: []
-                };
-
-                document.querySelectorAll('.os-bloco').forEach(b => {
-                    const id = b.getAttribute('data-id');
-                    let ordem = {
-                        cliente: document.getElementById(`cliente_${id}`).value, osNum: document.getElementById(`osNum_${id}`).value,
-                        equipamento: document.getElementById(`equipamento_${id}`).value, modelo: document.getElementById(`modelo_${id}`).value,
-                        serie: document.getElementById(`serie_${id}`).value, tag: document.getElementById(`tag_${id}`).value,
-                        cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked,
-                        cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked,
-                        cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbSemGarantia: document.getElementById(`cbSemGarantia_${id}`).checked,
-                        descricao: document.getElementById(`descricao_${id}`).value, pecas: [],
-                        liberacaoObs: document.getElementById(`liberacaoObs_${id}`).value, stOk: document.getElementById(`stOk_${id}`).checked,
-                        stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked,
-                        reNao: document.getElementById(`reNao_${id}`).checked, dt: document.getElementById(`dt_${id}`).value,
-                        hc: document.getElementById(`hc_${id}`).value, hs: document.getElementById(`hs_${id}`).value, th: document.getElementById(`th_${id}`).value,
-                        dtInicio: document.getElementById(`dtInicio_${id}`).value, dtFim: document.getElementById(`dtFim_${id}`).value, totalDias: document.getElementById(`totalDias_${id}`).value
-                    };
-                    b.querySelectorAll('.peca-row-item').forEach(row => {
-                        let q = row.querySelector('.q').value, n = row.querySelector('.n').value, c = row.querySelector('.c').value;
-                        if(q || n || c) ordem.pecas.push({ q, n, c });
-                    });
-                    dados.ordens.push(ordem);
-                });
-
+                let dados = recolherDadosDoFormulario();
                 let historico = await obterHistoricoSalvo();
                 let index = historico.findIndex(d => d.id === dados.id);
                 if(index >= 0) historico[index] = dados; else historico.unshift(dados);
                 
                 await gravarHistoricoSalvo(historico);
-                mostrarToast('Salvo com sucesso na Base de Dados!');
+                await localforage.removeItem('draft_os');
+                
+                if(!silencioso) mostrarToast('Salvo com sucesso na Base de Dados!');
                 return true;
             } catch(e) { 
-                mostrarToast('Erro ao salvar.', true); 
-                return false;
+                if(!silencioso) mostrarToast('Erro ao salvar.', true); return false;
             }
         }
 
@@ -767,7 +769,7 @@
                 return `
                 <div class="border p-4 rounded-xl bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shadow-sm mb-3 border-l-4 border-l-blue-600">
                     <div class="mb-3 sm:mb-0">
-                        <p class="font-bold text-blue-800 text-lg">OS Ref: ${primeiraOS.osNum || 'N/A'}</p>
+                        <p class="font-bold text-blue-800 text-lg">${primeiraOS.osNum || 'Sem OS'}</p>
                         <p class="text-sm font-semibold text-gray-700">${primeiraOS.cliente || doc.nomeClienteFinal || 'Desconhecido'}</p>
                         <p class="text-xs text-gray-500 mt-1">Atualizado: ${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-PT') : ''}</p>
                     </div>
@@ -780,37 +782,8 @@
         }
 
         async function carregarDocumentoParaEdicao(id) {
-            let historico = await obterHistoricoSalvo();
-            let doc = historico.find(d => d.id === id); if(!doc) return;
-            
-            desbloquearEdicao(); documentoAtualId = doc.id;
-            document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
-            if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o));
-            ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
-            
-            switchTab('novaOs');
-            
-            setTimeout(() => {
-                const cTec = document.getElementById('canvasTecnico');
-                const cCli = document.getElementById('canvasCliente');
-                
-                if(cTec && padTecnico) {
-                    resizeCanvas(cTec);
-                    padTecnico.clear();
-                    if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico);
-                }
-                if(cCli && padCliente) {
-                    resizeCanvas(cCli);
-                    padCliente.clear();
-                    if(doc.assinaturaCliente) {
-                        padCliente.fromDataURL(doc.assinaturaCliente);
-                        bloquearEdicao();
-                    }
-                }
-            }, 100);
-
-            mostrarToast('Documento restaurado.');
-            atualizarVisibilidadeCamposPorBloco();
+            let doc = (await obterHistoricoSalvo()).find(d => d.id === id); if(!doc) return;
+            restaurarDadosParaFormulario(doc); mostrarToast('Documento carregado.');
         }
 
         async function apagarDocumento(id) {
@@ -822,9 +795,7 @@
         }
 
         async function construirPDFBytes() {
-            if (!validarCamposObrigatorios()) {
-                throw new Error("Preencha os campos obrigatórios em destaque!");
-            }
+            if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios em destaque!");
 
             const blocosOS = document.querySelectorAll('.os-bloco');
             const isServicoInterno = verificarServicoInternoGlobal();
@@ -837,6 +808,9 @@
                 let ratio = Math.min(45 / imgObject.width, 15 / imgObject.height);
                 finalW = imgObject.width * ratio; finalH = imgObject.height * ratio;
             }
+
+            // CORREÇÃO: Cálculo da margem do topo dinâmica (Respeita a altura exata do seu logótipo)
+            const margemTopoSegura = Math.max(35, 10 + finalH + 5);
 
             for (let idx = 0; idx < blocosOS.length; idx++) {
                 const b = blocosOS[idx]; const id = b.getAttribute('data-id');
@@ -859,23 +833,19 @@
                 cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
                 cy += 4; 
                 
+                // CORREÇÃO: Tabela de Descrição respeitando o logótipo em quebras de página
                 docOS.autoTable({
-                    startY: cy,
-                    margin: { left: 15, right: 15 },
-                    body: [[document.getElementById(`descricao_${id}`).value || ' ']],
-                    theme: 'plain',
-                    styles: {
-                        lineWidth: 0.2,
-                        lineColor: [0, 0, 0],
-                        textColor: [0, 0, 0],
-                        fontSize: 9,
-                        cellPadding: 4,
-                        valign: 'middle'
-                    },
+                    startY: cy, 
+                    margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 },
+                    body: [[document.getElementById(`descricao_${id}`).value || ' ']], theme: 'plain',
+                    styles: { lineWidth: 0.2, lineColor: [0, 0, 0], textColor: [0, 0, 0], fontSize: 9, cellPadding: 4, valign: 'middle' },
                     columnStyles: { 0: { cellWidth: 180 } }
                 });
                 
                 cy = docOS.lastAutoTable.finalY + 8;
+
+                // Segurança: Se estiver no fim da página, quebra antes de imprimir o título PEÇAS
+                if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
 
                 docOS.setFont("helvetica", "bold"); docOS.text("PEÇAS", 15, cy); cy+=4;
                 let tb = [];
@@ -888,20 +858,24 @@
                 }
                 if(tb.length===0) tb.push(['','','','','','']);
                 
+                // CORREÇÃO: Tabela de Peças respeitando o logótipo em quebras de página
                 docOS.autoTable({ 
-                    startY: cy, margin: { left: 15, right: 15 }, theme: 'grid', styles: { fontSize: 8, cellPadding: 2 }, 
-                    head: [['Qtd', 'Nome', 'Cód', 'Qtd', 'Nome', 'Cód']], body: tb
+                    startY: cy, 
+                    margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, 
+                    theme: 'grid', styles: { fontSize: 8, cellPadding: 2 }, 
+                    head: [['Qtd', 'Nome', 'Cód', 'Qtd', 'Nome', 'Cód']], 
+                    body: tb 
                 });
                 
                 cy = docOS.lastAutoTable.finalY + 6;
+
+                // Segurança: Se a tabela for até ao fim, quebra página para os textos de baixo não sobreporem o rodapé
+                if (cy > 250) { docOS.addPage(); cy = margemTopoSegura; }
+
                 docOS.setFont("helvetica", "bold"); docOS.text("LIBERAÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
                 
-                cy+=4; 
-                let obsText = `OBS: ${document.getElementById(`liberacaoObs_${id}`).value}`;
-                let obsLines = docOS.splitTextToSize(obsText, 180);
-                docOS.text(obsLines, 15, cy);
-                cy += (obsLines.length * 4) + 2;
-                
+                cy+=4; let obsText = `OBS: ${document.getElementById(`liberacaoObs_${id}`).value}`;
+                let obsLines = docOS.splitTextToSize(obsText, 180); docOS.text(obsLines, 15, cy); cy += (obsLines.length * 4) + 2;
                 docOS.text(`Status: ${cb('stOk_'+id)} OK  ${cb('stRes_'+id)} RESTRIÇÃO`, 15, cy); 
                 
                 if (!document.getElementById(`cbServInterno_${id}`).checked) {
@@ -909,16 +883,15 @@
                     cy+=10; docOS.text(`DATA: ${document.getElementById(`dt_${id}`).value.split('-').reverse().join('/')}`, 15, cy); docOS.text(`CHEGADA: ${document.getElementById(`hc_${id}`).value}`, 75, cy); docOS.text(`SAÍDA: ${document.getElementById(`hs_${id}`).value}`, 140, cy);
                     cy+=6; docOS.text(`TOTAL HORAS: ${document.getElementById(`th_${id}`).value}`, 15, cy);
                 } else {
-                    cy+=10; 
-                    docOS.text(`DATA INÍCIO: ${document.getElementById(`dtInicio_${id}`).value.split('-').reverse().join('/')}`, 15, cy); 
-                    docOS.text(`DATA FINAL: ${document.getElementById(`dtFim_${id}`).value.split('-').reverse().join('/')}`, 75, cy); 
-                    docOS.text(`TOTAL DE DIAS: ${document.getElementById(`totalDias_${id}`).value}`, 140, cy);
+                    cy+=10; docOS.text(`DATA INÍCIO: ${document.getElementById(`dtInicio_${id}`).value.split('-').reverse().join('/')}`, 15, cy); docOS.text(`DATA FINAL: ${document.getElementById(`dtFim_${id}`).value.split('-').reverse().join('/')}`, 75, cy); docOS.text(`TOTAL DE DIAS: ${document.getElementById(`totalDias_${id}`).value}`, 140, cy);
                 }
 
                 const paginasDestaOS = docOS.internal.getNumberOfPages();
-                for (let i = 1; i <= paginasDestaOS; i++) {
-                    docOS.setPage(i);
-                    if (imgObject && logoImgData) docOS.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH);
+                
+                // CORREÇÃO: Voltar a imprimir o LOGÓTIPO em TODAS as páginas (A margem topo segura agora evita a sobreposição)
+                for (let i = 1; i <= paginasDestaOS; i++) { 
+                    docOS.setPage(i); 
+                    if (imgObject && logoImgData) docOS.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH); 
                 }
 
                 const osBuffer = docOS.output('arraybuffer');
@@ -940,45 +913,45 @@
 
             docSig.setFont("helvetica", "bold"); docSig.setFontSize(12); docSig.text(isServicoInterno ? "ASSINATURA DO TÉCNICO" : "ASSINATURAS GERAIS", 105, 20, {align:"center"});
             docSig.setFontSize(9); docSig.setFont("helvetica", "normal"); 
-            
             docSig.text("Este documento consolida as OS e os respetivos anexos presentes nas páginas anteriores.", 15, fy);
             fy+=20; 
 
             if (isServicoInterno) {
                 docSig.line(60, fy+15, 150, fy+15);
-                if(padTecnico && !padTecnico.isEmpty()) {
-                    const imgDataTec = padTecnico.toDataURL();
-                    if (imgDataTec) {
-                        docSig.addImage(imgDataTec, 'PNG', 75, fy-8, 60, 20);
-                    }
-                }
+                if(padTecnico && !padTecnico.isEmpty()) { const imgDataTec = padTecnico.toDataURL(); if (imgDataTec) docSig.addImage(imgDataTec, 'PNG', 75, fy-8, 60, 20); }
                 fy+=18; docSig.text("TÉCNICO RESPONSÁVEL", 105, fy, {align:"center"});
                 fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value}`, 60, fy);
             } else {
                 docSig.line(15, fy+15, 95, fy+15); docSig.line(110, fy+15, 195, fy+15);
-                if(padTecnico && !padTecnico.isEmpty()) {
-                    const imgDataTec = padTecnico.toDataURL();
-                    if(imgDataTec) docSig.addImage(imgDataTec, 'PNG', 25, fy-8, 50, 20);
-                }
-                if(padCliente && !padCliente.isEmpty()) {
-                    const imgDataCli = padCliente.toDataURL();
-                    if(imgDataCli) docSig.addImage(imgDataCli, 'PNG', 120, fy-8, 50, 20);
-                }
+                if(padTecnico && !padTecnico.isEmpty()) { const imgDataTec = padTecnico.toDataURL(); if(imgDataTec) docSig.addImage(imgDataTec, 'PNG', 25, fy-8, 50, 20); }
+                if(padCliente && !padCliente.isEmpty()) { const imgDataCli = padCliente.toDataURL(); if(imgDataCli) docSig.addImage(imgDataCli, 'PNG', 120, fy-8, 50, 20); }
                 fy+=18; docSig.text("TÉCNICO", 40, fy); docSig.text("CLIENTE", 140, fy);
                 fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value}`, 15, fy); docSig.text(`Nome: ${document.getElementById('nomeClienteFinal').value}`, 110, fy);
             }
+
+            fy+=25;
+            docSig.setFontSize(8); docSig.setFont("helvetica", "italic");
+            docSig.text("Obs: a assinatura deste relatório implica na aceitação dos serviços executados e posterior cobrança de peças e serviços.", 105, fy, {align: "center"});
 
             const sigBuffer = docSig.output('arraybuffer');
             const sigPdfLib = await PDFDocument.load(sigBuffer);
             const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices());
             sigPages.forEach((p) => masterPdf.addPage(p));
 
+            // AUDITORIA DO RODAPÉ
             const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica);
             const todasAsPaginas = masterPdf.getPages();
+            
+            const dataAuditoria = new Date().toLocaleString('pt-PT');
+            const tecnicoNome = document.getElementById('tecnico').value || "Não Identificado";
+            // CORREÇÃO: Remoção do ID, apenas nome e data/hora.
+            const textoAuditoria = `Documento gerado eletronicamente por ${tecnicoNome} em ${dataAuditoria}.`;
+
             todasAsPaginas.forEach((pagina, idx) => {
                 const { width } = pagina.getSize();
-                const texto = `Página ${idx + 1} de ${todasAsPaginas.length}`;
-                pagina.drawText(texto, { x: width - fonteNormal.widthOfTextAtSize(texto, 8) - 15, y: 15, size: 8, font: fonteNormal, color: rgb(0.5, 0.5, 0.5) });
+                pagina.drawText(textoAuditoria, { x: 15, y: 15, size: 6, font: fonteNormal, color: rgb(0.6, 0.6, 0.6) });
+                const textoPags = `Página ${idx + 1} de ${todasAsPaginas.length}`;
+                pagina.drawText(textoPags, { x: width - fonteNormal.widthOfTextAtSize(textoPags, 8) - 15, y: 15, size: 8, font: fonteNormal, color: rgb(0.5, 0.5, 0.5) });
             });
 
             return await masterPdf.save();
@@ -990,7 +963,6 @@
                 btn.disabled = true; btn.innerHTML = 'A Renderizar...';
                 const bytesPdf = await construirPDFBytes();
                 
-                // Anti memory leak (Libertar RAM do ficheiro anterior)
                 if(objUrlPreview) URL.revokeObjectURL(objUrlPreview);
                 const blob = new Blob([bytesPdf], { type: 'application/pdf' });
                 objUrlPreview = URL.createObjectURL(blob);
@@ -1020,32 +992,45 @@
         async function gerarPDFConsolidado() {
             const btn = document.getElementById('btnGerarPdf'); const btnTxt = document.getElementById('btnTxt');
             try {
-                const salvouComSucesso = await salvarDocumento();
-                if(!salvouComSucesso) return; // Se a validação falhou, cancela a geração
+                const salvouComSucesso = await salvarDocumento(false);
+                if(!salvouComSucesso) return; 
 
                 btn.disabled = true; btnTxt.innerText = "A COMPILAR PDF...";
                 const bytesPdfFinal = await construirPDFBytes();
+                
                 const primeiraOs = document.querySelector('.os-bloco');
                 const pId = primeiraOs.getAttribute('data-id');
                 const pOs = document.getElementById(`osNum_${pId}`).value.trim();
                 const pCliente = document.getElementById(`cliente_${pId}`).value.trim();
+                const nomeFicheiro = `${pOs}_${pCliente.replace(/[^a-z0-9]/gi,'_')}.pdf`;
 
                 const blob = new Blob([bytesPdfFinal], { type: 'application/pdf' });
-                
-                // Anti memory leak (Libertar RAM do ficheiro anterior)
+                const ficheiroPdf = new File([blob], nomeFicheiro, { type: "application/pdf" });
+
                 if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado);
                 urlDownloadGerado = URL.createObjectURL(blob);
 
-                const link = document.createElement('a'); link.href = urlDownloadGerado;
-                link.download = `OS_${pOs}_${pCliente.replace(/[^a-z0-9]/gi,'_')}.pdf`;
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                mostrarToast('PDF Gerado com sucesso!');
+                if (navigator.canShare && navigator.canShare({ files: [ficheiroPdf] })) {
+                    try {
+                        await navigator.share({
+                            title: `Ordem de Serviço ${pOs}`,
+                            text: `Segue em anexo a Ordem de Serviço ${pOs} referente a ${pCliente}.`,
+                            files: [ficheiroPdf]
+                        });
+                        mostrarToast('Documento partilhado com sucesso!');
+                    } catch(err) {
+                        const link = document.createElement('a'); link.href = urlDownloadGerado;
+                        link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                        mostrarToast('PDF transferido!');
+                    }
+                } else {
+                    const link = document.createElement('a'); link.href = urlDownloadGerado;
+                    link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                    mostrarToast('PDF transferido!');
+                }
             } catch (err) { mostrarToast(err.message || 'Erro ao gerar PDF.', true); } 
-            finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR DOCUMENTO (PDF)"; }
+            finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR E PARTILHAR (PDF)"; }
         }
     </script>
 </body>
 </html>
-
-
-
