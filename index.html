@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gerador de Múltiplas Ordens de Serviço</title>
     
-    <link rel="icon" type="image/png" href="icone.png">
-    <link rel="apple-touch-icon" href="icone.png">
+    <link rel="icon" type="image/png" href="icon.png">
     <meta name="theme-color" content="#1f2937">
 
     <!-- Configurações PWA e Ecrã Inteiro Avançadas -->
@@ -15,38 +14,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
     
-    <!-- Script para injetar o Manifesto e o Service Worker dinamicamente (Requisito para o modo App Nativa / Sem barra de endereço) -->
+    <!-- Service Worker para permitir Ecrã Inteiro (O Manifesto agora é gerado automaticamente pelo JS) -->
     <script>
-        const appUrl = window.location.href.split('?')[0];
-        const manifestJSON = {
-            "name": "Multi-OS Pro",
-            "short_name": "Multi-OS",
-            "start_url": appUrl,
-            "display": "standalone",
-            "background_color": "#f3f4f6",
-            "theme_color": "#1f2937",
-            "icons": [
-                {
-                    "src": "icone.png", 
-                    "sizes": "192x192",
-                    "type": "image/png",
-                    "purpose": "any"
-                },
-                {
-                    "src": "icone.png", 
-                    "sizes": "512x512",
-                    "type": "image/png",
-                    "purpose": "any maskable"
-                }
-            ]
-        };
-        const manifestBlob = new Blob([JSON.stringify(manifestJSON)], { type: 'application/manifest+json' });
-        const manifestURL = URL.createObjectURL(manifestBlob);
-        const manifestLink = document.createElement('link');
-        manifestLink.rel = 'manifest';
-        manifestLink.href = manifestURL;
-        document.head.appendChild(manifestLink);
-
         const swCode = `
             self.addEventListener('install', (e) => self.skipWaiting());
             self.addEventListener('activate', (e) => self.clients.claim());
@@ -174,7 +143,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v5.7</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v5.6</h1>
             </div>
             <div class="flex shrink-0 items-center">
                 <button id="btnInstalarApp" onclick="instalarPWA()" class="hidden px-2 sm:px-3 py-1.5 bg-emerald-600 rounded hover:bg-emerald-500 text-xs sm:text-sm mr-2 font-bold shadow border border-emerald-500">📲 Instalar App</button>
@@ -188,7 +157,8 @@
         
         <div id="novaOs" class="tab-content active">
             <div id="configLogoCard" class="mb-6 bg-gradient-to-r from-emerald-50 to-green-50 p-4 sm:p-6 rounded-lg shadow-sm border border-emerald-200">
-                <h3 class="font-bold text-lg text-emerald-800 mb-1">Configuração Oficial do Logótipo</h3>
+                <h3 class="font-bold text-lg text-emerald-800 mb-1">Configuração Oficial do Logótipo (Ícone)</h3>
+                <p class="text-xs text-gray-600 mb-3">Ao carregar a imagem, ela será usada no PDF e também como <strong>ícone principal da App</strong> no seu telemóvel.</p>
                 <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="block w-full text-sm text-gray-700 bg-white border border-emerald-200 rounded p-1 shadow-sm">
             </div>
 
@@ -285,6 +255,56 @@
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
+        // SISTEMA DE CRIAÇÃO DINÂMICA DO ÍCONE DA APP
+        async function gerarManifestoDinamico() {
+            const appUrl = window.location.href.split('?')[0];
+            let iconSrc = "icon.png"; // Fallback
+            
+            try {
+                // Tenta apanhar o ícone perfeitamente quadrado que o sistema gerou em background
+                const iconSalvo = await localforage.getItem('oficialIconApp');
+                if(iconSalvo) iconSrc = iconSalvo;
+            } catch(e) {}
+
+            const manifestJSON = {
+                "name": "Multi-OS Pro",
+                "short_name": "Multi-OS",
+                "start_url": appUrl,
+                "display": "standalone",
+                "background_color": "#f3f4f6",
+                "theme_color": "#1f2937",
+                "icons": [
+                    {
+                        "src": iconSrc, 
+                        "sizes": "192x192 512x512",
+                        "type": "image/png",
+                        "purpose": "any maskable"
+                    }
+                ]
+            };
+            const manifestBlob = new Blob([JSON.stringify(manifestJSON)], { type: 'application/manifest+json' });
+            const manifestURL = URL.createObjectURL(manifestBlob);
+            
+            let manifestLink = document.getElementById('dinamicManifest');
+            if(!manifestLink) {
+                manifestLink = document.createElement('link');
+                manifestLink.rel = 'manifest';
+                manifestLink.id = 'dinamicManifest';
+                document.head.appendChild(manifestLink);
+            }
+            manifestLink.href = manifestURL;
+            
+            // Injetar Apple Touch Icon também para iPhones
+            let appleIcon = document.getElementById('appleTouchIcon');
+            if(!appleIcon) {
+                appleIcon = document.createElement('link');
+                appleIcon.rel = 'apple-touch-icon';
+                appleIcon.id = 'appleTouchIcon';
+                document.head.appendChild(appleIcon);
+            }
+            appleIcon.href = iconSrc;
+        }
+
         async function carregarLogoDoArmazenamento() {
             try {
                 const logoSalvo = await localforage.getItem('oficialLogoApp');
@@ -309,22 +329,50 @@
             const file = event.target.files[0];
             if (file) {
                 const reader = new FileReader();
-                reader.onload = async function(e) {
-                    await localforage.setItem('oficialLogoApp', e.target.result);
-                    await carregarLogoDoArmazenamento();
-                    mostrarToast('Logótipo gravado!');
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = async function() {
+                        // 1. Guardar a imagem original para ser desenhada nos PDFs
+                        await localforage.setItem('oficialLogoApp', e.target.result);
+                        
+                        // 2. CRIAR O ÍCONE DA APP (Mágica: converte retangular para quadrado branco)
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 512; canvas.height = 512;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, 512, 512); // Fundo branco quadrado
+                        ctx.imageSmoothingEnabled = true;
+                        ctx.imageSmoothingQuality = 'high';
+                        
+                        const padding = 0.85; 
+                        const scale = Math.min(512 / img.width, 512 / img.height) * padding;
+                        const newWidth = img.width * scale;
+                        const newHeight = img.height * scale;
+                        const x = (512 - newWidth) / 2;
+                        const y = (512 - newHeight) / 2;
+                        
+                        ctx.drawImage(img, x, y, newWidth, newHeight);
+                        const iconBase64 = canvas.toDataURL('image/png'); // Transforma em código puro!
+                        
+                        // Guarda o ícone gerado
+                        await localforage.setItem('oficialIconApp', iconBase64);
+                        
+                        // Recarrega a interface
+                        await carregarLogoDoArmazenamento();
+                        
+                        // Recarrega o manifesto do telemóvel para assumir a nova imagem como ícone da app!
+                        await gerarManifestoDinamico();
+
+                        mostrarToast('Logótipo gravado e ícone de Instalação atualizado!');
+                    };
+                    img.src = e.target.result;
                 };
                 reader.readAsDataURL(file);
             }
         }
 
-        async function obterHistoricoSalvo() {
-            try { return (await localforage.getItem('historico_os')) || []; } catch(e) { return []; }
-        }
-
-        async function gravarHistoricoSalvo(historico) {
-            try { await localforage.setItem('historico_os', historico); return true; } catch(e) { return false; }
-        }
+        async function obterHistoricoSalvo() { try { return (await localforage.getItem('historico_os')) || []; } catch(e) { return []; } }
+        async function gravarHistoricoSalvo(historico) { try { await localforage.setItem('historico_os', historico); return true; } catch(e) { return false; } }
 
         function abrirModalExportar() { document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`; document.getElementById('modalExportar').classList.remove('hidden'); }
         function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
@@ -433,6 +481,8 @@
 
         document.addEventListener("DOMContentLoaded", async () => {
             await carregarLogoDoArmazenamento();
+            await gerarManifestoDinamico(); // Injeta o ícone atual antes de instalar a App!
+            
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
                 resizeCanvas(cTec); resizeCanvas(cCli);
@@ -570,7 +620,7 @@
             }
         }
 
-        // CORREÇÃO CRUCIAL DA ASSINATURA: Força o redimensionamento exato após abrir o modal
+        // CORREÇÃO CRUCIAL DA ASSINATURA
         function abrirModalAssinatura(alvo) {
             alvoAssinaturaAtual = alvo;
             document.getElementById('tituloModalAssinatura').textContent = alvo === 'tecnico' ? 'Assinatura do Técnico' : 'Assinatura do Cliente';
@@ -579,7 +629,6 @@
             modal.classList.remove('hidden');
             document.body.style.overflow = 'hidden';
 
-            // Aguarda 50ms para o telemóvel renderizar o modal e redimensiona o canvas com sucesso
             setTimeout(() => {
                 const cExp = document.getElementById('canvasExpandido');
                 resizeCanvas(cExp);
@@ -863,7 +912,6 @@
                 finalW = imgObject.width * ratio; finalH = imgObject.height * ratio;
             }
 
-            // CORREÇÃO: Cálculo da margem do topo dinâmica (Respeita a altura exata do seu logótipo)
             const margemTopoSegura = Math.max(35, 10 + finalH + 5);
 
             for (let idx = 0; idx < blocosOS.length; idx++) {
@@ -887,7 +935,6 @@
                 cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
                 cy += 4; 
                 
-                // CORREÇÃO: Tabela de Descrição respeitando o logótipo em quebras de página
                 docOS.autoTable({
                     startY: cy, 
                     margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 },
@@ -898,7 +945,6 @@
                 
                 cy = docOS.lastAutoTable.finalY + 8;
 
-                // Segurança: Se estiver no fim da página, quebra antes de imprimir o título PEÇAS
                 if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
 
                 docOS.setFont("helvetica", "bold"); docOS.text("PEÇAS", 15, cy); cy+=4;
@@ -912,7 +958,6 @@
                 }
                 if(tb.length===0) tb.push(['','','','','','']);
                 
-                // CORREÇÃO: Tabela de Peças respeitando o logótipo em quebras de página
                 docOS.autoTable({ 
                     startY: cy, 
                     margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, 
@@ -923,7 +968,6 @@
                 
                 cy = docOS.lastAutoTable.finalY + 6;
 
-                // Segurança: Se a tabela for até ao fim, quebra página para os textos de baixo não sobreporem o rodapé
                 if (cy > 250) { docOS.addPage(); cy = margemTopoSegura; }
 
                 docOS.setFont("helvetica", "bold"); docOS.text("LIBERAÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
@@ -942,7 +986,6 @@
 
                 const paginasDestaOS = docOS.internal.getNumberOfPages();
                 
-                // CORREÇÃO: Voltar a imprimir o LOGÓTIPO em TODAS as páginas (A margem topo segura agora evita a sobreposição)
                 for (let i = 1; i <= paginasDestaOS; i++) { 
                     docOS.setPage(i); 
                     if (imgObject && logoImgData) docOS.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH); 
@@ -992,13 +1035,11 @@
             const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices());
             sigPages.forEach((p) => masterPdf.addPage(p));
 
-            // AUDITORIA DO RODAPÉ
             const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica);
             const todasAsPaginas = masterPdf.getPages();
             
             const dataAuditoria = new Date().toLocaleString('pt-PT');
             const tecnicoNome = document.getElementById('tecnico').value || "Não Identificado";
-            // CORREÇÃO: Remoção do ID, apenas nome e data/hora.
             const textoAuditoria = `Documento gerado eletronicamente por ${tecnicoNome} em ${dataAuditoria}.`;
 
             todasAsPaginas.forEach((pagina, idx) => {
@@ -1085,24 +1126,20 @@
             } catch (err) { mostrarToast(err.message || 'Erro ao gerar PDF.', true); } 
             finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR E PARTILHAR (PDF)"; }
         }
-
+        
         // LÓGICA DE INSTALAÇÃO PWA (TELA INTEIRA)
         let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault(); // Previne que o browser mostre o aviso sozinho
+            e.preventDefault(); 
             deferredPrompt = e;
-            // Mostra o nosso próprio botão "Instalar App" no cabeçalho
             const btnInstalar = document.getElementById('btnInstalarApp');
             if (btnInstalar) btnInstalar.classList.remove('hidden');
         });
 
         async function instalarPWA() {
             if (deferredPrompt) {
-                deferredPrompt.prompt(); // Despoleta a janela de instalação nativa
+                deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    console.log('App instalada');
-                }
                 deferredPrompt = null;
                 document.getElementById('btnInstalarApp').classList.add('hidden');
             } else {
