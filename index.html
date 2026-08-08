@@ -9,12 +9,52 @@
     <link rel="apple-touch-icon" href="icone.png">
     <meta name="theme-color" content="#1f2937">
 
-    <!-- Configurações PWA para Ecrã Inteiro (Sem barra de endereço) -->
+    <!-- Configurações PWA e Ecrã Inteiro Avançadas -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
-    <link rel="manifest" href='data:application/manifest+json,{"name":"Multi-OS Pro","short_name":"Multi-OS","start_url":".","display":"standalone","background_color":"#f3f4f6","theme_color":"#1f2937","icons":[{"src":"icone.png","sizes":"192x192","type":"image/png"}]}'>
+    
+    <!-- Script para injetar o Manifesto e o Service Worker dinamicamente (Requisito para o modo App Nativa / Sem barra de endereço) -->
+    <script>
+        const appUrl = window.location.href.split('?')[0];
+        const manifestJSON = {
+            "name": "Multi-OS Pro",
+            "short_name": "Multi-OS",
+            "start_url": appUrl,
+            "display": "standalone",
+            "background_color": "#f3f4f6",
+            "theme_color": "#1f2937",
+            "icons": [
+                {
+                    "src": "https://cdn-icons-png.flaticon.com/512/1055/1055644.png", 
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "any maskable"
+                }
+            ]
+        };
+        const manifestBlob = new Blob([JSON.stringify(manifestJSON)], { type: 'application/manifest+json' });
+        const manifestURL = URL.createObjectURL(manifestBlob);
+        const manifestLink = document.createElement('link');
+        manifestLink.rel = 'manifest';
+        manifestLink.href = manifestURL;
+        document.head.appendChild(manifestLink);
+
+        const swCode = `
+            self.addEventListener('install', (e) => self.skipWaiting());
+            self.addEventListener('activate', (e) => self.clients.claim());
+            self.addEventListener('fetch', (e) => {});
+        `;
+        const swBlob = new Blob([swCode], { type: 'text/javascript' });
+        const swURL = URL.createObjectURL(swBlob);
+        
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register(swURL).catch(console.error);
+            });
+        }
+    </script>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -128,9 +168,10 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v5.5</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v5.7</h1>
             </div>
-            <div class="flex shrink-0">
+            <div class="flex shrink-0 items-center">
+                <button id="btnInstalarApp" onclick="instalarPWA()" class="hidden px-2 sm:px-3 py-1.5 bg-emerald-600 rounded hover:bg-emerald-500 text-xs sm:text-sm mr-2 font-bold shadow border border-emerald-500">📲 Instalar App</button>
                 <button onclick="switchTab('novaOs')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm mr-2 font-medium">Doc. Atual</button>
                 <button onclick="abrirAbaHistoricoSegura()" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm font-medium">Histórico</button>
             </div>
@@ -1037,6 +1078,30 @@
                 }
             } catch (err) { mostrarToast(err.message || 'Erro ao gerar PDF.', true); } 
             finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR E PARTILHAR (PDF)"; }
+        }
+
+        // LÓGICA DE INSTALAÇÃO PWA (TELA INTEIRA)
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault(); // Previne que o browser mostre o aviso sozinho
+            deferredPrompt = e;
+            // Mostra o nosso próprio botão "Instalar App" no cabeçalho
+            const btnInstalar = document.getElementById('btnInstalarApp');
+            if (btnInstalar) btnInstalar.classList.remove('hidden');
+        });
+
+        async function instalarPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt(); // Despoleta a janela de instalação nativa
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    console.log('App instalada');
+                }
+                deferredPrompt = null;
+                document.getElementById('btnInstalarApp').classList.add('hidden');
+            } else {
+                alert("Para instalar em Ecrã Inteiro: \n\nNo Android (Chrome): Clique nos 3 pontos verticais no canto superior direito e escolha 'Adicionar ao ecrã principal'.\n\nNo iPhone (Safari): Clique no botão de Partilhar e escolha 'Adicionar ao Ecrã principal'.");
+            }
         }
     </script>
 </body>
