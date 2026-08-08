@@ -146,7 +146,7 @@
                 <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v5.6</h1>
             </div>
             <div class="flex shrink-0 items-center">
-                <button id="btnInstalarApp" onclick="instalarPWA()" class="hidden px-2 sm:px-3 py-1.5 bg-emerald-600 rounded hover:bg-emerald-500 text-xs sm:text-sm mr-2 font-bold shadow border border-emerald-500">📲 Instalar App</button>
+                <button id="btnInstalarApp" onclick="instalarPWA()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded hover:bg-emerald-500 text-xs sm:text-sm mr-2 font-bold shadow border border-emerald-500">📲 Instalar App</button>
                 <button onclick="switchTab('novaOs')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm mr-2 font-medium">Doc. Atual</button>
                 <button onclick="abrirAbaHistoricoSegura()" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm font-medium">Histórico</button>
             </div>
@@ -255,10 +255,24 @@
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
+        function gerarIconeFallback() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#10B981'; // Verde
+            ctx.fillRect(0, 0, 512, 512);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 220px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('OS', 256, 256);
+            return canvas.toDataURL('image/png');
+        }
+
         // SISTEMA DE CRIAÇÃO DINÂMICA DO ÍCONE DA APP
         async function gerarManifestoDinamico() {
             const appUrl = window.location.href.split('?')[0];
-            let iconSrc = "icon.png"; // Fallback
+            let iconSrc = gerarIconeFallback(); 
             
             try {
                 // Tenta apanhar o ícone perfeitamente quadrado que o sistema gerou em background
@@ -1132,8 +1146,6 @@
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault(); 
             deferredPrompt = e;
-            const btnInstalar = document.getElementById('btnInstalarApp');
-            if (btnInstalar) btnInstalar.classList.remove('hidden');
         });
 
         async function instalarPWA() {
@@ -1141,9 +1153,8 @@
                 deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
                 deferredPrompt = null;
-                document.getElementById('btnInstalarApp').classList.add('hidden');
             } else {
-                alert("Para instalar em Ecrã Inteiro: \n\nNo Android (Chrome): Clique nos 3 pontos verticais no canto superior direito e escolha 'Adicionar ao ecrã principal'.\n\nNo iPhone (Safari): Clique no botão de Partilhar e escolha 'Adicionar ao Ecrã principal'.");
+                alert("Para instalar em Ecrã Inteiro e ocultar as barras de navegação:\n\n📱 No ANDROID (Chrome): Clique nos 3 pontos verticais no canto superior direito e escolha 'Adicionar ao ecrã principal'.\n\n🍏 No iPHONE (Safari): Clique no botão de Partilhar (um quadrado com uma seta) e escolha 'Adicionar ao Ecrã principal'.");
             }
         }
     </script>
