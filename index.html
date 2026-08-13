@@ -121,7 +121,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v5.9</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.0</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="sugerirInstalacao()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-xs sm:text-sm font-bold shadow-lg mr-2 flex items-center gap-1 text-white border border-emerald-400">📲 Instalar App</button>
@@ -212,11 +212,11 @@
         <div id="historico" class="tab-content bg-white p-6 rounded-lg shadow-lg">
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 border-b pb-4 gap-4">
                 <h2 class="text-2xl font-bold text-gray-700">Documentos Salvos</h2>
-                <div class="flex flex-wrap gap-2">
-                    <button onclick="iniciarNovaOS()" class="text-white bg-blue-600 px-3 py-1.5 rounded-lg text-sm font-semibold">+ Novo</button>
-                    <button onclick="abrirModalExportar()" class="text-white bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-semibold">📥 Backup</button>
-                    <label class="text-white bg-indigo-600 px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer">📤 Importar <input type="file" accept=".json" onchange="importarBackupJSON(event)" class="hidden"></label>
-                    <button onclick="resetPinMaster()" class="text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg text-sm font-semibold border">Reset PIN</button>
+                <div class="flex flex-wrap gap-2 items-center w-full sm:w-auto">
+                    <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="🔍 Buscar cliente ou OS..." class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 w-full sm:w-48 transition-all">
+                    <button onclick="iniciarNovaOS()" class="text-white bg-blue-600 px-3 py-1.5 rounded-lg text-sm font-semibold flex-1 sm:flex-none">+ Novo</button>
+                    <button onclick="abrirModalExportar()" class="text-white bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-semibold flex-1 sm:flex-none">📥 Backup</button>
+                    <label class="text-white bg-indigo-600 px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer flex-1 sm:flex-none text-center">📤 Importar <input type="file" accept=".json" onchange="importarBackupJSON(event)" class="hidden"></label>
                 </div>
             </div>
             <div id="historicoList" class="space-y-3"></div>
@@ -277,15 +277,6 @@
             } else {
                 alert("Para instalar no Android (Ecrã Inteiro):\n\n1. Toque nos 3 pontos no canto superior direito do Chrome.\n2. Escolha 'Adicionar ao ecrã principal' (Add to Home screen).");
             }
-        }
-
-        async function obterDeviceId() {
-            let id = await localforage.getItem('device_id');
-            if(!id) {
-                id = Math.random().toString(36).substring(2, 10).toUpperCase();
-                await localforage.setItem('device_id', id);
-            }
-            return id;
         }
 
         async function obterHistoricoSalvo() {
@@ -661,6 +652,9 @@
             switchTab('novaOs');
             atualizarVisibilidadeCamposPorBloco();
             localforage.removeItem('draft_os'); 
+            
+            const barraBusca = document.getElementById('buscaHistorico');
+            if (barraBusca) barraBusca.value = '';
         }
 
         let contadorOS = 0;
@@ -821,11 +815,26 @@
                 await gravarHistoricoSalvo(historico);
                 await localforage.removeItem('draft_os');
                 
-                if(!silencioso) mostrarToast('Salvo com sucesso na Base de Dados!');
+                if(!silencioso) {
+                    mostrarToast('Salvo com sucesso na Base de Dados!');
+                    await carregarHistorico();
+                }
                 return true;
             } catch(e) { 
                 if(!silencioso) mostrarToast('Erro ao salvar.', true); return false;
             }
+        }
+
+        function filtrarHistorico() {
+            const termo = document.getElementById('buscaHistorico').value.toLowerCase();
+            document.querySelectorAll('.historico-item').forEach(item => {
+                const texto = item.innerText.toLowerCase();
+                if (texto.includes(termo)) {
+                    item.style.display = '';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
         }
 
         async function carregarHistorico() {
@@ -836,7 +845,7 @@
             list.innerHTML = h.map(doc => {
                 let primeiraOS = (doc.ordens && doc.ordens[0]) ? doc.ordens[0] : {};
                 return `
-                <div class="border p-4 rounded-xl bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shadow-sm mb-3 border-l-4 border-l-blue-600">
+                <div class="historico-item border p-4 rounded-xl bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shadow-sm mb-3 border-l-4 border-l-blue-600">
                     <div class="mb-3 sm:mb-0">
                         <p class="font-bold text-blue-800 text-lg">${primeiraOS.osNum || 'Sem OS'}</p>
                         <p class="text-sm font-semibold text-gray-700">${primeiraOS.cliente || doc.nomeClienteFinal || 'Desconhecido'}</p>
@@ -848,6 +857,8 @@
                     </div>
                 </div>`;
             }).join('');
+            
+            filtrarHistorico();
         }
 
         async function carregarDocumentoParaEdicao(id) {
@@ -962,7 +973,6 @@
                 const osPages = await masterPdf.copyPages(osPdfLib, osPdfLib.getPageIndices());
                 osPages.forEach((p) => masterPdf.addPage(p));
 
-                // INSERÇÃO DO PDF ANEXO COM BASE64
                 const anexoB64 = document.getElementById(`anexoBase64_${id}`).value;
                 if (anexoB64) {
                     try {
@@ -981,9 +991,6 @@
                 }
             }
 
-            // ==============================================================
-            // BLOCO DE ASSINATURAS CRIADO SEPARADAMENTE NA ÚLTIMA PÁGINA DE TODAS
-            // ==============================================================
             const docSig = new jsPDF();
             if (imgObject && logoImgData) docSig.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH);
             let fy = Math.max(35, 10 + finalH + 10);
@@ -1004,19 +1011,29 @@
                 if(padCliente && !padCliente.isEmpty()) { const imgDataCli = padCliente.toDataURL(); if(imgDataCli) docSig.addImage(imgDataCli, 'PNG', 120, fy-8, 50, 20); }
                 fy+=18; docSig.text("TÉCNICO", 40, fy); docSig.text("CLIENTE", 140, fy);
                 fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value}`, 15, fy); docSig.text(`Nome: ${document.getElementById('nomeClienteFinal').value}`, 110, fy);
+                
+                let cargoCli = document.getElementById('cargo').value.trim();
+                let setorCli = document.getElementById('setor').value.trim();
+                if (cargoCli || setorCli) {
+                    let infoCli = [];
+                    if (cargoCli) infoCli.push(`Cargo: ${cargoCli}`);
+                    if (setorCli) infoCli.push(`Setor: ${setorCli}`);
+                    fy += 5;
+                    docSig.setFontSize(8); docSig.setTextColor(100, 100, 100);
+                    docSig.text(infoCli.join(' | '), 110, fy);
+                    docSig.setTextColor(0, 0, 0); 
+                }
+                
+                fy+=20;
+                docSig.setFontSize(8); docSig.setFont("helvetica", "italic");
+                docSig.text("Obs: a assinatura deste relatório implica na aceitação dos serviços executados e posterior cobrança.", 105, fy, {align: "center"});
             }
-
-            fy+=25;
-            docSig.setFontSize(8); docSig.setFont("helvetica", "italic");
-            docSig.text("Obs: a assinatura deste relatório implica na aceitação dos serviços executados e posterior cobrança.", 105, fy, {align: "center"});
 
             const sigBuffer = docSig.output('arraybuffer');
             const sigPdfLib = await PDFDocument.load(sigBuffer);
             const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices());
             sigPages.forEach((p) => masterPdf.addPage(p));
-            // ==============================================================
 
-            // AUDITORIA DO RODAPÉ
             const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica);
             const todasAsPaginas = masterPdf.getPages();
             
