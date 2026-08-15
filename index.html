@@ -121,7 +121,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.0</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.1</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="sugerirInstalacao()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-xs sm:text-sm font-bold shadow-lg mr-2 flex items-center gap-1 text-white border border-emerald-400">📲 Instalar App</button>
@@ -432,6 +432,57 @@
             }
         }
 
+        // --- SISTEMA FOTOGRÁFICO INTELIGENTE ---
+        function adicionarFoto(id) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if(!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Compressão automática para poupar a memória do navegador
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 1000; const MAX_HEIGHT = 1000;
+                        let width = img.width; let height = img.height;
+
+                        if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
+                        else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+                        
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext("2d");
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        const base64 = canvas.toDataURL("image/jpeg", 0.7); // 70% qualidade
+                        renderFotoItem(id, base64, '');
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+
+        function renderFotoItem(id, base64, desc) {
+            const container = document.getElementById(`fotosContainer_${id}`);
+            const div = document.createElement('div');
+            div.className = "foto-item flex flex-col sm:flex-row items-start gap-3 bg-white p-3 rounded border border-gray-200 shadow-sm relative";
+            div.innerHTML = `
+                <input type="hidden" class="foto-b64" value="${base64}">
+                <img src="${base64}" class="w-24 h-24 object-cover rounded border border-gray-300 shrink-0 mx-auto sm:mx-0">
+                <div class="flex-1 w-full">
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Descrição (Obrigatória no PDF)</label>
+                    <textarea rows="2" class="foto-desc w-full border border-gray-300 p-2 rounded text-sm outline-none focus:border-indigo-500 transition-colors bg-indigo-50/30" placeholder="Ex: Equipamento X após a limpeza...">${desc}</textarea>
+                </div>
+                <button type="button" onclick="this.closest('.foto-item').remove()" class="absolute top-2 right-2 sm:static sm:mt-6 text-red-500 font-bold p-1 hover:bg-red-50 rounded shrink-0" title="Remover Foto">✕</button>
+            `;
+            container.appendChild(div);
+        }
+
+        // Processamento de PDFs Anexos
         function processarAnexo(id, input) {
             const file = input.files[0];
             if (!file) return removerAnexo(id);
@@ -491,12 +542,22 @@
                     hc: document.getElementById(`hc_${id}`).value, hs: document.getElementById(`hs_${id}`).value, th: document.getElementById(`th_${id}`).value,
                     dtInicio: document.getElementById(`dtInicio_${id}`).value, dtFim: document.getElementById(`dtFim_${id}`).value, totalDias: document.getElementById(`totalDias_${id}`).value,
                     anexoBase64: document.getElementById(`anexoBase64_${id}`) ? document.getElementById(`anexoBase64_${id}`).value : null,
-                    anexoNome: document.getElementById(`anexoNome_${id}`) ? document.getElementById(`anexoNome_${id}`).textContent : null
+                    anexoNome: document.getElementById(`anexoNome_${id}`) ? document.getElementById(`anexoNome_${id}`).textContent : null,
+                    fotos: []
                 };
+                
                 b.querySelectorAll('.peca-row-item').forEach(row => {
                     let q = row.querySelector('.q').value, n = row.querySelector('.n').value, c = row.querySelector('.c').value;
                     if(q || n || c) ordem.pecas.push({ q, n, c });
                 });
+
+                b.querySelectorAll('.foto-item').forEach(fItem => {
+                    ordem.fotos.push({
+                        b64: fItem.querySelector('.foto-b64').value,
+                        desc: fItem.querySelector('.foto-desc').value
+                    });
+                });
+
                 dados.ordens.push(ordem);
             });
             return dados;
@@ -725,8 +786,19 @@
                     <div><label class="block text-xs font-bold mb-1">Total de Dias</label><input type="text" id="totalDias_${id}" value="1 dia(s)" class="w-full border border-gray-300 p-2 rounded text-xs bg-gray-100 font-semibold" readonly></div>
                 </div>
 
+                <div class="mt-4 bg-indigo-50/50 p-4 rounded-lg border border-indigo-200 shadow-sm">
+                    <div class="flex justify-between items-center mb-3">
+                        <div>
+                            <h4 class="font-bold text-indigo-900 text-sm">Evidências Fotográficas</h4>
+                            <p class="text-xs text-indigo-700">Imagens aparecem em grelha no PDF com descrição.</p>
+                        </div>
+                        <button type="button" onclick="adicionarFoto(${id})" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm whitespace-nowrap">+ Adicionar Foto</button>
+                    </div>
+                    <div id="fotosContainer_${id}" class="space-y-3"></div>
+                </div>
+
                 <div class="mt-4 bg-blue-50 p-3 rounded-lg border border-blue-200">
-                    <label class="block text-sm font-bold text-blue-800 mb-1">Anexar Ficheiro PDF</label>
+                    <label class="block text-sm font-bold text-blue-800 mb-1">Anexar Ficheiro PDF Extra</label>
                     <input type="file" id="anexoInput_${id}" accept=".pdf" onchange="processarAnexo(${id}, this)" class="block w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white bg-white border border-blue-200 p-1">
                     
                     <input type="hidden" id="anexoBase64_${id}">
@@ -759,6 +831,12 @@
                         pContainer.appendChild(row);
                     });
                 } else { addPecaRow(id); addPecaRow(id); }
+
+                // Restaurar fotos
+                if(dados.fotos && dados.fotos.length > 0) {
+                    dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
+                }
+
             } else { addPecaRow(id); addPecaRow(id); }
 
             atualizarVisibilidadeCamposPorBloco();
@@ -791,6 +869,8 @@
         function validarCamposObrigatorios() {
             let valido = true;
             document.querySelectorAll('.error-field').forEach(el => el.classList.remove('error-field'));
+            
+            // Valida Textos da OS
             const blocos = document.querySelectorAll('.os-bloco');
             if(blocos.length === 0) return false;
             blocos.forEach(b => {
@@ -801,11 +881,20 @@
                 if (!cCliente.value.trim()) { cCliente.classList.add('error-field'); valido = false; }
                 if (!cOsNum.value.trim()) { cOsNum.classList.add('error-field'); valido = false; }
             });
+
+            // Valida Descrições Obrigatórias das Fotos
+            document.querySelectorAll('.foto-desc').forEach(el => {
+                if(!el.value.trim()) {
+                    el.classList.add('error-field');
+                    valido = false;
+                }
+            });
+
             return valido;
         }
 
         async function salvarDocumento(silencioso = false) {
-            if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos obrigatórios em destaque!', true); return false; }
+            if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos em destaque vermelho (ex: Descrição de Fotos)!', true); return false; }
             try {
                 let dados = recolherDadosDoFormulario();
                 let historico = await obterHistoricoSalvo();
@@ -875,7 +964,7 @@
         }
 
         async function construirPDFBytes() {
-            if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios em destaque!");
+            if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios (incluindo descrição de fotos)!");
 
             const blocosOS = document.querySelectorAll('.os-bloco');
             const isServicoInterno = verificarServicoInternoGlobal();
@@ -961,8 +1050,65 @@
                     cy+=10; docOS.text(`DATA INÍCIO: ${document.getElementById(`dtInicio_${id}`).value.split('-').reverse().join('/')}`, 15, cy); docOS.text(`DATA FINAL: ${document.getElementById(`dtFim_${id}`).value.split('-').reverse().join('/')}`, 75, cy); docOS.text(`TOTAL DE DIAS: ${document.getElementById(`totalDias_${id}`).value}`, 140, cy);
                 }
 
+                // ==============================================================
+                // RENDERIZAÇÃO DA GRELHA FOTOGRÁFICA
+                // ==============================================================
+                const fotosContainer = document.getElementById(`fotosContainer_${id}`);
+                const fotoItems = fotosContainer.querySelectorAll('.foto-item');
+
+                if (fotoItems.length > 0) {
+                    cy += 12;
+                    if (cy > 260) { docOS.addPage(); cy = margemTopoSegura; }
+                    docOS.setFont("helvetica", "bold"); docOS.setFontSize(10);
+                    docOS.text("EVIDÊNCIAS FOTOGRÁFICAS", 15, cy);
+                    cy += 6;
+
+                    let col = 0; let maxRowH = 0; let startY = cy;
+
+                    for(let f = 0; f < fotoItems.length; f++) {
+                        const fItem = fotoItems[f];
+                        const base64 = fItem.querySelector('.foto-b64').value;
+                        const desc = fItem.querySelector('.foto-desc').value;
+
+                        // Obter medidas da imagem
+                        const imgProps = await new Promise((resolve) => {
+                            const i = new Image(); i.onload = () => resolve({ w: i.width, h: i.height }); i.src = base64;
+                        });
+
+                        // Grelha de 2 colunas. Largura máxima da imagem = 85mm. Altura máxima limitadora = 65mm.
+                        let renderW = 85;
+                        let renderH = (imgProps.h / imgProps.w) * 85;
+                        if (renderH > 65) { renderH = 65; renderW = (imgProps.w / imgProps.h) * 65; }
+
+                        let boxX = col === 0 ? 15 : 110;
+                        let imgX = boxX + (85 - renderW) / 2; // Centralizar imagem no bloco de 85mm
+
+                        let format = base64.includes('image/png') ? 'PNG' : 'JPEG';
+                        docOS.addImage(base64, format, imgX, startY, renderW, renderH);
+
+                        docOS.setFont("helvetica", "normal"); docOS.setFontSize(8);
+                        const textLines = docOS.splitTextToSize(desc, 85);
+                        let textY = startY + renderH + 5;
+                        docOS.text(textLines, boxX, textY);
+
+                        let totalElementH = renderH + 5 + (textLines.length * 3.5);
+                        if (totalElementH > maxRowH) maxRowH = totalElementH;
+
+                        col++;
+                        // Se preencheu as duas colunas ou é a última foto
+                        if (col === 2 || f === fotoItems.length - 1) {
+                            col = 0;
+                            startY += maxRowH + 8; // Mover para baixo para a próxima linha
+                            maxRowH = 0;
+                            // Prevenir que a próxima linha corte o fim da página
+                            if (startY > 240 && f < fotoItems.length - 1) { docOS.addPage(); startY = margemTopoSegura; }
+                        }
+                    }
+                    cy = startY; // Atualizar o eixo Y global caso haja mais algo na folha
+                }
+
+                // Compilar OS no ficheiro principal
                 const paginasDestaOS = docOS.internal.getNumberOfPages();
-                
                 for (let i = 1; i <= paginasDestaOS; i++) { 
                     docOS.setPage(i); 
                     if (imgObject && logoImgData) docOS.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH); 
@@ -973,31 +1119,31 @@
                 const osPages = await masterPdf.copyPages(osPdfLib, osPdfLib.getPageIndices());
                 osPages.forEach((p) => masterPdf.addPage(p));
 
+                // Processar Anexo PDF Extra da OS
                 const anexoB64 = document.getElementById(`anexoBase64_${id}`).value;
                 if (anexoB64) {
                     try {
                         const base64Data = anexoB64.split(',')[1];
                         const binaryStr = atob(base64Data);
                         const bytes = new Uint8Array(binaryStr.length);
-                        for (let i = 0; i < binaryStr.length; i++) {
-                            bytes[i] = binaryStr.charCodeAt(i);
-                        }
+                        for (let i = 0; i < binaryStr.length; i++) { bytes[i] = binaryStr.charCodeAt(i); }
                         const anexoPdf = await PDFDocument.load(bytes);
                         const anexoPages = await masterPdf.copyPages(anexoPdf, anexoPdf.getPageIndices());
                         anexoPages.forEach((p) => masterPdf.addPage(p));
-                    } catch (e) {
-                        console.error('Erro ao anexar PDF:', e);
-                    }
+                    } catch (e) { console.error('Erro ao anexar PDF:', e); }
                 }
             }
 
+            // ==============================================================
+            // BLOCO DE ASSINATURAS (ÚLTIMA PÁGINA DE TODAS)
+            // ==============================================================
             const docSig = new jsPDF();
             if (imgObject && logoImgData) docSig.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH);
             let fy = Math.max(35, 10 + finalH + 10);
 
             docSig.setFont("helvetica", "bold"); docSig.setFontSize(12); docSig.text(isServicoInterno ? "ASSINATURA DO TÉCNICO" : "ASSINATURAS GERAIS", 105, 20, {align:"center"});
             docSig.setFontSize(9); docSig.setFont("helvetica", "normal"); 
-            docSig.text("Este documento consolida as OS, os anexos e aprova os serviços executados.", 15, fy);
+            docSig.text("Este documento consolida as OS, as evidências visuais e aprova os serviços executados.", 15, fy);
             fy+=25; 
 
             if (isServicoInterno) {
@@ -1034,6 +1180,7 @@
             const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices());
             sigPages.forEach((p) => masterPdf.addPage(p));
 
+            // AUDITORIA DO RODAPÉ
             const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica);
             const todasAsPaginas = masterPdf.getPages();
             
