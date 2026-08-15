@@ -121,7 +121,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.2</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.3</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="sugerirInstalacao()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-xs sm:text-sm font-bold shadow-lg mr-2 flex items-center gap-1 text-white border border-emerald-400">📲 Instalar App</button>
@@ -444,7 +444,6 @@
                 reader.onload = (ev) => {
                     const img = new Image();
                     img.onload = () => {
-                        // Compressão automática para poupar a memória do navegador
                         const canvas = document.createElement('canvas');
                         const MAX_WIDTH = 1000; const MAX_HEIGHT = 1000;
                         let width = img.width; let height = img.height;
@@ -456,7 +455,7 @@
                         const ctx = canvas.getContext("2d");
                         ctx.drawImage(img, 0, 0, width, height);
                         
-                        const base64 = canvas.toDataURL("image/jpeg", 0.7); // 70% qualidade
+                        const base64 = canvas.toDataURL("image/jpeg", 0.7);
                         renderFotoItem(id, base64, '');
                     };
                     img.src = ev.target.result;
@@ -759,11 +758,14 @@
                     <label class="block text-sm font-semibold mb-1">Descrição do Serviço</label>
                     <textarea id="descricao_${id}" rows="3" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></textarea>
                 </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-semibold mb-2">Peças Utilizadas</label>
-                    <div id="pecasContainer_${id}" class="space-y-2 mb-2"></div>
-                    <button type="button" onclick="addPecaRow(${id})" class="px-2 py-1 bg-white border border-gray-300 rounded text-xs font-semibold">+ Adicionar Peça</button>
+                
+                <!-- Secção de Peças com Espaçamento Melhorado -->
+                <div class="mb-4 bg-white p-3.5 rounded-lg border border-gray-200 shadow-sm">
+                    <label class="block text-sm font-bold text-gray-800 mb-2">Peças Utilizadas</label>
+                    <div id="pecasContainer_${id}" class="space-y-3 mb-3"></div>
+                    <button type="button" onclick="addPecaRow(${id})" class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded text-xs font-bold text-gray-700 transition-colors">+ Adicionar Peça</button>
                 </div>
+
                 <div class="mb-4 bg-white p-3 rounded border border-gray-200">
                     <label class="block text-xs font-bold mb-1">Liberação</label>
                     <input type="text" id="liberacaoObs_${id}" value="Liberado para uso, teste operacional ok" class="w-full border border-gray-300 p-2 rounded mb-3 text-sm outline-none">
@@ -826,13 +828,12 @@
                 if(dados.pecas && dados.pecas.length > 0) {
                     dados.pecas.forEach(p => {
                         const pContainer = document.getElementById(`pecasContainer_${id}`);
-                        const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
-                        row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${p.q}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${p.n}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${p.c}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
+                        const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-2 bg-gray-50/80 p-2 rounded border border-gray-200";
+                        row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${p.q}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${p.n}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${p.c}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white"><button type="button" onclick="this.closest('.peca-row-item').remove()" class="text-red-500 font-bold px-2 text-xs">✕</button>`;
                         pContainer.appendChild(row);
                     });
                 } else { addPecaRow(id); addPecaRow(id); }
 
-                // Restaurar fotos
                 if(dados.fotos && dados.fotos.length > 0) {
                     dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
                 }
@@ -844,8 +845,8 @@
 
         function addPecaRow(id) {
             const container = document.getElementById(`pecasContainer_${id}`);
-            const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
-            row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
+            const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-2 bg-gray-50/80 p-2 rounded border border-gray-200";
+            row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white"><button type="button" onclick="this.closest('.peca-row-item').remove()" class="text-red-500 font-bold px-2 text-xs">✕</button>`;
             container.appendChild(row);
         }
 
@@ -870,7 +871,6 @@
             let valido = true;
             document.querySelectorAll('.error-field').forEach(el => el.classList.remove('error-field'));
             
-            // Valida Textos da OS
             const blocos = document.querySelectorAll('.os-bloco');
             if(blocos.length === 0) return false;
             blocos.forEach(b => {
@@ -882,7 +882,6 @@
                 if (!cOsNum.value.trim()) { cOsNum.classList.add('error-field'); valido = false; }
             });
 
-            // Valida Descrições Obrigatórias das Fotos
             document.querySelectorAll('.foto-desc').forEach(el => {
                 if(!el.value.trim()) {
                     el.classList.add('error-field');
@@ -894,7 +893,7 @@
         }
 
         async function salvarDocumento(silencioso = false) {
-            if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos em destaque vermelho (ex: Descrição de Fotos)!', true); return false; }
+            if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos em destaque vermelho!', true); return false; }
             try {
                 let dados = recolherDadosDoFormulario();
                 let historico = await obterHistoricoSalvo();
@@ -964,7 +963,7 @@
         }
 
         async function construirPDFBytes() {
-            if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios (incluindo descrição de fotos)!");
+            if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios!");
 
             const blocosOS = document.querySelectorAll('.os-bloco');
             const isServicoInterno = verificarServicoInternoGlobal();
@@ -1032,7 +1031,8 @@
                     body: tb 
                 });
                 
-                cy = docOS.lastAutoTable.finalY + 6;
+                // Adicionado espaçamento extra (respiro) após a tabela de peças no PDF
+                cy = docOS.lastAutoTable.finalY + 10;
 
                 if (cy > 250) { docOS.addPage(); cy = margemTopoSegura; }
 
@@ -1066,9 +1066,6 @@
                     let col = 0; let maxRowH = 0; let startY = cy;
 
                     for(let f = 0; f < fotoItems.length; f++) {
-                        
-                        // LIMITE DE SEGURANÇA SUPER RIGOROSO
-                        // Antes de desenhar uma nova linha de fotos, verifica se o Y atual ultrapassou 195mm (A4 tem 297mm)
                         if (col === 0 && startY > 195) {
                             docOS.addPage();
                             startY = margemTopoSegura;
@@ -1078,18 +1075,16 @@
                         const base64 = fItem.querySelector('.foto-b64').value;
                         const desc = fItem.querySelector('.foto-desc').value;
 
-                        // Obter medidas da imagem
                         const imgProps = await new Promise((resolve) => {
                             const i = new Image(); i.onload = () => resolve({ w: i.width, h: i.height }); i.src = base64;
                         });
 
-                        // Grelha de 2 colunas. Largura máxima da imagem = 85mm. Altura máxima limitadora = 65mm.
                         let renderW = 85;
                         let renderH = (imgProps.h / imgProps.w) * 85;
                         if (renderH > 65) { renderH = 65; renderW = (imgProps.w / imgProps.h) * 65; }
 
                         let boxX = col === 0 ? 15 : 110;
-                        let imgX = boxX + (85 - renderW) / 2; // Centralizar imagem no bloco de 85mm
+                        let imgX = boxX + (85 - renderW) / 2;
 
                         let format = base64.includes('image/png') ? 'PNG' : 'JPEG';
                         docOS.addImage(base64, format, imgX, startY, renderW, renderH);
@@ -1103,17 +1098,15 @@
                         if (totalElementH > maxRowH) maxRowH = totalElementH;
 
                         col++;
-                        // Se preencheu as duas colunas ou é a última foto
                         if (col === 2 || f === fotoItems.length - 1) {
                             col = 0;
-                            startY += maxRowH + 10; // Mover para baixo para a próxima linha
+                            startY += maxRowH + 10;
                             maxRowH = 0;
                         }
                     }
-                    cy = startY; // Atualizar o eixo Y global caso haja mais algo na folha
+                    cy = startY;
                 }
 
-                // Compilar OS no ficheiro principal
                 const paginasDestaOS = docOS.internal.getNumberOfPages();
                 for (let i = 1; i <= paginasDestaOS; i++) { 
                     docOS.setPage(i); 
@@ -1125,7 +1118,6 @@
                 const osPages = await masterPdf.copyPages(osPdfLib, osPdfLib.getPageIndices());
                 osPages.forEach((p) => masterPdf.addPage(p));
 
-                // Processar Anexo PDF Extra da OS
                 const anexoB64 = document.getElementById(`anexoBase64_${id}`).value;
                 if (anexoB64) {
                     try {
@@ -1186,7 +1178,6 @@
             const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices());
             sigPages.forEach((p) => masterPdf.addPage(p));
 
-            // AUDITORIA DO RODAPÉ
             const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica);
             const todasAsPaginas = masterPdf.getPages();
             
