@@ -121,7 +121,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.3</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.4</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="sugerirInstalacao()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-xs sm:text-sm font-bold shadow-lg mr-2 flex items-center gap-1 text-white border border-emerald-400">📲 Instalar App</button>
@@ -759,11 +759,10 @@
                     <textarea id="descricao_${id}" rows="3" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></textarea>
                 </div>
                 
-                <!-- Secção de Peças com Espaçamento Melhorado -->
-                <div class="mb-4 bg-white p-3.5 rounded-lg border border-gray-200 shadow-sm">
-                    <label class="block text-sm font-bold text-gray-800 mb-2">Peças Utilizadas</label>
-                    <div id="pecasContainer_${id}" class="space-y-3 mb-3"></div>
-                    <button type="button" onclick="addPecaRow(${id})" class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded text-xs font-bold text-gray-700 transition-colors">+ Adicionar Peça</button>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold mb-2">Peças Utilizadas</label>
+                    <div id="pecasContainer_${id}" class="space-y-2 mb-2"></div>
+                    <button type="button" onclick="addPecaRow(${id})" class="px-2 py-1 bg-white border border-gray-300 rounded text-xs font-semibold">+ Adicionar Peça</button>
                 </div>
 
                 <div class="mb-4 bg-white p-3 rounded border border-gray-200">
@@ -828,8 +827,8 @@
                 if(dados.pecas && dados.pecas.length > 0) {
                     dados.pecas.forEach(p => {
                         const pContainer = document.getElementById(`pecasContainer_${id}`);
-                        const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-2 bg-gray-50/80 p-2 rounded border border-gray-200";
-                        row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${p.q}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${p.n}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${p.c}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white"><button type="button" onclick="this.closest('.peca-row-item').remove()" class="text-red-500 font-bold px-2 text-xs">✕</button>`;
+                        const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
+                        row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${p.q}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${p.n}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${p.c}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
                         pContainer.appendChild(row);
                     });
                 } else { addPecaRow(id); addPecaRow(id); }
@@ -845,8 +844,8 @@
 
         function addPecaRow(id) {
             const container = document.getElementById(`pecasContainer_${id}`);
-            const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-2 bg-gray-50/80 p-2 rounded border border-gray-200";
-            row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white"><button type="button" onclick="this.closest('.peca-row-item').remove()" class="text-red-500 font-bold px-2 text-xs">✕</button>`;
+            const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
+            row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
             container.appendChild(row);
         }
 
@@ -1019,20 +1018,39 @@
                     let r1=pRows[i], r2=pRows[i+1];
                     let r1q=r1.querySelector('.q').value, r1n=r1.querySelector('.n').value, r1c=r1.querySelector('.c').value;
                     let r2q=r2?r2.querySelector('.q').value:'', r2n=r2?r2.querySelector('.n').value:'', r2c=r2?r2.querySelector('.c').value:'';
-                    if(r1q||r1n||r1c||r2q||r2n||r2c) tb.push([r1q,r1n,r1c,r2q,r2n,r2c]);
+                    if(r1q||r1n||r1c||r2q||r2n||r2c) tb.push([r1q, r1n, r1c, '', r2q, r2n, r2c]);
                 }
-                if(tb.length===0) tb.push(['','','','','','']);
+                if(tb.length===0) tb.push(['','','','','','','']);
                 
+                // NOVO DESIGN DA TABELA NO PDF: Um bloco transparente no meio para separar
                 docOS.autoTable({ 
                     startY: cy, 
                     margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, 
-                    theme: 'grid', styles: { fontSize: 8, cellPadding: 2 }, 
-                    head: [['Qtd', 'Nome', 'Cód', 'Qtd', 'Nome', 'Cód']], 
-                    body: tb 
+                    theme: 'grid', 
+                    styles: { fontSize: 8, cellPadding: 2 }, 
+                    head: [['Qtd', 'Nome', 'Cód', '', 'Qtd', 'Nome', 'Cód']], 
+                    body: tb,
+                    columnStyles: {
+                        0: { cellWidth: 12 },
+                        1: { cellWidth: 55 },
+                        2: { cellWidth: 20 },
+                        3: { cellWidth: 6 }, // ESPAÇO TRANSPARENTE
+                        4: { cellWidth: 12 },
+                        5: { cellWidth: 55 },
+                        6: { cellWidth: 20 }
+                    },
+                    didParseCell: function(data) {
+                        // Se a coluna for a central (índice 3), pinta de branco e tira os contornos
+                        if (data.column.index === 3) {
+                            data.cell.styles.fillColor = [255, 255, 255];
+                            data.cell.styles.textColor = [255, 255, 255];
+                            data.cell.styles.lineColor = [255, 255, 255];
+                            data.cell.styles.lineWidth = 0;
+                        }
+                    }
                 });
                 
-                // Adicionado espaçamento extra (respiro) após a tabela de peças no PDF
-                cy = docOS.lastAutoTable.finalY + 10;
+                cy = docOS.lastAutoTable.finalY + 6;
 
                 if (cy > 250) { docOS.addPage(); cy = margemTopoSegura; }
 
@@ -1050,9 +1068,6 @@
                     cy+=10; docOS.text(`DATA INÍCIO: ${document.getElementById(`dtInicio_${id}`).value.split('-').reverse().join('/')}`, 15, cy); docOS.text(`DATA FINAL: ${document.getElementById(`dtFim_${id}`).value.split('-').reverse().join('/')}`, 75, cy); docOS.text(`TOTAL DE DIAS: ${document.getElementById(`totalDias_${id}`).value}`, 140, cy);
                 }
 
-                // ==============================================================
-                // RENDERIZAÇÃO DA GRELHA FOTOGRÁFICA
-                // ==============================================================
                 const fotosContainer = document.getElementById(`fotosContainer_${id}`);
                 const fotoItems = fotosContainer.querySelectorAll('.foto-item');
 
@@ -1132,9 +1147,6 @@
                 }
             }
 
-            // ==============================================================
-            // BLOCO DE ASSINATURAS (ÚLTIMA PÁGINA DE TODAS)
-            // ==============================================================
             const docSig = new jsPDF();
             if (imgObject && logoImgData) docSig.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH);
             let fy = Math.max(35, 10 + finalH + 10);
