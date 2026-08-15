@@ -121,7 +121,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.4</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.5</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="sugerirInstalacao()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-xs sm:text-sm font-bold shadow-lg mr-2 flex items-center gap-1 text-white border border-emerald-400">📲 Instalar App</button>
@@ -1022,7 +1022,7 @@
                 }
                 if(tb.length===0) tb.push(['','','','','','','']);
                 
-                // NOVO DESIGN DA TABELA NO PDF: Um bloco transparente no meio para separar
+                // TABELA DO PDF REBALANCEADA (VERSÃO 6.5)
                 docOS.autoTable({ 
                     startY: cy, 
                     margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, 
@@ -1031,16 +1031,15 @@
                     head: [['Qtd', 'Nome', 'Cód', '', 'Qtd', 'Nome', 'Cód']], 
                     body: tb,
                     columnStyles: {
-                        0: { cellWidth: 12 },
-                        1: { cellWidth: 55 },
-                        2: { cellWidth: 20 },
-                        3: { cellWidth: 6 }, // ESPAÇO TRANSPARENTE
-                        4: { cellWidth: 12 },
-                        5: { cellWidth: 55 },
-                        6: { cellWidth: 20 }
+                        0: { cellWidth: 10 }, // Qtd reduzida ligeiramente
+                        1: { cellWidth: 50 }, // Nome reduzido para dar espaço ao código
+                        2: { cellWidth: 28 }, // CÓDIGO AUMENTADO para caber os 12 caracteres sem quebrar
+                        3: { cellWidth: 4 },  // Espaço central transparente reduzido de 6 para 4
+                        4: { cellWidth: 10 }, 
+                        5: { cellWidth: 50 }, 
+                        6: { cellWidth: 28 }  // CÓDIGO AUMENTADO
                     },
                     didParseCell: function(data) {
-                        // Se a coluna for a central (índice 3), pinta de branco e tira os contornos
                         if (data.column.index === 3) {
                             data.cell.styles.fillColor = [255, 255, 255];
                             data.cell.styles.textColor = [255, 255, 255];
