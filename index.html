@@ -121,7 +121,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.1</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.2</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="sugerirInstalacao()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-xs sm:text-sm font-bold shadow-lg mr-2 flex items-center gap-1 text-white border border-emerald-400">📲 Instalar App</button>
@@ -1061,11 +1061,19 @@
                     if (cy > 260) { docOS.addPage(); cy = margemTopoSegura; }
                     docOS.setFont("helvetica", "bold"); docOS.setFontSize(10);
                     docOS.text("EVIDÊNCIAS FOTOGRÁFICAS", 15, cy);
-                    cy += 6;
+                    cy += 8;
 
                     let col = 0; let maxRowH = 0; let startY = cy;
 
                     for(let f = 0; f < fotoItems.length; f++) {
+                        
+                        // LIMITE DE SEGURANÇA SUPER RIGOROSO
+                        // Antes de desenhar uma nova linha de fotos, verifica se o Y atual ultrapassou 195mm (A4 tem 297mm)
+                        if (col === 0 && startY > 195) {
+                            docOS.addPage();
+                            startY = margemTopoSegura;
+                        }
+
                         const fItem = fotoItems[f];
                         const base64 = fItem.querySelector('.foto-b64').value;
                         const desc = fItem.querySelector('.foto-desc').value;
@@ -1098,10 +1106,8 @@
                         // Se preencheu as duas colunas ou é a última foto
                         if (col === 2 || f === fotoItems.length - 1) {
                             col = 0;
-                            startY += maxRowH + 8; // Mover para baixo para a próxima linha
+                            startY += maxRowH + 10; // Mover para baixo para a próxima linha
                             maxRowH = 0;
-                            // Prevenir que a próxima linha corte o fim da página
-                            if (startY > 240 && f < fotoItems.length - 1) { docOS.addPage(); startY = margemTopoSegura; }
                         }
                     }
                     cy = startY; // Atualizar o eixo Y global caso haja mais algo na folha
