@@ -85,15 +85,26 @@
 
     <!-- Modal Pré-visualização do PDF -->
     <div id="modalPreviewPDF" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
-        <div class="bg-white rounded-lg w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden">
-            <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-gray-50 shrink-0">
+        <div class="bg-white rounded-lg w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden relative">
+            <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-gray-50 shrink-0 z-10">
                 <h3 class="text-base sm:text-lg font-bold text-gray-800 flex items-center gap-2">Leitura do Documento</h3>
                 <div class="flex gap-2 sm:gap-3">
                     <a id="linkPreviewExt" target="_blank" class="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg font-semibold text-xs sm:text-sm hover:bg-blue-200 flex items-center gap-1">Download</a>
                     <button onclick="fecharPreviewPDF()" class="px-3 py-1.5 bg-gray-800 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-gray-900">Fechar</button>
                 </div>
             </div>
-            <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-300 p-2 sm:p-6 overflow-y-auto flex flex-col items-center"></div>
+
+            <!-- Botões Flutuantes de Zoom -->
+            <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-900/90 text-white rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.5)] px-4 py-2 z-20 gap-4 backdrop-blur-sm border border-gray-700">
+                <button onclick="zoomOutPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">−</button>
+                <span id="zoomText" class="text-sm font-bold w-12 text-center tracking-wider">100%</span>
+                <button onclick="zoomInPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">+</button>
+            </div>
+
+            <!-- Container do PDF Renderizado (Com suporte a Pinch-to-Zoom) -->
+            <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-300 overflow-auto touch-pan-x touch-pan-y relative">
+                <div id="pdfPagesWrapper" class="min-w-full flex flex-col items-center p-2 sm:p-6 pb-24 origin-top-left transition-transform duration-75 ease-out"></div>
+            </div>
         </div>
     </div>
 
@@ -121,7 +132,7 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.5</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.6</h1>
             </div>
             <div class="flex shrink-0">
                 <button onclick="sugerirInstalacao()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-xs sm:text-sm font-bold shadow-lg mr-2 flex items-center gap-1 text-white border border-emerald-400">📲 Instalar App</button>
@@ -231,6 +242,12 @@
         let urlDownloadGerado = null; 
         let objUrlPreview = null;
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
+        
+        // Variaveis de Zoom
+        let currentZoom = 1;
+        let startZoom = 1;
+        let startDist = 0;
+
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
         async function carregarLogoDoArmazenamento() {
@@ -402,12 +419,63 @@
                     if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
                 }
             }, 150);
+            
+            // --- GESTÃO DO MOVIMENTO DE PINÇA (ZOOM DO PDF) ---
+            const pdfContainer = document.getElementById('pdfRenderContainer');
+            if(pdfContainer) {
+                pdfContainer.addEventListener('touchstart', function(e) {
+                    if (e.touches.length === 2) {
+                        startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+                        startZoom = currentZoom;
+                    }
+                }, {passive: false});
+
+                pdfContainer.addEventListener('touchmove', function(e) {
+                    if (e.touches.length === 2) {
+                        e.preventDefault(); // Previne o comportamento padrão (scroll/zoom nativo da página inteira)
+                        let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+                        currentZoom = Math.min(Math.max(1, startZoom * (dist / startDist)), 4); // Limita o zoom entre 1x e 4x
+                        atualizarZoomPdf();
+                    }
+                }, {passive: false});
+            }
+
             adicionarBlocoOS(); 
             atualizarVisibilidadeCamposPorBloco();
             verificarRascunhoPendente();
 
             setInterval(autoSalvarRascunho, 10000);
         });
+
+        function atualizarZoomPdf() {
+            const wrapper = document.getElementById('pdfPagesWrapper');
+            if (!wrapper) return;
+            
+            // Se estiver com zoom aplicado, mudamos o alinhamento para permitir o scroll lateral perfeitamente
+            if(currentZoom > 1) {
+                wrapper.classList.remove('items-center');
+                wrapper.classList.add('items-start');
+            } else {
+                wrapper.classList.add('items-center');
+                wrapper.classList.remove('items-start');
+            }
+
+            const canvases = wrapper.querySelectorAll('canvas');
+            canvases.forEach(c => {
+                if (window.innerWidth > 600) {
+                    c.style.width = (768 * currentZoom) + 'px'; // 768px é a largura base no computador
+                } else {
+                    c.style.width = (100 * currentZoom) + '%';
+                }
+                c.style.maxWidth = 'none';
+            });
+            
+            const zoomText = document.getElementById('zoomText');
+            if(zoomText) zoomText.innerText = Math.round(currentZoom * 100) + '%';
+        }
+
+        function zoomInPdf() { currentZoom = Math.min(currentZoom + 0.25, 4); atualizarZoomPdf(); }
+        function zoomOutPdf() { currentZoom = Math.max(currentZoom - 0.25, 1); atualizarZoomPdf(); }
 
         async function autoSalvarRascunho() {
             if (!document.getElementById('novaOs').classList.contains('active')) return;
@@ -1031,13 +1099,13 @@
                     head: [['Qtd', 'Nome', 'Cód', '', 'Qtd', 'Nome', 'Cód']], 
                     body: tb,
                     columnStyles: {
-                        0: { cellWidth: 10 }, // Qtd reduzida ligeiramente
-                        1: { cellWidth: 50 }, // Nome reduzido para dar espaço ao código
-                        2: { cellWidth: 28 }, // CÓDIGO AUMENTADO para caber os 12 caracteres sem quebrar
-                        3: { cellWidth: 4 },  // Espaço central transparente reduzido de 6 para 4
+                        0: { cellWidth: 10 }, 
+                        1: { cellWidth: 50 }, 
+                        2: { cellWidth: 28 }, // Código mais largo
+                        3: { cellWidth: 4 },  
                         4: { cellWidth: 10 }, 
                         5: { cellWidth: 50 }, 
-                        6: { cellWidth: 28 }  // CÓDIGO AUMENTADO
+                        6: { cellWidth: 28 }  // Código mais largo
                     },
                     didParseCell: function(data) {
                         if (data.column.index === 3) {
@@ -1220,17 +1288,30 @@
                 document.getElementById('linkPreviewExt').download = "rascunho_os.pdf";
 
                 const pdf = await pdfjsLib.getDocument({data: bytesPdf}).promise;
-                const container = document.getElementById('pdfRenderContainer'); container.innerHTML = ''; 
+                const wrapper = document.getElementById('pdfPagesWrapper'); 
+                wrapper.innerHTML = ''; 
+                
+                // Reseta o nível de zoom sempre que abrimos um documento
+                currentZoom = 1;
+                atualizarZoomPdf();
 
                 for(let num = 1; num <= pdf.numPages; num++) {
                     const page = await pdf.getPage(num);
-                    const viewport = page.getViewport({scale: window.innerWidth > 600 ? 1.5 : 1.2}); 
+                    
+                    // Renderização em alta qualidade (Escala 2.0 ou 1.8) para garantir que a imagem continua nítida ao fazer zoom
+                    const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); 
+                    
                     const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
                     canvas.height = viewport.height; canvas.width = viewport.width;
-                    canvas.className = 'w-full max-w-3xl mb-4 bg-white shadow-xl border border-gray-300';
+                    
+                    canvas.className = 'mb-4 bg-white shadow-xl border border-gray-300';
                     await page.render({canvasContext: ctx, viewport: viewport}).promise;
-                    container.appendChild(canvas);
+                    wrapper.appendChild(canvas);
                 }
+                
+                // Aplicar a largura inicial correta de acordo com o ecrã
+                atualizarZoomPdf();
+
                 document.getElementById('modalPreviewPDF').classList.remove('hidden');
             } catch (err) { mostrarToast(err.message || 'Erro ao pre-visualizar.', true); } 
             finally { btn.disabled = false; btn.innerHTML = 'Ver Documento'; }
