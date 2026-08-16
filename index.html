@@ -144,8 +144,12 @@
                 <button onclick="acionarInstalacaoApp()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded flex items-center gap-1 text-xs sm:text-sm font-bold shadow-sm text-white border border-emerald-500">
                     📲 Instalar
                 </button>
-                <button onclick="switchTab('novaOs')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm font-medium transition-colors">Doc</button>
-                <button onclick="abrirAbaHistoricoSegura()" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm font-medium transition-colors">Histórico</button>
+                <button onclick="switchTab('novaOs')" class="px-2 sm:px-3 py-1.5 bg-blue-600 rounded hover:bg-blue-500 text-xs sm:text-sm font-bold transition-colors text-white shadow-sm border border-blue-500">
+                    Doc
+                </button>
+                <button onclick="abrirAbaHistoricoSegura()" class="px-2 sm:px-3 py-1.5 bg-yellow-400 rounded hover:bg-yellow-500 text-xs sm:text-sm font-bold transition-colors text-gray-900 shadow-sm border border-yellow-500">
+                    Histórico
+                </button>
             </div>
 
         </div>
@@ -238,7 +242,6 @@
                     <button onclick="abrirModalExportar()" class="text-white bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-semibold flex-1 sm:flex-none">📥 Backup</button>
                     <label class="text-white bg-indigo-600 px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer flex-1 sm:flex-none text-center">📤 Importar <input type="file" accept=".json" onchange="importarBackupJSON(event)" class="hidden"></label>
                     
-                    <!-- NOVO: Botão para trocar Logotipo a qualquer momento -->
                     <button onclick="document.getElementById('inputTrocarLogo').click()" class="text-gray-800 bg-amber-400 hover:bg-amber-500 px-3 py-1.5 rounded-lg text-sm font-semibold flex-1 sm:flex-none whitespace-nowrap shadow-sm">🔄 Trocar Logo</button>
                     <input type="file" id="inputTrocarLogo" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="hidden">
 
@@ -281,6 +284,33 @@
             if (str === null || str === undefined) return '';
             return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
+
+        /* ----- SISTEMA DE INSTALAÇÃO ----- */
+        let promptDeInstalacao = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Previne a barra inferior padrão do navegador
+            e.preventDefault();
+            // Guarda o evento para usarmos no nosso botão
+            promptDeInstalacao = e;
+        });
+
+        async function acionarInstalacaoApp() {
+            if (promptDeInstalacao) {
+                // Tenta forçar o pop-up nativo de instalação
+                promptDeInstalacao.prompt();
+                const { outcome } = await promptDeInstalacao.userChoice;
+                promptDeInstalacao = null; // O evento só pode ser usado uma vez
+            } else {
+                // Plano B: Se o navegador bloquear ou já estiver instalado
+                const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+                if (isIos()) {
+                    alert("Para instalar no iPhone (Ecrã Inteiro):\n\n1. Toque no ícone de Partilha (quadrado com seta) na barra do Safari.\n2. Escolha 'Adicionar ao Ecrã principal'.");
+                } else {
+                    alert("A instalação automática foi bloqueada pelo navegador.\n\nPara instalar manualmente no Android:\n1. Toque nos 3 pontos no canto superior direito do Chrome.\n2. Escolha 'Adicionar ao ecrã principal' (Add to Home screen).");
+                }
+            }
+        }
+        /* --------------------------------- */
 
         async function atualizarIndicadorArmazenamento() {
             const elText = document.getElementById('storage-text');
@@ -332,15 +362,6 @@
                     mostrarToast('Logótipo atualizado com sucesso!');
                 };
                 reader.readAsDataURL(file);
-            }
-        }
-
-        function acionarInstalacaoApp() {
-            const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
-            if (isIos()) {
-                alert("Para instalar no iPhone (Ecrã Inteiro):\n\n1. Toque no ícone de Partilha (quadrado com seta para cima) na barra inferior do Safari.\n2. Escolha 'Adicionar ao Ecrã principal'.");
-            } else {
-                alert("Para instalar no Android (Ecrã Inteiro):\n\n1. Toque nos 3 pontos no canto superior direito do Chrome.\n2. Escolha 'Adicionar ao ecrã principal' (Add to Home screen).");
             }
         }
 
@@ -1120,8 +1141,6 @@
                         3: { cellWidth: 4 }, 4: { cellWidth: 10 }, 5: { cellWidth: 50 }, 6: { cellWidth: 28 }  
                     },
                     didDrawCell: function(data) {
-                        // FIX: Pintar um rectângulo branco apenas sobre o conteúdo e bordas verticais do meio
-                        // Isto preserva as bordas fortes externas e as tabelas ficam perfeitas.
                         if (data.column.index === 3) {
                             docOS.setFillColor(255, 255, 255);
                             docOS.rect(data.cell.x, data.cell.y - 0.5, data.cell.width, data.cell.height + 1, 'F');
