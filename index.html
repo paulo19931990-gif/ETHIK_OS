@@ -129,7 +129,7 @@
         </div>
     </div>
 
-    <!-- BARRA DE NAVEGAÇÃO ÚNICA (OTIMIZADA PARA MOBILE) -->
+    <!-- BARRA DE NAVEGAÇÃO -->
     <nav class="bg-gray-800 text-white p-2 sm:p-4 shadow-md sticky top-0 z-40">
         <div class="max-w-4xl mx-auto flex justify-between items-center gap-1 sm:gap-4">
             
@@ -233,10 +233,15 @@
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 border-b pb-4 gap-4">
                 <h2 class="text-2xl font-bold text-gray-700">Documentos Salvos</h2>
                 <div class="flex flex-wrap gap-2 items-center w-full sm:w-auto">
-                    <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="🔍 Buscar cliente..." class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 w-full sm:w-40 transition-all">
+                    <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="🔍 Buscar cliente..." class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 w-full sm:w-32 transition-all">
                     <button onclick="iniciarNovaOS()" class="text-white bg-blue-600 px-3 py-1.5 rounded-lg text-sm font-semibold flex-1 sm:flex-none">+ Novo</button>
                     <button onclick="abrirModalExportar()" class="text-white bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-semibold flex-1 sm:flex-none">📥 Backup</button>
                     <label class="text-white bg-indigo-600 px-3 py-1.5 rounded-lg text-sm font-semibold cursor-pointer flex-1 sm:flex-none text-center">📤 Importar <input type="file" accept=".json" onchange="importarBackupJSON(event)" class="hidden"></label>
+                    
+                    <!-- NOVO: Botão para trocar Logotipo a qualquer momento -->
+                    <button onclick="document.getElementById('inputTrocarLogo').click()" class="text-gray-800 bg-amber-400 hover:bg-amber-500 px-3 py-1.5 rounded-lg text-sm font-semibold flex-1 sm:flex-none whitespace-nowrap shadow-sm">🔄 Trocar Logo</button>
+                    <input type="file" id="inputTrocarLogo" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="hidden">
+
                     <button onclick="apagarTodoHistorico()" class="text-white bg-red-600 px-3 py-1.5 rounded-lg text-sm font-semibold flex-1 sm:flex-none whitespace-nowrap">🗑️ Apagar Tudo</button>
                 </div>
             </div>
@@ -271,7 +276,7 @@
 
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
-        // Função de Segurança contra XSS (Código Malicioso)
+        // Segurança contra Código Malicioso (XSS)
         function escapeHTML(str) {
             if (str === null || str === undefined) return '';
             return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
@@ -324,7 +329,7 @@
                 reader.onload = async function(e) {
                     await localforage.setItem('oficialLogoApp', e.target.result);
                     await carregarLogoDoArmazenamento();
-                    mostrarToast('Logótipo gravado e Ícone da App preparado!');
+                    mostrarToast('Logótipo atualizado com sucesso!');
                 };
                 reader.readAsDataURL(file);
             }
@@ -1083,7 +1088,7 @@
                     startY: cy, 
                     margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 },
                     body: [[document.getElementById(`descricao_${id}`).value || ' ']], theme: 'plain',
-                    styles: { lineWidth: 0.2, lineColor: [0, 0, 0], textColor: [0, 0, 0], fontSize: 9, cellPadding: 4, valign: 'middle' },
+                    styles: { lineWidth: 0.2, lineColor: [150, 150, 150], textColor: [0, 0, 0], fontSize: 9, cellPadding: 4, valign: 'middle' },
                     columnStyles: { 0: { cellWidth: 180 } }
                 });
                 
@@ -1106,19 +1111,20 @@
                     startY: cy, 
                     margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, 
                     theme: 'grid', 
-                    styles: { fontSize: 8, cellPadding: 2 }, 
+                    styles: { fontSize: 8, cellPadding: 2, lineWidth: 0.2, lineColor: [150, 150, 150] }, 
+                    headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
                     head: [['Qtd', 'Nome', 'Cód', '', 'Qtd', 'Nome', 'Cód']], 
                     body: tb,
                     columnStyles: {
                         0: { cellWidth: 10 }, 1: { cellWidth: 50 }, 2: { cellWidth: 28 }, 
                         3: { cellWidth: 4 }, 4: { cellWidth: 10 }, 5: { cellWidth: 50 }, 6: { cellWidth: 28 }  
                     },
-                    didParseCell: function(data) {
+                    didDrawCell: function(data) {
+                        // FIX: Pintar um rectângulo branco apenas sobre o conteúdo e bordas verticais do meio
+                        // Isto preserva as bordas fortes externas e as tabelas ficam perfeitas.
                         if (data.column.index === 3) {
-                            data.cell.styles.fillColor = [255, 255, 255];
-                            data.cell.styles.textColor = [255, 255, 255];
-                            data.cell.styles.lineColor = [255, 255, 255];
-                            data.cell.styles.lineWidth = 0;
+                            docOS.setFillColor(255, 255, 255);
+                            docOS.rect(data.cell.x, data.cell.y - 0.5, data.cell.width, data.cell.height + 1, 'F');
                         }
                     }
                 });
@@ -1333,7 +1339,7 @@
                 const pOs = document.getElementById(`osNum_${pId}`).value.trim();
                 const pCliente = document.getElementById(`cliente_${pId}`).value.trim();
                 
-                // Sanitização Absoluta do Ficheiro (Remove Barras e Símbolos do Nº OS)
+                // Sanitização Absoluta do Ficheiro
                 const pOsLimpo = pOs.replace(/[^a-z0-9]/gi, '_');
                 const pClienteLimpo = pCliente.replace(/[^a-z0-9]/gi, '_');
                 const nomeFicheiro = `${pOsLimpo}_${pClienteLimpo}.pdf`;
