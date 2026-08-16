@@ -3,11 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gerador de Múltiplas Ordens de Serviço</title>
+    <title>Multi-OS Pro</title>
     
-    <link rel="icon" type="image/png" href="icon.png">
-    <link rel="apple-touch-icon" href="icon.png">
-    <meta name="theme-color" content="#1f2937">
+    <!-- PWA Manifest Dinâmico -->
+    <link rel="manifest" id="dynamicManifest">
+    <meta name="theme-color" content="#059669">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -132,10 +135,10 @@
                 <div id="headerLogoContainer" class="hidden bg-white px-2 py-1 rounded shadow-sm mr-3 flex-shrink-0">
                     <img id="headerLogo" src="" alt="Logo" class="h-6 sm:h-9 object-contain" />
                 </div>
-                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.6</h1>
+                <h1 class="text-base sm:text-xl font-bold truncate hidden sm:block text-emerald-400">Multi-OS Pro v6.7</h1>
             </div>
             <div class="flex shrink-0">
-                <button onclick="sugerirInstalacao()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-xs sm:text-sm font-bold shadow-lg mr-2 flex items-center gap-1 text-white border border-emerald-400">📲 Instalar App</button>
+                <button onclick="acionarInstalacaoApp()" class="px-2 sm:px-3 py-1.5 bg-emerald-600 rounded-lg hover:bg-emerald-500 text-xs sm:text-sm font-bold shadow-lg mr-2 flex items-center gap-1 text-white border border-emerald-400">📲 Instalar App</button>
                 <button onclick="switchTab('novaOs')" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm mr-2 font-medium">Doc. Atual</button>
                 <button onclick="abrirAbaHistoricoSegura()" class="px-2 sm:px-3 py-1.5 bg-gray-700 rounded hover:bg-gray-600 text-xs sm:text-sm font-medium">Histórico</button>
             </div>
@@ -243,12 +246,86 @@
         let objUrlPreview = null;
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
         
-        // Variaveis de Zoom
         let currentZoom = 1;
         let startZoom = 1;
         let startDist = 0;
+        let deferredPrompt = null;
 
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
+
+        // GERAR ÍCONE "OS" COM CONTORNO VERDE EM BASE64 AUTOMATICAMENTE
+        function gerarIconeOSVerdeBase64() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // Fundo escuro profissional
+            ctx.fillStyle = '#1f2937';
+            ctx.fillRect(0, 0, 512, 512);
+
+            // Contorno Verde Brilhante
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 28;
+            ctx.strokeRect(32, 32, 448, 448);
+
+            // Texto "OS"
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 180px "Segoe UI", Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('OS', 256, 256);
+
+            return canvas.toDataURL('image/png');
+        }
+
+        function injetarManifestDinamico() {
+            const iconeB64 = gerarIconeOSVerdeBase64();
+            const manifestData = {
+                name: "Multi-OS Pro",
+                short_name: "Multi-OS",
+                start_url: "./",
+                display: "standalone",
+                background_color: "#1f2937",
+                theme_color: "#10b981",
+                icons: [
+                    {
+                        src: iconeB64,
+                        sizes: "512x512",
+                        type: "image/png",
+                        purpose: "any maskable"
+                    }
+                ]
+            };
+            const stringManifest = JSON.stringify(manifestData);
+            const blob = new Blob([stringManifest], {type: 'application/json'});
+            const manifestURL = URL.createObjectURL(blob);
+            document.getElementById('dynamicManifest').setAttribute('href', manifestURL);
+        }
+
+        // Capturar evento de instalação do navegador
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+        });
+
+        function acionarInstalacaoApp() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        mostrarToast('Aplicativo instalado com sucesso!');
+                    }
+                    deferredPrompt = null;
+                });
+            } else {
+                const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+                if (isIos()) {
+                    alert("Para instalar no iPhone (Ecrã Inteiro):\n\n1. Toque no ícone de Partilha (quadrado com seta para cima) na barra inferior do Safari.\n2. Escolha 'Adicionar ao Ecrã principal'.");
+                } else {
+                    alert("Para instalar no Android (Ecrã Inteiro):\n\n1. Toque nos 3 pontos no canto superior direito do Chrome.\n2. Escolha 'Adicionar ao ecrã principal' (Add to Home screen).");
+                }
+            }
+        }
 
         async function carregarLogoDoArmazenamento() {
             try {
@@ -280,19 +357,6 @@
                     mostrarToast('Logótipo gravado e Ícone da App preparado!');
                 };
                 reader.readAsDataURL(file);
-            }
-        }
-
-        function sugerirInstalacao() {
-            const isIos = () => {
-                const userAgent = window.navigator.userAgent.toLowerCase();
-                return /iphone|ipad|ipod/.test(userAgent);
-            };
-            
-            if (isIos()) {
-                alert("Para instalar no iPhone (Ecrã Inteiro):\n\n1. Toque no ícone de Partilha (quadrado com seta para cima) na barra inferior do Safari.\n2. Escolha 'Adicionar ao Ecrã principal'.");
-            } else {
-                alert("Para instalar no Android (Ecrã Inteiro):\n\n1. Toque nos 3 pontos no canto superior direito do Chrome.\n2. Escolha 'Adicionar ao ecrã principal' (Add to Home screen).");
             }
         }
 
@@ -383,19 +447,6 @@
             }
         }
 
-        async function resetPinMaster() {
-            let digitado = prompt("Digite o PIN atual ou a senha Master para redefinir:");
-            if (!digitado) return;
-            let pinSalvo = await localforage.getItem('app_pin');
-            if (digitado === pinSalvo || digitado === '2838') {
-                await localforage.removeItem('app_pin');
-                alert("PIN removido com sucesso.");
-                switchTab('novaOs');
-            } else {
-                mostrarToast("Senha incorreta!", true);
-            }
-        }
-
         function resizeCanvas(canvas) {
             if(!canvas) return;
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
@@ -409,6 +460,7 @@
         }
 
         document.addEventListener("DOMContentLoaded", async () => {
+            injetarManifestDinamico();
             await carregarLogoDoArmazenamento();
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
@@ -420,7 +472,6 @@
                 }
             }, 150);
             
-            // --- GESTÃO DO MOVIMENTO DE PINÇA (ZOOM DO PDF) ---
             const pdfContainer = document.getElementById('pdfRenderContainer');
             if(pdfContainer) {
                 pdfContainer.addEventListener('touchstart', function(e) {
@@ -432,9 +483,9 @@
 
                 pdfContainer.addEventListener('touchmove', function(e) {
                     if (e.touches.length === 2) {
-                        e.preventDefault(); // Previne o comportamento padrão (scroll/zoom nativo da página inteira)
+                        e.preventDefault();
                         let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-                        currentZoom = Math.min(Math.max(1, startZoom * (dist / startDist)), 4); // Limita o zoom entre 1x e 4x
+                        currentZoom = Math.min(Math.max(1, startZoom * (dist / startDist)), 4);
                         atualizarZoomPdf();
                     }
                 }, {passive: false});
@@ -451,7 +502,6 @@
             const wrapper = document.getElementById('pdfPagesWrapper');
             if (!wrapper) return;
             
-            // Se estiver com zoom aplicado, mudamos o alinhamento para permitir o scroll lateral perfeitamente
             if(currentZoom > 1) {
                 wrapper.classList.remove('items-center');
                 wrapper.classList.add('items-start');
@@ -463,7 +513,7 @@
             const canvases = wrapper.querySelectorAll('canvas');
             canvases.forEach(c => {
                 if (window.innerWidth > 600) {
-                    c.style.width = (768 * currentZoom) + 'px'; // 768px é a largura base no computador
+                    c.style.width = (768 * currentZoom) + 'px';
                 } else {
                     c.style.width = (100 * currentZoom) + '%';
                 }
@@ -500,7 +550,6 @@
             }
         }
 
-        // --- SISTEMA FOTOGRÁFICO INTELIGENTE ---
         function adicionarFoto(id) {
             const input = document.createElement('input');
             input.type = 'file';
@@ -549,7 +598,6 @@
             container.appendChild(div);
         }
 
-        // Processamento de PDFs Anexos
         function processarAnexo(id, input) {
             const file = input.files[0];
             if (!file) return removerAnexo(id);
@@ -1090,7 +1138,6 @@
                 }
                 if(tb.length===0) tb.push(['','','','','','','']);
                 
-                // TABELA DO PDF REBALANCEADA (VERSÃO 6.5)
                 docOS.autoTable({ 
                     startY: cy, 
                     margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, 
@@ -1101,11 +1148,11 @@
                     columnStyles: {
                         0: { cellWidth: 10 }, 
                         1: { cellWidth: 50 }, 
-                        2: { cellWidth: 28 }, // Código mais largo
+                        2: { cellWidth: 28 }, 
                         3: { cellWidth: 4 },  
                         4: { cellWidth: 10 }, 
                         5: { cellWidth: 50 }, 
-                        6: { cellWidth: 28 }  // Código mais largo
+                        6: { cellWidth: 28 }  
                     },
                     didParseCell: function(data) {
                         if (data.column.index === 3) {
@@ -1291,14 +1338,11 @@
                 const wrapper = document.getElementById('pdfPagesWrapper'); 
                 wrapper.innerHTML = ''; 
                 
-                // Reseta o nível de zoom sempre que abrimos um documento
                 currentZoom = 1;
                 atualizarZoomPdf();
 
                 for(let num = 1; num <= pdf.numPages; num++) {
                     const page = await pdf.getPage(num);
-                    
-                    // Renderização em alta qualidade (Escala 2.0 ou 1.8) para garantir que a imagem continua nítida ao fazer zoom
                     const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); 
                     
                     const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
@@ -1309,9 +1353,7 @@
                     wrapper.appendChild(canvas);
                 }
                 
-                // Aplicar a largura inicial correta de acordo com o ecrã
                 atualizarZoomPdf();
-
                 document.getElementById('modalPreviewPDF').classList.remove('hidden');
             } catch (err) { mostrarToast(err.message || 'Erro ao pre-visualizar.', true); } 
             finally { btn.disabled = false; btn.innerHTML = 'Ver Documento'; }
