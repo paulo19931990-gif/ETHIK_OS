@@ -106,7 +106,7 @@
 
             <!-- Container do PDF Renderizado -->
             <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-300 overflow-auto touch-pan-x touch-pan-y relative">
-                <div id="pdfPagesWrapper" class="min-w-full flex flex-col items-center p-2 sm:p-6 pb-24 origin-top-left transition-transform duration-75 ease-out"></div>
+                <div id="pdfPagesWrapper" class="w-full p-2 sm:p-6 pb-24"></div>
             </div>
         </div>
     </div>
@@ -504,18 +504,32 @@
 
         function atualizarZoomPdf() {
             const wrapper = document.getElementById('pdfPagesWrapper');
-            if (!wrapper) return;
-            
-            if(currentZoom > 1) { wrapper.classList.remove('items-center'); wrapper.classList.add('items-start'); } 
-            else { wrapper.classList.add('items-center'); wrapper.classList.remove('items-start'); }
+            const container = document.getElementById('pdfRenderContainer');
+            if (!wrapper || !container) return;
+
+            const isDesktop = window.innerWidth > 600;
+            const paddingLateral = isDesktop ? 48 : 16; 
+            const safeWidth = container.clientWidth - paddingLateral;
 
             const canvases = wrapper.querySelectorAll('canvas');
             canvases.forEach(c => {
-                if (window.innerWidth > 600) { c.style.width = (768 * currentZoom) + 'px'; } 
-                else { c.style.width = (100 * currentZoom) + '%'; }
+                c.style.height = 'auto';
+                c.style.display = 'inline-block';
                 c.style.maxWidth = 'none';
+
+                if (isDesktop) {
+                    c.style.width = (768 * currentZoom) + 'px';
+                    wrapper.style.textAlign = 'center';
+                } else {
+                    c.style.width = (safeWidth * currentZoom) + 'px';
+                    if (currentZoom > 1) {
+                        wrapper.style.textAlign = 'left';
+                    } else {
+                        wrapper.style.textAlign = 'center';
+                    }
+                }
             });
-            
+
             const zoomText = document.getElementById('zoomText');
             if(zoomText) zoomText.innerText = Math.round(currentZoom * 100) + '%';
         }
