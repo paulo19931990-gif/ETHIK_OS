@@ -489,7 +489,8 @@
                     if (e.touches.length === 2) {
                         e.preventDefault(); 
                         let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-                        currentZoom = Math.min(Math.max(1, startZoom * (dist / startDist)), 4);
+                        // Permitindo o zoom reduzir até 50% (0.5)
+                        currentZoom = Math.min(Math.max(0.5, startZoom * (dist / startDist)), 4);
                         atualizarZoomPdf();
                     }
                 }, {passive: false});
@@ -534,8 +535,9 @@
             if(zoomText) zoomText.innerText = Math.round(currentZoom * 100) + '%';
         }
 
+        // Permitindo o clique no botão de diminuir reduzir até 50% (0.5)
         function zoomInPdf() { currentZoom = Math.min(currentZoom + 0.25, 4); atualizarZoomPdf(); }
-        function zoomOutPdf() { currentZoom = Math.max(currentZoom - 0.25, 1); atualizarZoomPdf(); }
+        function zoomOutPdf() { currentZoom = Math.max(currentZoom - 0.25, 0.5); atualizarZoomPdf(); }
 
         async function autoSalvarRascunho() {
             if (!document.getElementById('novaOs').classList.contains('active')) return;
