@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Multi-OS Pro</title>
     
-    <!-- PWA Manifest Dinâmico -->
-    <link rel="manifest" id="dynamicManifest">
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#1f2937">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -47,7 +46,6 @@
         <span id="toastMsg">Mensagem</span>
     </div>
 
-    <!-- Modais de Segurança (PIN) -->
     <div id="modalCriarPin" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] px-4">
         <div class="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl">
             <h3 class="text-xl font-bold mb-2 text-indigo-700">Segurança LGPD</h3>
@@ -68,7 +66,6 @@
         </div>
     </div>
 
-    <!-- Modal Exportar Backup -->
     <div id="modalExportar" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
         <div class="bg-white p-6 rounded-lg max-w-sm w-full shadow-2xl">
             <h3 class="text-xl font-bold mb-2 text-emerald-600">Salvar Backup</h3>
@@ -86,7 +83,6 @@
         </div>
     </div>
 
-    <!-- Modal Pré-visualização do PDF -->
     <div id="modalPreviewPDF" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
         <div class="bg-white rounded-lg w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden relative">
             <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-gray-50 shrink-0 z-10">
@@ -97,21 +93,18 @@
                 </div>
             </div>
 
-            <!-- Botões Flutuantes de Zoom -->
             <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-900/90 text-white rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.5)] px-4 py-2 z-20 gap-4 backdrop-blur-sm border border-gray-700">
                 <button onclick="zoomOutPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">−</button>
                 <span id="zoomText" class="text-sm font-bold w-12 text-center tracking-wider">100%</span>
                 <button onclick="zoomInPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">+</button>
             </div>
 
-            <!-- Container do PDF Renderizado -->
             <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-300 overflow-auto touch-pan-x touch-pan-y relative">
                 <div id="pdfPagesWrapper" class="w-full p-2 sm:p-6 pb-24"></div>
             </div>
         </div>
     </div>
 
-    <!-- Modal de Assinatura -->
     <div id="modalAssinaturaExpandida" class="hidden fixed inset-0 bg-gray-900 z-50 flex flex-col">
         <div class="bg-gray-800 p-4 text-white flex justify-between items-center shrink-0 shadow-md z-10">
             <h3 id="tituloModalAssinatura" class="font-bold text-lg flex items-center gap-2">Área de Assinatura</h3>
@@ -129,7 +122,6 @@
         </div>
     </div>
 
-    <!-- BARRA DE NAVEGAÇÃO -->
     <nav class="bg-gray-800 text-white p-2 sm:p-4 shadow-md sticky top-0 z-40">
         <div class="max-w-4xl mx-auto flex justify-between items-center gap-1 sm:gap-4">
             
@@ -249,7 +241,6 @@
                 </div>
             </div>
 
-            <!-- Monitor de Armazenamento -->
             <div class="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <div class="flex justify-between text-sm mb-1">
                     <span class="font-bold text-gray-700">Armazenamento do Dispositivo</span>
@@ -279,29 +270,23 @@
 
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
-        // Segurança contra Código Malicioso (XSS)
         function escapeHTML(str) {
             if (str === null || str === undefined) return '';
             return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
 
-        /* ----- SISTEMA DE INSTALAÇÃO ----- */
         let promptDeInstalacao = null;
         window.addEventListener('beforeinstallprompt', (e) => {
-            // Previne a barra inferior padrão do navegador
             e.preventDefault();
-            // Guarda o evento para usarmos no nosso botão
             promptDeInstalacao = e;
         });
 
         async function acionarInstalacaoApp() {
             if (promptDeInstalacao) {
-                // Tenta forçar o pop-up nativo de instalação
                 promptDeInstalacao.prompt();
                 const { outcome } = await promptDeInstalacao.userChoice;
-                promptDeInstalacao = null; // O evento só pode ser usado uma vez
+                promptDeInstalacao = null; 
             } else {
-                // Plano B: Se o navegador bloquear ou já estiver instalado
                 const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
                 if (isIos()) {
                     alert("Para instalar no iPhone (Ecrã Inteiro):\n\n1. Toque no ícone de Partilha (quadrado com seta) na barra do Safari.\n2. Escolha 'Adicionar ao Ecrã principal'.");
@@ -310,7 +295,6 @@
                 }
             }
         }
-        /* --------------------------------- */
 
         async function atualizarIndicadorArmazenamento() {
             const elText = document.getElementById('storage-text');
@@ -365,19 +349,48 @@
             }
         }
 
+        // --- NOVO SISTEMA DE BANCO DE DADOS (SEPARAÇÃO LEVE/PESADA) ---
         async function obterHistoricoSalvo() {
-            try { return (await localforage.getItem('historico_os')) || []; } catch(e) { return []; }
+            try { 
+                let h = await localforage.getItem('historico_os') || []; 
+                // Auto-Migração Silenciosa de documentos antigos (que continham as ordens pesadas dentro do array)
+                if (h.length > 0 && h[0].ordens) {
+                    let novoMeta = [];
+                    for(let doc of h) {
+                        await localforage.setItem(`os_doc_${doc.id}`, doc); // Salva o gigante separado
+                        novoMeta.push({
+                            id: doc.id, 
+                            dataAtualizacao: doc.dataAtualizacao,
+                            nomeClienteFinal: doc.nomeClienteFinal || (doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido'),
+                            osNumResumo: doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS'
+                        });
+                    }
+                    await localforage.setItem('historico_os', novoMeta);
+                    return novoMeta;
+                }
+                return h; // Retorna só os metadados leves
+            } catch(e) { return []; }
         }
 
-        async function gravarHistoricoSalvo(historico) {
-            try { await localforage.setItem('historico_os', historico); return true; } catch(e) { return false; }
+        async function gravarHistoricoSalvo(historicoMeta) {
+            try { await localforage.setItem('historico_os', historicoMeta); return true; } catch(e) { return false; }
         }
 
         function abrirModalExportar() { document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`; document.getElementById('modalExportar').classList.remove('hidden'); }
         function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
+        
         async function confirmarExportacao() {
             let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${new Date().toISOString().split('T')[0]}`;
-            const blob = new Blob([JSON.stringify(await obterHistoricoSalvo(), null, 2)], { type: 'application/json' });
+            
+            // Reconstruir o backup completo unindo o leve com o pesado
+            let historicoMeta = await obterHistoricoSalvo();
+            let backupCompleto = [];
+            for (let meta of historicoMeta) {
+                let docFull = await localforage.getItem(`os_doc_${meta.id}`);
+                if (docFull) backupCompleto.push(docFull);
+            }
+
+            const blob = new Blob([JSON.stringify(backupCompleto, null, 2)], { type: 'application/json' });
             if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado);
             urlDownloadGerado = URL.createObjectURL(blob);
             const a = document.createElement('a'); a.href = urlDownloadGerado; a.download = `${inputNome}.json`;
@@ -392,10 +405,21 @@
                 try {
                     const importados = JSON.parse(e.target.result);
                     if(!Array.isArray(importados)) throw new Error("Inválido");
-                    let historicoAtual = await obterHistoricoSalvo();
-                    let mapa = new Map();
-                    [...historicoAtual, ...importados].forEach(item => mapa.set(item.id, item));
-                    await gravarHistoricoSalvo(Array.from(mapa.values()));
+                    let historicoMeta = await obterHistoricoSalvo();
+                    
+                    for (let doc of importados) {
+                        await localforage.setItem(`os_doc_${doc.id}`, doc); // Salva o pesado individualmente
+                        
+                        let meta = {
+                            id: doc.id, dataAtualizacao: doc.dataAtualizacao,
+                            nomeClienteFinal: doc.nomeClienteFinal || (doc.ordens && doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido'),
+                            osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS'
+                        };
+                        let idx = historicoMeta.findIndex(m => m.id === doc.id);
+                        if(idx >= 0) historicoMeta[idx] = meta; else historicoMeta.unshift(meta);
+                    }
+                    
+                    await gravarHistoricoSalvo(historicoMeta);
                     await carregarHistorico();
                     mostrarToast('Backup importado com sucesso!');
                 } catch(err) { mostrarToast('Ficheiro inválido.', true); }
@@ -452,28 +476,39 @@
             }
         }
 
-        function resizeCanvas(canvas) {
+        // --- CORREÇÃO DO REDIMENSIONAMENTO DO CANVAS ---
+        function resizeCanvasSeguro(canvas, pad) {
             if(!canvas) return;
+            
+            let data = null;
+            // O segredo: salvar os traços vetoriais ANTES de mudar a largura/altura que limpam o bitmap
+            if(pad && !pad.isEmpty()) { data = pad.toData(); } 
+
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
             const width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 300;
             const height = canvas.offsetHeight || canvas.parentElement.offsetHeight || 150;
+            
             canvas.width = width * ratio;
             canvas.height = height * ratio;
+            
             const ctx = canvas.getContext("2d");
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.scale(ratio, ratio);
+            
+            // Redesenha os traços armazenados
+            if(data && pad) { pad.fromData(data); } 
         }
 
         document.addEventListener("DOMContentLoaded", async () => {
             await carregarLogoDoArmazenamento();
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
-                resizeCanvas(cTec); resizeCanvas(cCli);
                 if (typeof SignaturePad !== 'undefined') {
                     if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions);
                     if(cCli) padCliente = new SignaturePad(cCli, signatureOptions);
                     if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
                 }
+                resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
             }, 150);
             
             const pdfContainer = document.getElementById('pdfRenderContainer');
@@ -489,7 +524,6 @@
                     if (e.touches.length === 2) {
                         e.preventDefault(); 
                         let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-                        // Permitindo o zoom reduzir até 50% (0.5)
                         currentZoom = Math.min(Math.max(0.5, startZoom * (dist / startDist)), 4);
                         atualizarZoomPdf();
                     }
@@ -535,7 +569,6 @@
             if(zoomText) zoomText.innerText = Math.round(currentZoom * 100) + '%';
         }
 
-        // Permitindo o clique no botão de diminuir reduzir até 50% (0.5)
         function zoomInPdf() { currentZoom = Math.min(currentZoom + 0.25, 4); atualizarZoomPdf(); }
         function zoomOutPdf() { currentZoom = Math.max(currentZoom - 0.25, 0.5); atualizarZoomPdf(); }
 
@@ -688,18 +721,27 @@
             switchTab('novaOs');
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente');
-                if(cTec && padTecnico) { resizeCanvas(cTec); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
-                if(cCli && padCliente) { resizeCanvas(cCli); padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
+                if(cTec && padTecnico) { resizeCanvasSeguro(cTec, padTecnico); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
+                if(cCli && padCliente) { resizeCanvasSeguro(cCli, padCliente); padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
             }, 100);
             atualizarVisibilidadeCamposPorBloco();
         }
 
+        // --- CORREÇÃO DA LÓGICA DO SERVIÇO INTERNO ---
         function verificarServicoInternoGlobal() {
             const blocos = document.querySelectorAll('.os-bloco');
             if (blocos.length === 0) return false;
-            const primeiraId = blocos[0].getAttribute('data-id');
-            const cbServInterno = document.getElementById(`cbServInterno_${primeiraId}`);
-            return cbServInterno ? cbServInterno.checked : false;
+            
+            let apenasInterno = true;
+            // Verifica TODOS os blocos. Se 1 deles precisar de assinatura externa, mostra a área do cliente.
+            blocos.forEach(b => {
+                const id = b.getAttribute('data-id');
+                const cbServInterno = document.getElementById(`cbServInterno_${id}`);
+                if (!cbServInterno || !cbServInterno.checked) {
+                    apenasInterno = false; 
+                }
+            });
+            return apenasInterno;
         }
 
         function atualizarVisibilidadeCamposPorBloco() {
@@ -735,7 +777,7 @@
                     containerCliente.style.display = 'none'; if(padCliente) padCliente.clear();
                 } else {
                     containerCliente.style.display = 'block';
-                    setTimeout(() => { const cCli = document.getElementById('canvasCliente'); if(cCli) resizeCanvas(cCli); }, 50);
+                    setTimeout(() => { const cCli = document.getElementById('canvasCliente'); if(cCli) resizeCanvasSeguro(cCli, padCliente); }, 50);
                 }
             }
         }
@@ -749,11 +791,11 @@
 
             setTimeout(() => {
                 const cExp = document.getElementById('canvasExpandido');
-                resizeCanvas(cExp);
+                resizeCanvasSeguro(cExp, padExpandido);
                 if(padExpandido) {
                     padExpandido.clear();
                     const padFonte = alvo === 'tecnico' ? padTecnico : padCliente;
-                    if (padFonte && !padFonte.isEmpty()) padExpandido.fromDataURL(padFonte.toDataURL());
+                    if (padFonte && !padFonte.isEmpty()) padExpandido.fromData(padFonte.toData());
                 }
             }, 50);
         }
@@ -767,12 +809,12 @@
             const canvasEl = alvoAssinaturaAtual === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
             
             if (padExpandido && padDestino) {
-                resizeCanvas(canvasEl);
+                resizeCanvasSeguro(canvasEl, padDestino);
                 if (padExpandido.isEmpty()) { 
                     padDestino.clear(); 
                     if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao(); 
                 } else { 
-                    padDestino.fromDataURL(padExpandido.toDataURL()); 
+                    padDestino.fromData(padExpandido.toData()); 
                     if (alvoAssinaturaAtual === 'cliente') bloquearEdicao(); 
                 }
             }
@@ -802,7 +844,7 @@
                 await carregarHistorico();
                 await atualizarIndicadorArmazenamento();
             } else if(tabId === 'novaOs') {
-                setTimeout(() => { resizeCanvas(document.getElementById('canvasTecnico')); resizeCanvas(document.getElementById('canvasCliente')); }, 50);
+                setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
             }
             window.scrollTo(0, 0);
         }
@@ -1001,11 +1043,23 @@
             }
             try {
                 let dados = recolherDadosDoFormulario();
-                let historico = await obterHistoricoSalvo();
-                let index = historico.findIndex(d => d.id === dados.id);
-                if(index >= 0) historico[index] = dados; else historico.unshift(dados);
                 
-                await gravarHistoricoSalvo(historico);
+                // Salva o documento pesado e completo em uma chave isolada
+                await localforage.setItem(`os_doc_${dados.id}`, dados);
+                
+                // Cria ou atualiza os metadados super leves para a lista
+                let historicoMeta = await obterHistoricoSalvo();
+                let meta = {
+                    id: dados.id, 
+                    dataAtualizacao: dados.dataAtualizacao,
+                    nomeClienteFinal: dados.nomeClienteFinal || (dados.ordens[0] ? dados.ordens[0].cliente : 'Desconhecido'),
+                    osNumResumo: dados.ordens[0] ? dados.ordens[0].osNum : 'Sem OS'
+                };
+                
+                let index = historicoMeta.findIndex(d => d.id === dados.id);
+                if(index >= 0) historicoMeta[index] = meta; else historicoMeta.unshift(meta);
+                
+                await gravarHistoricoSalvo(historicoMeta);
                 await localforage.removeItem('draft_os');
                 
                 if(!silencioso) {
@@ -1031,13 +1085,13 @@
 
         async function carregarHistorico() {
             const list = document.getElementById('historicoList'); 
-            let h = await obterHistoricoSalvo();
-            if(!h || h.length === 0) return list.innerHTML = '<p class="text-gray-500 italic text-center">Nenhum documento salvo.</p>';
+            let historicoMeta = await obterHistoricoSalvo();
             
-            list.innerHTML = h.map(doc => {
-                let primeiraOS = (doc.ordens && doc.ordens[0]) ? doc.ordens[0] : {};
-                const osNumSafe = escapeHTML(primeiraOS.osNum || 'Sem OS');
-                const clienteSafe = escapeHTML(primeiraOS.cliente || doc.nomeClienteFinal || 'Desconhecido');
+            if(!historicoMeta || historicoMeta.length === 0) return list.innerHTML = '<p class="text-gray-500 italic text-center">Nenhum documento salvo.</p>';
+            
+            list.innerHTML = historicoMeta.map(doc => {
+                const osNumSafe = escapeHTML(doc.osNumResumo || 'Sem OS');
+                const clienteSafe = escapeHTML(doc.nomeClienteFinal || 'Desconhecido');
                 return `
                 <div class="historico-item border p-4 rounded-xl bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shadow-sm mb-3 border-l-4 border-l-blue-600">
                     <div class="mb-3 sm:mb-0">
@@ -1055,25 +1109,46 @@
         }
 
         async function carregarDocumentoParaEdicao(id) {
-            let doc = (await obterHistoricoSalvo()).find(d => d.id === id); if(!doc) return;
+            // Busca a chave isolada e pesada do documento
+            let doc = await localforage.getItem(`os_doc_${id}`); 
+            
+            // Segurança: Se não encontrar (caso algo da migração falhe), tenta buscar no array antigo
+            if(!doc) {
+                let histAntigo = await localforage.getItem('historico_os') || [];
+                doc = histAntigo.find(d => d.id === id);
+            }
+            if(!doc) return;
+            
             restaurarDadosParaFormulario(doc); mostrarToast('Documento carregado.');
         }
 
         async function apagarDocumento(id) {
             if(!confirm("Tem certeza que deseja apagar?")) return;
-            let historico = await obterHistoricoSalvo();
-            await gravarHistoricoSalvo(historico.filter(d => d.id !== id));
+            let historicoMeta = await obterHistoricoSalvo();
+            
+            // Apaga da lista leve
+            await gravarHistoricoSalvo(historicoMeta.filter(d => d.id !== id));
+            // Apaga os dados pesados
+            await localforage.removeItem(`os_doc_${id}`);
+            
             if(id === documentoAtualId) iniciarNovaOS(); 
             await carregarHistorico();
             atualizarIndicadorArmazenamento();
         }
 
         async function apagarTodoHistorico() {
-            let historico = await obterHistoricoSalvo();
-            if(historico.length === 0) { mostrarToast("O histórico já está vazio."); return; }
+            let historicoMeta = await obterHistoricoSalvo();
+            if(historicoMeta.length === 0) { mostrarToast("O histórico já está vazio."); return; }
             let p = prompt("ATENÇÃO: Isto apagará TODAS as Ordens de Serviço e fotos guardadas.\\nPara confirmar, digite APAGAR:");
             if(p === "APAGAR") {
                 await gravarHistoricoSalvo([]);
+                
+                // Limpa todos os documentos pesados
+                let chaves = await localforage.keys();
+                for(let key of chaves) {
+                    if(key.startsWith('os_doc_')) await localforage.removeItem(key);
+                }
+
                 iniciarNovaOS();
                 await carregarHistorico();
                 atualizarIndicadorArmazenamento();
@@ -1409,3 +1484,4 @@
     </script>
 </body>
 </html>
+
