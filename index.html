@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Multi-OS Pro</title>
     
-    <link rel="manifest" href="./manifest.json">
+    <!-- PWA Manifest Dinâmico -->
+    <link rel="manifest" id="dynamicManifest">
     <meta name="theme-color" content="#1f2937">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -46,6 +47,7 @@
         <span id="toastMsg">Mensagem</span>
     </div>
 
+    <!-- Modais de Segurança (PIN) -->
     <div id="modalCriarPin" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] px-4">
         <div class="bg-white p-6 rounded-xl max-w-sm w-full shadow-2xl">
             <h3 class="text-xl font-bold mb-2 text-indigo-700">Segurança LGPD</h3>
@@ -66,6 +68,7 @@
         </div>
     </div>
 
+    <!-- Modal Exportar Backup -->
     <div id="modalExportar" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
         <div class="bg-white p-6 rounded-lg max-w-sm w-full shadow-2xl">
             <h3 class="text-xl font-bold mb-2 text-emerald-600">Salvar Backup</h3>
@@ -83,6 +86,7 @@
         </div>
     </div>
 
+    <!-- Modal Pré-visualização do PDF -->
     <div id="modalPreviewPDF" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-2 sm:p-4">
         <div class="bg-white rounded-lg w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden relative">
             <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-gray-50 shrink-0 z-10">
@@ -93,18 +97,21 @@
                 </div>
             </div>
 
+            <!-- Botões Flutuantes de Zoom -->
             <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-900/90 text-white rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.5)] px-4 py-2 z-20 gap-4 backdrop-blur-sm border border-gray-700">
                 <button onclick="zoomOutPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">−</button>
                 <span id="zoomText" class="text-sm font-bold w-12 text-center tracking-wider">100%</span>
                 <button onclick="zoomInPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">+</button>
             </div>
 
+            <!-- Container do PDF Renderizado -->
             <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-300 overflow-auto touch-pan-x touch-pan-y relative">
                 <div id="pdfPagesWrapper" class="w-full p-2 sm:p-6 pb-24"></div>
             </div>
         </div>
     </div>
 
+    <!-- Modal de Assinatura -->
     <div id="modalAssinaturaExpandida" class="hidden fixed inset-0 bg-gray-900 z-50 flex flex-col">
         <div class="bg-gray-800 p-4 text-white flex justify-between items-center shrink-0 shadow-md z-10">
             <h3 id="tituloModalAssinatura" class="font-bold text-lg flex items-center gap-2">Área de Assinatura</h3>
@@ -122,6 +129,7 @@
         </div>
     </div>
 
+    <!-- BARRA DE NAVEGAÇÃO -->
     <nav class="bg-gray-800 text-white p-2 sm:p-4 shadow-md sticky top-0 z-40">
         <div class="max-w-4xl mx-auto flex justify-between items-center gap-1 sm:gap-4">
             
@@ -241,6 +249,7 @@
                 </div>
             </div>
 
+            <!-- Monitor de Armazenamento -->
             <div class="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <div class="flex justify-between text-sm mb-1">
                     <span class="font-bold text-gray-700">Armazenamento do Dispositivo</span>
@@ -349,7 +358,7 @@
             }
         }
 
-        // --- NOVO SISTEMA DE BANCO DE DADOS (SEPARAÇÃO LEVE/PESADA) ---
+        // --- SISTEMA DE BANCO DE DADOS (SEPARAÇÃO LEVE/PESADA) ---
         async function obterHistoricoSalvo() {
             try { 
                 let h = await localforage.getItem('historico_os') || []; 
@@ -476,39 +485,28 @@
             }
         }
 
-        // --- CORREÇÃO DO REDIMENSIONAMENTO DO CANVAS ---
-        function resizeCanvasSeguro(canvas, pad) {
+        function resizeCanvas(canvas) {
             if(!canvas) return;
-            
-            let data = null;
-            // O segredo: salvar os traços vetoriais ANTES de mudar a largura/altura que limpam o bitmap
-            if(pad && !pad.isEmpty()) { data = pad.toData(); } 
-
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
             const width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 300;
             const height = canvas.offsetHeight || canvas.parentElement.offsetHeight || 150;
-            
             canvas.width = width * ratio;
             canvas.height = height * ratio;
-            
             const ctx = canvas.getContext("2d");
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.scale(ratio, ratio);
-            
-            // Redesenha os traços armazenados
-            if(data && pad) { pad.fromData(data); } 
         }
 
         document.addEventListener("DOMContentLoaded", async () => {
             await carregarLogoDoArmazenamento();
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
+                resizeCanvas(cTec); resizeCanvas(cCli);
                 if (typeof SignaturePad !== 'undefined') {
                     if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions);
                     if(cCli) padCliente = new SignaturePad(cCli, signatureOptions);
                     if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
                 }
-                resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
             }, 150);
             
             const pdfContainer = document.getElementById('pdfRenderContainer');
@@ -721,27 +719,18 @@
             switchTab('novaOs');
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente');
-                if(cTec && padTecnico) { resizeCanvasSeguro(cTec, padTecnico); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
-                if(cCli && padCliente) { resizeCanvasSeguro(cCli, padCliente); padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
+                if(cTec && padTecnico) { resizeCanvas(cTec); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
+                if(cCli && padCliente) { resizeCanvas(cCli); padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
             }, 100);
             atualizarVisibilidadeCamposPorBloco();
         }
 
-        // --- CORREÇÃO DA LÓGICA DO SERVIÇO INTERNO ---
         function verificarServicoInternoGlobal() {
             const blocos = document.querySelectorAll('.os-bloco');
             if (blocos.length === 0) return false;
-            
-            let apenasInterno = true;
-            // Verifica TODOS os blocos. Se 1 deles precisar de assinatura externa, mostra a área do cliente.
-            blocos.forEach(b => {
-                const id = b.getAttribute('data-id');
-                const cbServInterno = document.getElementById(`cbServInterno_${id}`);
-                if (!cbServInterno || !cbServInterno.checked) {
-                    apenasInterno = false; 
-                }
-            });
-            return apenasInterno;
+            const primeiraId = blocos[0].getAttribute('data-id');
+            const cbServInterno = document.getElementById(`cbServInterno_${primeiraId}`);
+            return cbServInterno ? cbServInterno.checked : false;
         }
 
         function atualizarVisibilidadeCamposPorBloco() {
@@ -777,7 +766,7 @@
                     containerCliente.style.display = 'none'; if(padCliente) padCliente.clear();
                 } else {
                     containerCliente.style.display = 'block';
-                    setTimeout(() => { const cCli = document.getElementById('canvasCliente'); if(cCli) resizeCanvasSeguro(cCli, padCliente); }, 50);
+                    setTimeout(() => { const cCli = document.getElementById('canvasCliente'); if(cCli) resizeCanvas(cCli); }, 50);
                 }
             }
         }
@@ -791,11 +780,11 @@
 
             setTimeout(() => {
                 const cExp = document.getElementById('canvasExpandido');
-                resizeCanvasSeguro(cExp, padExpandido);
+                resizeCanvas(cExp);
                 if(padExpandido) {
                     padExpandido.clear();
                     const padFonte = alvo === 'tecnico' ? padTecnico : padCliente;
-                    if (padFonte && !padFonte.isEmpty()) padExpandido.fromData(padFonte.toData());
+                    if (padFonte && !padFonte.isEmpty()) padExpandido.fromDataURL(padFonte.toDataURL());
                 }
             }, 50);
         }
@@ -809,12 +798,12 @@
             const canvasEl = alvoAssinaturaAtual === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
             
             if (padExpandido && padDestino) {
-                resizeCanvasSeguro(canvasEl, padDestino);
+                resizeCanvas(canvasEl);
                 if (padExpandido.isEmpty()) { 
                     padDestino.clear(); 
                     if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao(); 
                 } else { 
-                    padDestino.fromData(padExpandido.toData()); 
+                    padDestino.fromDataURL(padExpandido.toDataURL()); 
                     if (alvoAssinaturaAtual === 'cliente') bloquearEdicao(); 
                 }
             }
@@ -844,7 +833,7 @@
                 await carregarHistorico();
                 await atualizarIndicadorArmazenamento();
             } else if(tabId === 'novaOs') {
-                setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
+                setTimeout(() => { resizeCanvas(document.getElementById('canvasTecnico')); resizeCanvas(document.getElementById('canvasCliente')); }, 50);
             }
             window.scrollTo(0, 0);
         }
@@ -1484,4 +1473,3 @@
     </script>
 </body>
 </html>
-
