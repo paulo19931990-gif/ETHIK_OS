@@ -362,22 +362,22 @@
         async function obterHistoricoSalvo() {
             try { 
                 let h = await localforage.getItem('historico_os') || []; 
-                // Auto-Migração Silenciosa de documentos antigos (que continham as ordens pesadas dentro do array)
                 if (h.length > 0 && h[0].ordens) {
                     let novoMeta = [];
                     for(let doc of h) {
-                        await localforage.setItem(`os_doc_${doc.id}`, doc); // Salva o gigante separado
+                        await localforage.setItem(`os_doc_${doc.id}`, doc); 
                         novoMeta.push({
                             id: doc.id, 
                             dataAtualizacao: doc.dataAtualizacao,
                             nomeClienteFinal: doc.nomeClienteFinal || (doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido'),
-                            osNumResumo: doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS'
+                            osNumResumo: doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS',
+                            equipamentoResumo: doc.ordens[0] ? doc.ordens[0].equipamento : ''
                         });
                     }
                     await localforage.setItem('historico_os', novoMeta);
                     return novoMeta;
                 }
-                return h; // Retorna só os metadados leves
+                return h; 
             } catch(e) { return []; }
         }
 
@@ -391,7 +391,6 @@
         async function confirmarExportacao() {
             let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${new Date().toISOString().split('T')[0]}`;
             
-            // Reconstruir o backup completo unindo o leve com o pesado
             let historicoMeta = await obterHistoricoSalvo();
             let backupCompleto = [];
             for (let meta of historicoMeta) {
@@ -417,12 +416,13 @@
                     let historicoMeta = await obterHistoricoSalvo();
                     
                     for (let doc of importados) {
-                        await localforage.setItem(`os_doc_${doc.id}`, doc); // Salva o pesado individualmente
+                        await localforage.setItem(`os_doc_${doc.id}`, doc); 
                         
                         let meta = {
                             id: doc.id, dataAtualizacao: doc.dataAtualizacao,
                             nomeClienteFinal: doc.nomeClienteFinal || (doc.ordens && doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido'),
-                            osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS'
+                            osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS',
+                            equipamentoResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].equipamento : ''
                         };
                         let idx = historicoMeta.findIndex(m => m.id === doc.id);
                         if(idx >= 0) historicoMeta[idx] = meta; else historicoMeta.unshift(meta);
@@ -593,9 +593,13 @@
             }
         }
 
-        function adicionarFoto(id) {
+        function adicionarFoto(id, source) {
             const input = document.createElement('input');
-            input.type = 'file'; input.accept = 'image/*';
+            input.type = 'file'; 
+            input.accept = 'image/*';
+            if (source === 'camera') {
+                input.capture = 'environment'; // Força a abertura da câmera traseira
+            }
             input.onchange = (e) => {
                 const file = e.target.files[0]; if(!file) return;
                 const reader = new FileReader();
@@ -920,13 +924,17 @@
                     <div><label class="block text-xs font-bold mb-1">Total de Dias</label><input type="text" id="totalDias_${id}" value="1 dia(s)" class="w-full border border-gray-300 p-2 rounded text-xs bg-gray-100 font-semibold" readonly></div>
                 </div>
 
+                <!-- Modificado: Dois Botões Lado a Lado (Câmera e Galeria) -->
                 <div class="mt-4 bg-indigo-50/50 p-4 rounded-lg border border-indigo-200 shadow-sm">
-                    <div class="flex justify-between items-center mb-3">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-3">
                         <div>
                             <h4 class="font-bold text-indigo-900 text-sm">Evidências Fotográficas</h4>
                             <p class="text-xs text-indigo-700">Imagens aparecem em grelha no PDF com descrição.</p>
                         </div>
-                        <button type="button" onclick="adicionarFoto(${id})" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm whitespace-nowrap">+ Adicionar Foto</button>
+                        <div class="flex gap-2 w-full sm:w-auto">
+                            <button type="button" onclick="adicionarFoto(${id}, 'camera')" class="flex-1 sm:flex-none px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center justify-center gap-1">📸 Câmera</button>
+                            <button type="button" onclick="adicionarFoto(${id}, 'galeria')" class="flex-1 sm:flex-none px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center justify-center gap-1">🖼️ Galeria</button>
+                        </div>
                     </div>
                     <div id="fotosContainer_${id}" class="space-y-3"></div>
                 </div>
@@ -1042,7 +1050,8 @@
                     id: dados.id, 
                     dataAtualizacao: dados.dataAtualizacao,
                     nomeClienteFinal: dados.nomeClienteFinal || (dados.ordens[0] ? dados.ordens[0].cliente : 'Desconhecido'),
-                    osNumResumo: dados.ordens[0] ? dados.ordens[0].osNum : 'Sem OS'
+                    osNumResumo: dados.ordens[0] ? dados.ordens[0].osNum : 'Sem OS',
+                    equipamentoResumo: dados.ordens[0] ? dados.ordens[0].equipamento : '' // Adicionado para exibir no card
                 };
                 
                 let index = historicoMeta.findIndex(d => d.id === dados.id);
@@ -1081,11 +1090,14 @@
             list.innerHTML = historicoMeta.map(doc => {
                 const osNumSafe = escapeHTML(doc.osNumResumo || 'Sem OS');
                 const clienteSafe = escapeHTML(doc.nomeClienteFinal || 'Desconhecido');
+                const equipSafe = escapeHTML(doc.equipamentoResumo || 'Diversos');
+                
+                // Alteração: Cliente agora é o Título Maior em Azul. OS e Equipamento são o subtítulo.
                 return `
                 <div class="historico-item border p-4 rounded-xl bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center shadow-sm mb-3 border-l-4 border-l-blue-600">
                     <div class="mb-3 sm:mb-0">
-                        <p class="font-bold text-blue-800 text-lg">${osNumSafe}</p>
-                        <p class="text-sm font-semibold text-gray-700">${clienteSafe}</p>
+                        <p class="font-bold text-blue-800 text-lg">${clienteSafe}</p>
+                        <p class="text-sm font-semibold text-gray-700">OS: ${osNumSafe} <span class="mx-1 text-gray-400">•</span> Equip: ${equipSafe}</p>
                         <p class="text-xs text-gray-500 mt-1">Atualizado: ${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-PT') : ''}</p>
                     </div>
                     <div class="flex gap-2 w-full sm:w-auto">
@@ -1098,10 +1110,7 @@
         }
 
         async function carregarDocumentoParaEdicao(id) {
-            // Busca a chave isolada e pesada do documento
             let doc = await localforage.getItem(`os_doc_${id}`); 
-            
-            // Segurança: Se não encontrar (caso algo da migração falhe), tenta buscar no array antigo
             if(!doc) {
                 let histAntigo = await localforage.getItem('historico_os') || [];
                 doc = histAntigo.find(d => d.id === id);
@@ -1115,9 +1124,7 @@
             if(!confirm("Tem certeza que deseja apagar?")) return;
             let historicoMeta = await obterHistoricoSalvo();
             
-            // Apaga da lista leve
             await gravarHistoricoSalvo(historicoMeta.filter(d => d.id !== id));
-            // Apaga os dados pesados
             await localforage.removeItem(`os_doc_${id}`);
             
             if(id === documentoAtualId) iniciarNovaOS(); 
@@ -1132,7 +1139,6 @@
             if(p === "APAGAR") {
                 await gravarHistoricoSalvo([]);
                 
-                // Limpa todos os documentos pesados
                 let chaves = await localforage.keys();
                 for(let key of chaves) {
                     if(key.startsWith('os_doc_')) await localforage.removeItem(key);
@@ -1387,9 +1393,19 @@
                 if(objUrlPreview) URL.revokeObjectURL(objUrlPreview);
                 const blob = new Blob([bytesPdf], { type: 'application/pdf' });
                 objUrlPreview = URL.createObjectURL(blob);
-                
+
+                // Silenciosamente garantir que o próprio Preview PDF tem o nome correto se baixado
+                const primeiraOs = document.querySelector('.os-bloco');
+                let pOs = 'Rascunho', pCliente = 'Cliente';
+                if(primeiraOs) {
+                    const pId = primeiraOs.getAttribute('data-id');
+                    pOs = document.getElementById(`osNum_${pId}`).value.trim() || 'Rascunho';
+                    pCliente = document.getElementById(`cliente_${pId}`).value.trim() || 'Cliente';
+                }
+                const pOsLimpo = pOs.replace(/[^a-z0-9]/gi, '_');
+                const pClienteLimpo = pCliente.replace(/[^a-z0-9]/gi, '_');
+                document.getElementById('linkPreviewExt').download = `Pre_Visualizacao_${pOsLimpo}_${pClienteLimpo}.pdf`;
                 document.getElementById('linkPreviewExt').href = objUrlPreview; 
-                document.getElementById('linkPreviewExt').download = "rascunho_os.pdf";
 
                 const pdf = await pdfjsLib.getDocument({data: bytesPdf}).promise;
                 const wrapper = document.getElementById('pdfPagesWrapper'); 
@@ -1438,7 +1454,6 @@
                 const pOs = document.getElementById(`osNum_${pId}`).value.trim();
                 const pCliente = document.getElementById(`cliente_${pId}`).value.trim();
                 
-                // Sanitização Absoluta do Ficheiro
                 const pOsLimpo = pOs.replace(/[^a-z0-9]/gi, '_');
                 const pClienteLimpo = pCliente.replace(/[^a-z0-9]/gi, '_');
                 const nomeFicheiro = `${pOsLimpo}_${pClienteLimpo}.pdf`;
