@@ -337,7 +337,7 @@
             return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
 
-        // ---------- FUNÇÕES DA INTELIGÊNCIA ARTIFICIAL (CORRIGIDAS PARA O PROJETO) ----------
+        // ---------- FUNÇÕES DA INTELIGÊNCIA ARTIFICIAL (ROTA UNIVERSAL v1) ----------
         async function carregarApiKey() {
             try {
                 const key = await localforage.getItem('gemini_api_key');
@@ -418,8 +418,8 @@ Instruções OBRIGATÓRIAS:
 Rascunho original:
 "${textoOriginal}"`;
 
-            // Rota universal otimizada para aceitar chaves de projetos corporativos/AI Studio
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            // Utilizando o endpoint oficial v1 compatível com todos os tipos de chaves do Google AI Studio
+            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
             const response = await fetch(url, {
                 method: 'POST',
