@@ -39,9 +39,6 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .error-field { border-color: #ef4444 !important; border-width: 2px !important; background-color: #fef2f2 !important; }
-        
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #4f46e5; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="text-gray-800">
@@ -68,44 +65,6 @@
             <input type="password" id="inputDigitarPin" inputmode="numeric" class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 outline-none text-center text-2xl tracking-widest mb-4" placeholder="••••">
             <button onclick="validarPinAcesso()" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Entrar</button>
             <button onclick="document.getElementById('modalDigitarPin').classList.add('hidden')" class="w-full mt-2 py-2 text-gray-500 font-semibold">Cancelar</button>
-        </div>
-    </div>
-
-    <!-- Modal de Inteligência Artificial -->
-    <div id="modalIA" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] px-4">
-        <div class="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div class="bg-indigo-700 p-4 text-white flex justify-between items-center shrink-0">
-                <h3 class="font-bold text-lg flex items-center gap-2">✨ Engenheiro IA</h3>
-                <button onclick="fecharModalIA()" class="text-indigo-200 hover:text-white font-bold text-xl">✕</button>
-            </div>
-            
-            <div class="p-4 sm:p-6 overflow-y-auto flex-1 bg-indigo-50/30">
-                <div id="iaLoading" class="hidden flex-col items-center justify-center py-10">
-                    <div class="loader mb-4"></div>
-                    <p class="text-indigo-700 font-bold animate-pulse text-center">A ler e otimizar o seu relatório...</p>
-                    <p class="text-sm text-gray-500 mt-2 text-center">A aplicar vocabulário técnico e clareza.</p>
-                </div>
-                
-                <div id="iaContent" class="hidden flex-col h-full">
-                    <label class="block text-sm font-bold text-indigo-800 mb-2">Sugestão Profissional (Pode editar se quiser):</label>
-                    <textarea id="textoSugeridoIA" rows="8" class="w-full border-2 border-indigo-200 p-3 rounded-lg bg-white outline-none focus:border-indigo-500 transition-colors text-gray-800 shadow-inner"></textarea>
-                    
-                    <div class="mt-4 bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-xs text-yellow-800">
-                        <strong>Nota:</strong> Verifique sempre se os detalhes técnicos estão corretos antes de aplicar. A IA não inventa serviços, apenas melhora a forma como estão escritos.
-                    </div>
-                </div>
-
-                <div id="iaError" class="hidden flex-col items-center justify-center py-6 text-center">
-                    <span class="text-4xl mb-2">⚠️</span>
-                    <p class="text-red-600 font-bold mb-2">Erro ao contactar a Inteligência Artificial.</p>
-                    <p class="text-sm text-gray-600" id="iaErrorMsg">Verifique a sua ligação à internet ou a chave API.</p>
-                </div>
-            </div>
-
-            <div class="bg-gray-100 p-4 flex justify-end gap-3 shrink-0 border-t border-gray-200">
-                <button onclick="fecharModalIA()" class="px-4 py-2 bg-gray-300 text-gray-800 font-bold rounded-lg hover:bg-gray-400">Cancelar</button>
-                <button id="btnAplicarIA" onclick="aplicarTextoIA()" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md hidden">Aplicar Substituição</button>
-            </div>
         </div>
     </div>
 
@@ -138,12 +97,14 @@
                 </div>
             </div>
 
+            <!-- Botões Flutuantes de Zoom -->
             <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-900/90 text-white rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.5)] px-4 py-2 z-20 gap-4 backdrop-blur-sm border border-gray-700">
                 <button onclick="zoomOutPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">−</button>
                 <span id="zoomText" class="text-sm font-bold w-12 text-center tracking-wider">100%</span>
                 <button onclick="zoomInPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">+</button>
             </div>
 
+            <!-- Container do PDF Renderizado -->
             <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-300 overflow-auto touch-pan-x touch-pan-y relative">
                 <div id="pdfPagesWrapper" class="w-full p-2 sm:p-6 pb-24"></div>
             </div>
@@ -197,22 +158,10 @@
     <div class="max-w-4xl mx-auto p-4 mt-2 mb-20">
         
         <div id="novaOs" class="tab-content active">
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <!-- Config de Logo -->
-                <div id="configLogoCard" class="bg-gradient-to-r from-emerald-50 to-green-50 p-4 rounded-lg shadow-sm border border-emerald-200">
-                    <h3 class="font-bold text-sm text-emerald-800 mb-1">Logótipo do App / Documento</h3>
-                    <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="block w-full text-xs text-gray-700 bg-white border border-emerald-200 rounded p-1">
-                </div>
-
-                <!-- Config de API Key para a IA -->
-                <div class="bg-gradient-to-r from-indigo-50 to-blue-50 p-4 rounded-lg shadow-sm border border-indigo-200">
-                    <h3 class="font-bold text-sm text-indigo-800 mb-1">Engenheiro IA (Google Gemini)</h3>
-                    <div class="flex gap-2">
-                        <input type="password" id="inputApiKey" placeholder="Cole aqui a sua Chave API do Gemini" class="flex-1 w-full border border-indigo-300 p-1.5 rounded bg-white text-xs outline-none focus:border-indigo-500">
-                        <button onclick="salvarApiKey()" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-indigo-700">Salvar</button>
-                    </div>
-                </div>
+            <div id="configLogoCard" class="mb-6 bg-gradient-to-r from-emerald-50 to-green-50 p-4 sm:p-6 rounded-lg shadow-sm border border-emerald-200">
+                <h3 class="font-bold text-lg text-emerald-800 mb-1">Configuração Oficial do Logótipo (Ícone)</h3>
+                <p class="text-xs text-emerald-700 mb-3">Carregue a sua imagem. O sistema irá prepará-la automaticamente para ser o ícone do aplicativo no telemóvel.</p>
+                <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="block w-full text-sm text-gray-700 bg-white border border-emerald-200 rounded p-1 shadow-sm">
             </div>
 
             <form id="osForm" class="bg-white p-4 sm:p-6 rounded-lg shadow-lg relative" onsubmit="event.preventDefault();">
@@ -327,8 +276,6 @@
         let currentZoom = 1;
         let startZoom = 1;
         let startDist = 0;
-        
-        let blocoAtualEdicaoIA = null;
 
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
@@ -336,127 +283,6 @@
             if (str === null || str === undefined) return '';
             return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
-
-        // ---------- FUNÇÕES DA INTELIGÊNCIA ARTIFICIAL (ROTA UNIVERSAL v1) ----------
-        async function carregarApiKey() {
-            try {
-                const key = await localforage.getItem('gemini_api_key');
-                if (key) document.getElementById('inputApiKey').value = key;
-            } catch(e) {}
-        }
-
-        async function salvarApiKey() {
-            const key = document.getElementById('inputApiKey').value.trim();
-            if (key) {
-                await localforage.setItem('gemini_api_key', key);
-                mostrarToast('Chave API guardada com sucesso!');
-            } else {
-                await localforage.removeItem('gemini_api_key');
-                mostrarToast('Chave API apagada.');
-            }
-        }
-
-        async function abrirModalIA(idBloco) {
-            const apiKey = await localforage.getItem('gemini_api_key');
-            if (!apiKey) {
-                alert("Por favor, cole a sua Chave API do Gemini na caixa de configuração no topo da página primeiro.");
-                document.getElementById('inputApiKey').focus();
-                return;
-            }
-
-            const textAreaOriginal = document.getElementById(`descricao_${idBloco}`);
-            const textoAtual = textAreaOriginal.value.trim();
-
-            if (textoAtual.length < 5) {
-                mostrarToast('Escreva um pequeno rascunho (5+ letras) para a IA melhorar.', true);
-                return;
-            }
-
-            blocoAtualEdicaoIA = idBloco;
-            
-            document.getElementById('modalIA').classList.remove('hidden');
-            document.getElementById('iaLoading').classList.remove('hidden');
-            document.getElementById('iaLoading').classList.add('flex');
-            document.getElementById('iaContent').classList.add('hidden');
-            document.getElementById('iaContent').classList.remove('flex');
-            document.getElementById('iaError').classList.add('hidden');
-            document.getElementById('iaError').classList.remove('flex');
-            document.getElementById('btnAplicarIA').classList.add('hidden');
-            
-            try {
-                const textoReescrito = await invocarEngenheiroIA(apiKey, textoAtual);
-                
-                document.getElementById('iaLoading').classList.add('hidden');
-                document.getElementById('iaLoading').classList.remove('flex');
-                
-                document.getElementById('iaContent').classList.remove('hidden');
-                document.getElementById('iaContent').classList.add('flex');
-                
-                document.getElementById('textoSugeridoIA').value = textoReescrito;
-                document.getElementById('btnAplicarIA').classList.remove('hidden');
-                
-            } catch (error) {
-                console.error(error);
-                document.getElementById('iaLoading').classList.add('hidden');
-                document.getElementById('iaLoading').classList.remove('flex');
-                
-                document.getElementById('iaError').classList.remove('hidden');
-                document.getElementById('iaError').classList.add('flex');
-                document.getElementById('iaErrorMsg').innerText = "Erro ao processar: " + (error.message || "Verifique a chave ou conexão.");
-            }
-        }
-
-        async function invocarEngenheiroIA(apiKey, textoOriginal) {
-            const promptMestre = `Atue como um Engenheiro Eletricista e de Refrigeração Sênior especialista em manutenção técnica. 
-Sua tarefa é reescrever o rascunho de um relatório de manutenção redigido por um técnico. 
-Instruções OBRIGATÓRIAS:
-1. Torne o vocabulário mais profissional, técnico, impessoal e coeso.
-2. Corrija quaisquer erros gramaticais ou ortográficos.
-3. NÃO INVENTE fatos, peças, diagnósticos ou serviços que não estejam mencionados no rascunho original. Apenas melhore a articulação do que já foi escrito.
-4. Retorne APENAS o texto reescrito, pronto para ser colocado no relatório (sem introduções, sem dizer "aqui está o texto").
-
-Rascunho original:
-"${textoOriginal}"`;
-
-            // Utilizando o endpoint oficial v1 compatível com todos os tipos de chaves do Google AI Studio
-            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: promptMestre }] }]
-                })
-            });
-
-            const data = await response.json();
-            
-            if (!response.ok) {
-                const errMsg = data.error && data.error.message ? data.error.message : "Erro desconhecido na API";
-                throw new Error(errMsg);
-            }
-            
-            if (data.candidates && data.candidates.length > 0) {
-                return data.candidates[0].content.parts[0].text.trim();
-            } else {
-                throw new Error("A IA não retornou resposta.");
-            }
-        }
-
-        function fecharModalIA() {
-            document.getElementById('modalIA').classList.add('hidden');
-            blocoAtualEdicaoIA = null;
-        }
-
-        function aplicarTextoIA() {
-            if (blocoAtualEdicaoIA !== null) {
-                const textoFinal = document.getElementById('textoSugeridoIA').value;
-                document.getElementById(`descricao_${blocoAtualEdicaoIA}`).value = textoFinal;
-                mostrarToast("Relatório atualizado com sucesso!");
-                fecharModalIA();
-            }
-        }
-        // ---------------------------------------------------------------------
 
         let promptDeInstalacao = null;
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -678,14 +504,19 @@ Rascunho original:
             if(!skipRestore && dataURL && pad) { pad.fromDataURL(dataURL); } 
         }
 
+        // NOVO: Função para rejeitar palmas da mão e toques secundários no ecrã
         function bloquearMultiTouch(canvas) {
             if(!canvas) return;
             const blockSecondary = (e) => {
+                // Se for um evento Pointer e não for o primário (ex: um segundo dedo)
+                // ou se for um evento Touch clássico e tiver mais de 1 dedo na ecrã
                 if ((e.type.startsWith('pointer') && !e.isPrimary) || (e.touches && e.touches.length > 1)) {
-                    e.stopImmediatePropagation();
+                    e.stopImmediatePropagation(); // Impede que a biblioteca processe este toque
                     e.preventDefault();
                 }
             };
+            
+            // "capture: true" garante que filtramos antes da biblioteca SignaturePad perceber o toque
             canvas.addEventListener('pointerdown', blockSecondary, { capture: true, passive: false });
             canvas.addEventListener('pointermove', blockSecondary, { capture: true, passive: false });
             canvas.addEventListener('touchstart', blockSecondary, { capture: true, passive: false });
@@ -694,7 +525,6 @@ Rascunho original:
 
         document.addEventListener("DOMContentLoaded", async () => {
             await carregarLogoDoArmazenamento();
-            await carregarApiKey();
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
                 if (typeof SignaturePad !== 'undefined') {
@@ -703,6 +533,8 @@ Rascunho original:
                     if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
                 }
                 resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
+                
+                // Aplica a blindagem contra multi-touch nos quadros
                 bloquearMultiTouch(cTec); bloquearMultiTouch(cCli); bloquearMultiTouch(cExp);
             }, 150);
             
@@ -1110,13 +942,9 @@ Rascunho original:
                         <label class="flex items-center gap-1"><input type="checkbox" id="cbSemGarantia_${id}" checked> Sem Garantia</label>
                     </div>
                 </div>
-                
                 <div class="mb-4">
-                    <div class="flex justify-between items-center mb-1">
-                        <label class="block text-sm font-semibold">Descrição do Serviço</label>
-                        <button type="button" onclick="abrirModalIA(${id})" class="text-xs font-bold bg-indigo-100 text-indigo-700 px-2 py-1.5 rounded-lg hover:bg-indigo-200 flex items-center gap-1 shadow-sm border border-indigo-200 transition-colors">✨ Melhorar com IA</button>
-                    </div>
-                    <textarea id="descricao_${id}" rows="3" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-blue-500"></textarea>
+                    <label class="block text-sm font-semibold mb-1">Descrição do Serviço</label>
+                    <textarea id="descricao_${id}" rows="3" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></textarea>
                 </div>
                 
                 <div class="mb-4">
@@ -1712,3 +1540,4 @@ Rascunho original:
     </script>
 </body>
 </html>
+
