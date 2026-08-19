@@ -486,12 +486,12 @@
             }
         }
 
-        // REDIMENSIONAMENTO DE CANVAS SEGURO
-        function resizeCanvasSeguro(canvas, pad) {
+        // REDIMENSIONAMENTO DE CANVAS SEGURO - Atualizado para evitar "Race Condition"
+        function resizeCanvasSeguro(canvas, pad, skipRestore = false) {
             if(!canvas) return;
             let dataURL = null;
-            // Salva os traços antes do redimensionamento (que limpa o bitmap nativamente)
-            if(pad && !pad.isEmpty()) { dataURL = pad.toDataURL(); } 
+            // Salva os traços antes do redimensionamento APENAS se não formos substituir por completo
+            if(!skipRestore && pad && !pad.isEmpty()) { dataURL = pad.toDataURL(); } 
 
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
             const width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 300;
@@ -505,7 +505,7 @@
             ctx.scale(ratio, ratio);
             
             // Restaura os traços após redimensionar
-            if(dataURL && pad) { pad.fromDataURL(dataURL); } 
+            if(!skipRestore && dataURL && pad) { pad.fromDataURL(dataURL); } 
         }
 
         document.addEventListener("DOMContentLoaded", async () => {
@@ -734,8 +734,8 @@
             switchTab('novaOs');
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente');
-                if(cTec && padTecnico) { resizeCanvasSeguro(cTec, padTecnico); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
-                if(cCli && padCliente) { resizeCanvasSeguro(cCli, padCliente); padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
+                if(cTec && padTecnico) { resizeCanvasSeguro(cTec, padTecnico, true); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
+                if(cCli && padCliente) { resizeCanvasSeguro(cCli, padCliente, true); padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
             }, 100);
             atualizarVisibilidadeCamposPorBloco();
         }
@@ -786,6 +786,7 @@
             }
         }
 
+        // CORREÇÃO DO BUG DE DUPLICAÇÃO DA ASSINATURA
         function abrirModalAssinatura(alvo) {
             alvoAssinaturaAtual = alvo;
             document.getElementById('tituloModalAssinatura').textContent = alvo === 'tecnico' ? 'Assinatura do Técnico' : 'Assinatura do Cliente';
@@ -795,11 +796,16 @@
 
             setTimeout(() => {
                 const cExp = document.getElementById('canvasExpandido');
-                resizeCanvasSeguro(cExp, padExpandido);
+                // IMPORTANTE: Limpar a assinatura antiga IMEDIATAMENTE para evitar a race condition assíncrona
+                if(padExpandido) padExpandido.clear(); 
+                
+                resizeCanvasSeguro(cExp, padExpandido, true); // O 'true' ignora a restauração fantasma
+                
                 if(padExpandido) {
-                    padExpandido.clear();
                     const padFonte = alvo === 'tecnico' ? padTecnico : padCliente;
-                    if (padFonte && !padFonte.isEmpty()) padExpandido.fromDataURL(padFonte.toDataURL());
+                    if (padFonte && !padFonte.isEmpty()) {
+                        padExpandido.fromDataURL(padFonte.toDataURL());
+                    }
                 }
             }, 50);
         }
@@ -813,11 +819,14 @@
             const canvasEl = alvoAssinaturaAtual === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
             
             if (padExpandido && padDestino) {
-                resizeCanvasSeguro(canvasEl, padDestino);
+                // Ao confirmar, ignoramos restaurações perigosas
+                resizeCanvasSeguro(canvasEl, padDestino, true); 
+                
                 if (padExpandido.isEmpty()) { 
                     padDestino.clear(); 
                     if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao(); 
                 } else { 
+                    padDestino.clear(); // Previne mistura visual antes de injetar a nova
                     padDestino.fromDataURL(padExpandido.toDataURL()); 
                     if (alvoAssinaturaAtual === 'cliente') bloquearEdicao(); 
                 }
@@ -935,7 +944,6 @@
                     <div><label class="block text-xs font-bold mb-1">Total de Dias</label><input type="text" id="totalDias_${id}" value="1 dia(s)" class="w-full border border-gray-300 p-2 rounded text-xs bg-gray-100 font-semibold" readonly></div>
                 </div>
 
-                <!-- Modificado: Dois Botões Lado a Lado (Câmera e Galeria) -->
                 <div class="mt-4 bg-indigo-50/50 p-4 rounded-lg border border-indigo-200 shadow-sm">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-3">
                         <div>
@@ -1052,10 +1060,8 @@
             try {
                 let dados = recolherDadosDoFormulario();
                 
-                // Salva o documento pesado e completo em uma chave isolada
                 await localforage.setItem(`os_doc_${dados.id}`, dados);
                 
-                // Usa a função DRY de metadados
                 let historicoMeta = await obterHistoricoSalvo();
                 let meta = gerarMetadadosResumo(dados);
                 
@@ -1118,8 +1124,6 @@
             if(!doc) {
                 let histAntigo = await localforage.getItem('historico_os') || [];
                 doc = histAntigo.find(d => d.id === id);
-                
-                // Fallback Seguro: Se o documento antigo não tiver as ordens (for só metadados), aborta
                 if (doc && !doc.ordens) doc = null; 
             }
             if(!doc) {
@@ -1354,12 +1358,11 @@
                 fy+=18; docSig.text("TÉCNICO", 40, fy); docSig.text("CLIENTE", 140, fy);
                 fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value || 'Não preenchido'}`, 15, fy); 
                 
-                // Extrai a empresa do primeiro bloco da OS
                 let pId = document.querySelector('.os-bloco').getAttribute('data-id');
                 let nomeEmpresa = document.getElementById(`cliente_${pId}`).value.trim() || 'Empresa não informada';
                 
                 docSig.text(`Empresa: ${nomeEmpresa}`, 110, fy);
-                fy += 5; // Salta uma linha a mais para não atropelar os campos
+                fy += 5;
                 docSig.text(`Nome: ${document.getElementById('nomeClienteFinal').value}`, 110, fy);
                 
                 let cargoCli = document.getElementById('cargo').value.trim();
@@ -1505,4 +1508,3 @@
     </script>
 </body>
 </html>
-
