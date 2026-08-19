@@ -359,6 +359,19 @@
         }
 
         // --- SISTEMA DE BANCO DE DADOS (SEPARAÇÃO LEVE/PESADA) ---
+        
+        // FUNÇÃO CENTRALIZADA DE METADADOS (DRY)
+        function gerarMetadadosResumo(doc) {
+            return {
+                id: doc.id, 
+                dataAtualizacao: doc.dataAtualizacao,
+                clienteEmpresa: doc.ordens && doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido', 
+                nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
+                osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS',
+                equipamentoResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].equipamento : ''
+            };
+        }
+
         async function obterHistoricoSalvo() {
             try { 
                 let h = await localforage.getItem('historico_os') || []; 
@@ -366,14 +379,7 @@
                     let novoMeta = [];
                     for(let doc of h) {
                         await localforage.setItem(`os_doc_${doc.id}`, doc); 
-                        novoMeta.push({
-                            id: doc.id, 
-                            dataAtualizacao: doc.dataAtualizacao,
-                            clienteEmpresa: doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido', // CORRIGIDO PARA EMPRESA
-                            nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
-                            osNumResumo: doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS',
-                            equipamentoResumo: doc.ordens[0] ? doc.ordens[0].equipamento : ''
-                        });
+                        novoMeta.push(gerarMetadadosResumo(doc));
                     }
                     await localforage.setItem('historico_os', novoMeta);
                     return novoMeta;
@@ -418,14 +424,7 @@
                     
                     for (let doc of importados) {
                         await localforage.setItem(`os_doc_${doc.id}`, doc); 
-                        
-                        let meta = {
-                            id: doc.id, dataAtualizacao: doc.dataAtualizacao,
-                            clienteEmpresa: doc.ordens && doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido', // CORRIGIDO PARA EMPRESA
-                            nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
-                            osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS',
-                            equipamentoResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].equipamento : ''
-                        };
+                        let meta = gerarMetadadosResumo(doc);
                         let idx = historicoMeta.findIndex(m => m.id === doc.id);
                         if(idx >= 0) historicoMeta[idx] = meta; else historicoMeta.unshift(meta);
                     }
@@ -487,28 +486,38 @@
             }
         }
 
-        function resizeCanvas(canvas) {
+        // REDIMENSIONAMENTO DE CANVAS SEGURO
+        function resizeCanvasSeguro(canvas, pad) {
             if(!canvas) return;
+            let dataURL = null;
+            // Salva os traços antes do redimensionamento (que limpa o bitmap nativamente)
+            if(pad && !pad.isEmpty()) { dataURL = pad.toDataURL(); } 
+
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
             const width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 300;
             const height = canvas.offsetHeight || canvas.parentElement.offsetHeight || 150;
+            
             canvas.width = width * ratio;
             canvas.height = height * ratio;
+            
             const ctx = canvas.getContext("2d");
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.scale(ratio, ratio);
+            
+            // Restaura os traços após redimensionar
+            if(dataURL && pad) { pad.fromDataURL(dataURL); } 
         }
 
         document.addEventListener("DOMContentLoaded", async () => {
             await carregarLogoDoArmazenamento();
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
-                resizeCanvas(cTec); resizeCanvas(cCli);
                 if (typeof SignaturePad !== 'undefined') {
                     if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions);
                     if(cCli) padCliente = new SignaturePad(cCli, signatureOptions);
                     if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
                 }
+                resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
             }, 150);
             
             const pdfContainer = document.getElementById('pdfRenderContainer');
@@ -600,7 +609,7 @@
             input.type = 'file'; 
             input.accept = 'image/*';
             if (source === 'camera') {
-                input.capture = 'environment'; // Força a abertura da câmera traseira
+                input.capture = 'environment'; 
             }
             input.onchange = (e) => {
                 const file = e.target.files[0]; if(!file) return;
@@ -725,8 +734,8 @@
             switchTab('novaOs');
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente');
-                if(cTec && padTecnico) { resizeCanvas(cTec); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
-                if(cCli && padCliente) { resizeCanvas(cCli); padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
+                if(cTec && padTecnico) { resizeCanvasSeguro(cTec, padTecnico); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
+                if(cCli && padCliente) { resizeCanvasSeguro(cCli, padCliente); padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
             }, 100);
             atualizarVisibilidadeCamposPorBloco();
         }
@@ -772,7 +781,7 @@
                     containerCliente.style.display = 'none'; if(padCliente) padCliente.clear();
                 } else {
                     containerCliente.style.display = 'block';
-                    setTimeout(() => { const cCli = document.getElementById('canvasCliente'); if(cCli) resizeCanvas(cCli); }, 50);
+                    setTimeout(() => { const cCli = document.getElementById('canvasCliente'); if(cCli) resizeCanvasSeguro(cCli, padCliente); }, 50);
                 }
             }
         }
@@ -786,7 +795,7 @@
 
             setTimeout(() => {
                 const cExp = document.getElementById('canvasExpandido');
-                resizeCanvas(cExp);
+                resizeCanvasSeguro(cExp, padExpandido);
                 if(padExpandido) {
                     padExpandido.clear();
                     const padFonte = alvo === 'tecnico' ? padTecnico : padCliente;
@@ -804,7 +813,7 @@
             const canvasEl = alvoAssinaturaAtual === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
             
             if (padExpandido && padDestino) {
-                resizeCanvas(canvasEl);
+                resizeCanvasSeguro(canvasEl, padDestino);
                 if (padExpandido.isEmpty()) { 
                     padDestino.clear(); 
                     if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao(); 
@@ -839,7 +848,7 @@
                 await carregarHistorico();
                 await atualizarIndicadorArmazenamento();
             } else if(tabId === 'novaOs') {
-                setTimeout(() => { resizeCanvas(document.getElementById('canvasTecnico')); resizeCanvas(document.getElementById('canvasCliente')); }, 50);
+                setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
             }
             window.scrollTo(0, 0);
         }
@@ -1046,16 +1055,9 @@
                 // Salva o documento pesado e completo em uma chave isolada
                 await localforage.setItem(`os_doc_${dados.id}`, dados);
                 
-                // Cria ou atualiza os metadados super leves para a lista
+                // Usa a função DRY de metadados
                 let historicoMeta = await obterHistoricoSalvo();
-                let meta = {
-                    id: dados.id, 
-                    dataAtualizacao: dados.dataAtualizacao,
-                    clienteEmpresa: dados.ordens[0] ? dados.ordens[0].cliente : 'Desconhecido', // CORRIGIDO PARA EMPRESA
-                    nomeClienteFinal: dados.nomeClienteFinal || 'Desconhecido',
-                    osNumResumo: dados.ordens[0] ? dados.ordens[0].osNum : 'Sem OS',
-                    equipamentoResumo: dados.ordens[0] ? dados.ordens[0].equipamento : ''
-                };
+                let meta = gerarMetadadosResumo(dados);
                 
                 let index = historicoMeta.findIndex(d => d.id === dados.id);
                 if(index >= 0) historicoMeta[index] = meta; else historicoMeta.unshift(meta);
@@ -1092,7 +1094,6 @@
             
             list.innerHTML = historicoMeta.map(doc => {
                 const osNumSafe = escapeHTML(doc.osNumResumo || 'Sem OS');
-                // Alteração na linha abaixo: Usa sempre a empresa do bloco principal primeiro
                 const clienteSafe = escapeHTML(doc.clienteEmpresa || doc.nomeClienteFinal || 'Desconhecido');
                 const equipSafe = escapeHTML(doc.equipamentoResumo || 'Diversos');
                 
@@ -1117,8 +1118,14 @@
             if(!doc) {
                 let histAntigo = await localforage.getItem('historico_os') || [];
                 doc = histAntigo.find(d => d.id === id);
+                
+                // Fallback Seguro: Se o documento antigo não tiver as ordens (for só metadados), aborta
+                if (doc && !doc.ordens) doc = null; 
             }
-            if(!doc) return;
+            if(!doc) {
+                mostrarToast('Erro: Ficheiro corrompido ou não encontrado.', true);
+                return;
+            }
             
             restaurarDadosParaFormulario(doc); mostrarToast('Documento carregado.');
         }
@@ -1345,7 +1352,15 @@
                 if(padTecnico && !padTecnico.isEmpty()) { const imgDataTec = padTecnico.toDataURL(); if(imgDataTec) docSig.addImage(imgDataTec, 'PNG', 25, fy-8, 50, 20); }
                 if(padCliente && !padCliente.isEmpty()) { const imgDataCli = padCliente.toDataURL(); if(imgDataCli) docSig.addImage(imgDataCli, 'PNG', 120, fy-8, 50, 20); }
                 fy+=18; docSig.text("TÉCNICO", 40, fy); docSig.text("CLIENTE", 140, fy);
-                fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value || 'Não preenchido'}`, 15, fy); docSig.text(`Nome: ${document.getElementById('nomeClienteFinal').value}`, 110, fy);
+                fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value || 'Não preenchido'}`, 15, fy); 
+                
+                // Extrai a empresa do primeiro bloco da OS
+                let pId = document.querySelector('.os-bloco').getAttribute('data-id');
+                let nomeEmpresa = document.getElementById(`cliente_${pId}`).value.trim() || 'Empresa não informada';
+                
+                docSig.text(`Empresa: ${nomeEmpresa}`, 110, fy);
+                fy += 5; // Salta uma linha a mais para não atropelar os campos
+                docSig.text(`Nome: ${document.getElementById('nomeClienteFinal').value}`, 110, fy);
                 
                 let cargoCli = document.getElementById('cargo').value.trim();
                 let setorCli = document.getElementById('setor').value.trim();
@@ -1397,7 +1412,6 @@
                 const blob = new Blob([bytesPdf], { type: 'application/pdf' });
                 objUrlPreview = URL.createObjectURL(blob);
 
-                // Silenciosamente garantir que o próprio Preview PDF tem o nome correto se baixado
                 const primeiraOs = document.querySelector('.os-bloco');
                 let pOs = 'Rascunho', pCliente = 'Cliente';
                 if(primeiraOs) {
@@ -1491,3 +1505,4 @@
     </script>
 </body>
 </html>
+
