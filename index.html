@@ -483,7 +483,6 @@
             }
         }
 
-        // REDIMENSIONAMENTO DE CANVAS SEGURO - Atualizado para exorcizar o fantasma
         function resizeCanvasSeguro(canvas, pad, skipRestore = false) {
             if(!canvas) return;
             let dataURL = null;
@@ -500,10 +499,28 @@
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.scale(ratio, ratio);
             
-            // Força a limpeza absoluta dos vetores internos antes de restaurar
             if (pad) pad.clear(); 
             
             if(!skipRestore && dataURL && pad) { pad.fromDataURL(dataURL); } 
+        }
+
+        // NOVO: Função para rejeitar palmas da mão e toques secundários no ecrã
+        function bloquearMultiTouch(canvas) {
+            if(!canvas) return;
+            const blockSecondary = (e) => {
+                // Se for um evento Pointer e não for o primário (ex: um segundo dedo)
+                // ou se for um evento Touch clássico e tiver mais de 1 dedo na ecrã
+                if ((e.type.startsWith('pointer') && !e.isPrimary) || (e.touches && e.touches.length > 1)) {
+                    e.stopImmediatePropagation(); // Impede que a biblioteca processe este toque
+                    e.preventDefault();
+                }
+            };
+            
+            // "capture: true" garante que filtramos antes da biblioteca SignaturePad perceber o toque
+            canvas.addEventListener('pointerdown', blockSecondary, { capture: true, passive: false });
+            canvas.addEventListener('pointermove', blockSecondary, { capture: true, passive: false });
+            canvas.addEventListener('touchstart', blockSecondary, { capture: true, passive: false });
+            canvas.addEventListener('touchmove', blockSecondary, { capture: true, passive: false });
         }
 
         document.addEventListener("DOMContentLoaded", async () => {
@@ -516,6 +533,9 @@
                     if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
                 }
                 resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
+                
+                // Aplica a blindagem contra multi-touch nos quadros
+                bloquearMultiTouch(cTec); bloquearMultiTouch(cCli); bloquearMultiTouch(cExp);
             }, 150);
             
             const pdfContainer = document.getElementById('pdfRenderContainer');
@@ -723,19 +743,17 @@
             return dados;
         }
 
-        // CARREGAMENTO SEGURO DA OS (Limpeza imediata antes de mudar de ecrã)
         function restaurarDadosParaFormulario(doc) {
             desbloquearEdicao(); documentoAtualId = doc.id;
             document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
             
-            // EXORCISMO DO FANTASMA: Garante que os pads estão vazios antes de mudar o ecrã
             if(padTecnico) padTecnico.clear();
             if(padCliente) padCliente.clear();
 
             if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o));
             ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
             
-            switchTab('novaOs'); // Ao fazer a troca com os pads já limpos, não salva o fantasma
+            switchTab('novaOs'); 
             
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente');
@@ -1403,7 +1421,6 @@
             const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica);
             const todasAsPaginas = masterPdf.getPages();
             
-            // ALTERAÇÃO PARA REMOVER A HORA DA MARCA D'ÁGUA
             const dataAuditoria = new Date().toLocaleDateString('pt-PT');
             
             const tecnicoNome = document.getElementById('tecnico').value || "Não Identificado";
