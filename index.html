@@ -357,10 +357,7 @@
                 reader.readAsDataURL(file);
             }
         }
-
-        // --- SISTEMA DE BANCO DE DADOS (SEPARAÇÃO LEVE/PESADA) ---
         
-        // FUNÇÃO CENTRALIZADA DE METADADOS (DRY)
         function gerarMetadadosResumo(doc) {
             return {
                 id: doc.id, 
@@ -486,11 +483,10 @@
             }
         }
 
-        // REDIMENSIONAMENTO DE CANVAS SEGURO - Atualizado para evitar "Race Condition"
+        // REDIMENSIONAMENTO DE CANVAS SEGURO - Atualizado para exorcizar o fantasma
         function resizeCanvasSeguro(canvas, pad, skipRestore = false) {
             if(!canvas) return;
             let dataURL = null;
-            // Salva os traços antes do redimensionamento APENAS se não formos substituir por completo
             if(!skipRestore && pad && !pad.isEmpty()) { dataURL = pad.toDataURL(); } 
 
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
@@ -504,7 +500,9 @@
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.scale(ratio, ratio);
             
-            // Restaura os traços após redimensionar
+            // Força a limpeza absoluta dos vetores internos antes de restaurar
+            if (pad) pad.clear(); 
+            
             if(!skipRestore && dataURL && pad) { pad.fromDataURL(dataURL); } 
         }
 
@@ -725,19 +723,32 @@
             return dados;
         }
 
+        // CARREGAMENTO SEGURO DA OS (Limpeza imediata antes de mudar de ecrã)
         function restaurarDadosParaFormulario(doc) {
             desbloquearEdicao(); documentoAtualId = doc.id;
             document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
+            
+            // EXORCISMO DO FANTASMA: Garante que os pads estão vazios antes de mudar o ecrã
+            if(padTecnico) padTecnico.clear();
+            if(padCliente) padCliente.clear();
+
             if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o));
             ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
             
-            switchTab('novaOs');
+            switchTab('novaOs'); // Ao fazer a troca com os pads já limpos, não salva o fantasma
+            
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente');
-                if(cTec && padTecnico) { resizeCanvasSeguro(cTec, padTecnico, true); padTecnico.clear(); if(doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); }
-                if(cCli && padCliente) { resizeCanvasSeguro(cCli, padCliente, true); padCliente.clear(); if(doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } }
+                
+                if(cTec && padTecnico && doc.assinaturaTecnico) { 
+                    padTecnico.fromDataURL(doc.assinaturaTecnico); 
+                }
+                if(cCli && padCliente && doc.assinaturaCliente) { 
+                    padCliente.fromDataURL(doc.assinaturaCliente); 
+                    bloquearEdicao(); 
+                }
+                atualizarVisibilidadeCamposPorBloco();
             }, 100);
-            atualizarVisibilidadeCamposPorBloco();
         }
 
         function verificarServicoInternoGlobal() {
@@ -786,7 +797,6 @@
             }
         }
 
-        // CORREÇÃO DO BUG DE DUPLICAÇÃO DA ASSINATURA
         function abrirModalAssinatura(alvo) {
             alvoAssinaturaAtual = alvo;
             document.getElementById('tituloModalAssinatura').textContent = alvo === 'tecnico' ? 'Assinatura do Técnico' : 'Assinatura do Cliente';
@@ -796,10 +806,9 @@
 
             setTimeout(() => {
                 const cExp = document.getElementById('canvasExpandido');
-                // IMPORTANTE: Limpar a assinatura antiga IMEDIATAMENTE para evitar a race condition assíncrona
                 if(padExpandido) padExpandido.clear(); 
                 
-                resizeCanvasSeguro(cExp, padExpandido, true); // O 'true' ignora a restauração fantasma
+                resizeCanvasSeguro(cExp, padExpandido, true); 
                 
                 if(padExpandido) {
                     const padFonte = alvo === 'tecnico' ? padTecnico : padCliente;
@@ -819,14 +828,13 @@
             const canvasEl = alvoAssinaturaAtual === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
             
             if (padExpandido && padDestino) {
-                // Ao confirmar, ignoramos restaurações perigosas
                 resizeCanvasSeguro(canvasEl, padDestino, true); 
                 
                 if (padExpandido.isEmpty()) { 
                     padDestino.clear(); 
                     if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao(); 
                 } else { 
-                    padDestino.clear(); // Previne mistura visual antes de injetar a nova
+                    padDestino.clear(); 
                     padDestino.fromDataURL(padExpandido.toDataURL()); 
                     if (alvoAssinaturaAtual === 'cliente') bloquearEdicao(); 
                 }
@@ -865,10 +873,15 @@
         function iniciarNovaOS() {
             if(!confirm("Iniciar documento em branco?")) return;
             documentoAtualId = Date.now().toString();
-            document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0; adicionarBlocoOS();
+            document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0; 
+            
+            if(padTecnico) padTecnico.clear();
+            if(padCliente) padCliente.clear();
+            
+            adicionarBlocoOS();
             document.getElementById('tecnico').value = '';
             ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
-            if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
+            
             desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco();
             localforage.removeItem('draft_os'); 
             const barraBusca = document.getElementById('buscaHistorico'); if (barraBusca) barraBusca.value = '';
@@ -1390,7 +1403,9 @@
             const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica);
             const todasAsPaginas = masterPdf.getPages();
             
-            const dataAuditoria = new Date().toLocaleString('pt-PT');
+            // ALTERAÇÃO PARA REMOVER A HORA DA MARCA D'ÁGUA
+            const dataAuditoria = new Date().toLocaleDateString('pt-PT');
+            
             const tecnicoNome = document.getElementById('tecnico').value || "Não Identificado";
             const textoAuditoria = `Documento gerado eletronicamente por ${tecnicoNome} em ${dataAuditoria}.`;
 
