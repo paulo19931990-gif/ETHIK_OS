@@ -1,4 +1,4 @@
-const CACHE_NAME = 'multios-pro-v1';
+const CACHE_NAME = 'multios-pro-v2'; // Mudei para v2 para forçar a atualização nos teus testes
 const urlsToCache = [
   './index.html',
   'https://cdn.tailwindcss.com',
@@ -11,23 +11,54 @@ const urlsToCache = [
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 ];
 
+// 1. INSTALAÇÃO ROBUSTA (Tolerância a falhas na rede)
 self.addEventListener('install', event => {
+  self.skipWaiting(); // Força o novo Service Worker a instalar imediatamente
+  
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        return cache.addAll(urlsToCache);
-      })
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Usa Promise.allSettled para garantir que ficheiros bem-sucedidos ficam no cache, 
+      // mesmo que um ou outro CDN falhe.
+      return Promise.allSettled(
+        urlsToCache.map(url => 
+          cache.add(url).catch(err => console.warn(`[SW] Falha isolada ao cachear ${url}:`, err))
+        )
+      );
+    })
   );
 });
 
+// 2. ACTIVAÇÃO E LIMPEZA DE LIXO (Apaga caches antigas)
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[SW] A apagar versão antiga do cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim()) // Força o SW a assumir o controlo das abas abertas na hora!
+  );
+});
+
+// 3. ESTRATÉGIA DE REDE (Cache-First)
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
       .then(response => {
+        // Se está no cache, serve imediatamente (Offline-first)
         if (response) {
-          return response; // Retorna do cache se existir (ideal para funcionar offline)
+          return response;
         }
-        return fetch(event.request);
+        // Se não está, tenta ir buscar à rede
+        return fetch(event.request).catch(err => {
+          console.warn('[SW] Offline e recurso não cacheado:', event.request.url);
+          // Como é um SPA de ficheiro único, não precisamos de retornar uma página offline genérica,
+          // mas o catch previne que falhas de rede quebrem o fluxo do Service Worker.
+        });
       })
   );
 });
