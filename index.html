@@ -39,6 +39,9 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .error-field { border-color: #ef4444 !important; border-width: 2px !important; background-color: #fef2f2 !important; }
+        
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #4f46e5; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="text-gray-800">
@@ -67,6 +70,8 @@
             <button onclick="document.getElementById('modalDigitarPin').classList.add('hidden')" class="w-full mt-2 py-2 text-gray-500 font-semibold">Cancelar</button>
         </div>
     </div>
+
+    
 
     <!-- Modal Exportar Backup -->
     <div id="modalExportar" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
@@ -97,14 +102,12 @@
                 </div>
             </div>
 
-            <!-- Botões Flutuantes de Zoom -->
             <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-900/90 text-white rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.5)] px-4 py-2 z-20 gap-4 backdrop-blur-sm border border-gray-700">
                 <button onclick="zoomOutPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">−</button>
                 <span id="zoomText" class="text-sm font-bold w-12 text-center tracking-wider">100%</span>
                 <button onclick="zoomInPdf()" class="text-2xl font-bold w-10 h-10 flex items-center justify-center hover:text-emerald-400 bg-gray-800 rounded-full active:bg-gray-700 transition-all shadow-inner">+</button>
             </div>
 
-            <!-- Container do PDF Renderizado -->
             <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-300 overflow-auto touch-pan-x touch-pan-y relative">
                 <div id="pdfPagesWrapper" class="w-full p-2 sm:p-6 pb-24"></div>
             </div>
@@ -158,10 +161,15 @@
     <div class="max-w-4xl mx-auto p-4 mt-2 mb-20">
         
         <div id="novaOs" class="tab-content active">
-            <div id="configLogoCard" class="mb-6 bg-gradient-to-r from-emerald-50 to-green-50 p-4 sm:p-6 rounded-lg shadow-sm border border-emerald-200">
-                <h3 class="font-bold text-lg text-emerald-800 mb-1">Configuração Oficial do Logótipo (Ícone)</h3>
-                <p class="text-xs text-emerald-700 mb-3">Carregue a sua imagem. O sistema irá prepará-la automaticamente para ser o ícone do aplicativo no telemóvel.</p>
-                <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="block w-full text-sm text-gray-700 bg-white border border-emerald-200 rounded p-1 shadow-sm">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <!-- Config de Logo -->
+                <div id="configLogoCard" class="bg-gradient-to-r from-emerald-50 to-green-50 p-4 rounded-lg shadow-sm border border-emerald-200">
+                    <h3 class="font-bold text-sm text-emerald-800 mb-1">Logótipo do App / Documento</h3>
+                    <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="block w-full text-xs text-gray-700 bg-white border border-emerald-200 rounded p-1">
+                </div>
+
+                
             </div>
 
             <form id="osForm" class="bg-white p-4 sm:p-6 rounded-lg shadow-lg relative" onsubmit="event.preventDefault();">
@@ -276,6 +284,13 @@
         let currentZoom = 1;
         let startZoom = 1;
         let startDist = 0;
+        
+        let blocoAtualEdicaoIA = null;
+
+        
+        // Helpers de Formatação e Estado
+        const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
+        const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
 
         const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
 
@@ -283,6 +298,8 @@
             if (str === null || str === undefined) return '';
             return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
+
+        
 
         let promptDeInstalacao = null;
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -319,7 +336,7 @@
                         elBar.style.width = `${percent}%`;
                         elBar.className = `h-3 rounded-full transition-all duration-500 ${percent > 80 ? 'bg-red-500' : 'bg-emerald-500'}`;
                     }
-                } catch(e) {}
+                } catch(e) { console.error('Erro de cache/storage:', e); }
             } else {
                 if(elText) elText.textContent = "Estimativa indisponível neste navegador.";
             }
@@ -342,7 +359,7 @@
                         if(elCard) elCard.style.display = 'none';
                     };
                 }
-            } catch(e) {}
+            } catch(e) { console.error('Erro de cache/storage:', e); }
         }
 
         async function lerLogotipo(event) {
@@ -382,11 +399,11 @@
                     return novoMeta;
                 }
                 return h; 
-            } catch(e) { return []; }
+            } catch(e) { console.error('Erro ao ler DB:', e); return []; }
         }
 
         async function gravarHistoricoSalvo(historicoMeta) {
-            try { await localforage.setItem('historico_os', historicoMeta); return true; } catch(e) { return false; }
+            try { await localforage.setItem('historico_os', historicoMeta); return true; } catch(e) { console.error('Erro ao salvar DB:', e); return false; }
         }
 
         function abrirModalExportar() { document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`; document.getElementById('modalExportar').classList.remove('hidden'); }
@@ -429,7 +446,7 @@
                     await gravarHistoricoSalvo(historicoMeta);
                     await carregarHistorico();
                     mostrarToast('Backup importado com sucesso!');
-                } catch(err) { mostrarToast('Ficheiro inválido.', true); }
+                } catch(err) { console.error('Erro no JSON:', err); mostrarToast('Ficheiro inválido.', true); }
             };
             reader.readAsText(file);
         }
@@ -504,27 +521,39 @@
             if(!skipRestore && dataURL && pad) { pad.fromDataURL(dataURL); } 
         }
 
-        // NOVO: Função para rejeitar palmas da mão e toques secundários no ecrã
         function bloquearMultiTouch(canvas) {
             if(!canvas) return;
             const blockSecondary = (e) => {
-                // Se for um evento Pointer e não for o primário (ex: um segundo dedo)
-                // ou se for um evento Touch clássico e tiver mais de 1 dedo na ecrã
                 if ((e.type.startsWith('pointer') && !e.isPrimary) || (e.touches && e.touches.length > 1)) {
-                    e.stopImmediatePropagation(); // Impede que a biblioteca processe este toque
+                    e.stopImmediatePropagation();
                     e.preventDefault();
                 }
             };
-            
-            // "capture: true" garante que filtramos antes da biblioteca SignaturePad perceber o toque
             canvas.addEventListener('pointerdown', blockSecondary, { capture: true, passive: false });
             canvas.addEventListener('pointermove', blockSecondary, { capture: true, passive: false });
             canvas.addEventListener('touchstart', blockSecondary, { capture: true, passive: false });
             canvas.addEventListener('touchmove', blockSecondary, { capture: true, passive: false });
         }
 
+        
         document.addEventListener("DOMContentLoaded", async () => {
+            // Gerar Manifest Dinâmico para PWA
+            const manifest = {
+                name: "Multi-OS Pro", short_name: "Multi-OS", start_url: "./index.html", display: "standalone", background_color: "#f3f4f6", theme_color: "#1f2937",
+                icons: [{ src: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2310b981' width='100' height='100'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>OS</text></svg>", sizes: "192x192", type: "image/svg+xml" }]
+            };
+            const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+            const dynamicManifest = document.getElementById('dynamicManifest');
+            if(dynamicManifest) dynamicManifest.href = URL.createObjectURL(manifestBlob);
+
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./sw.js').catch(err => console.error('Erro no SW:', err));
+                });
+            }
+
             await carregarLogoDoArmazenamento();
+            
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
                 if (typeof SignaturePad !== 'undefined') {
@@ -533,8 +562,6 @@
                     if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
                 }
                 resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
-                
-                // Aplica a blindagem contra multi-touch nos quadros
                 bloquearMultiTouch(cTec); bloquearMultiTouch(cCli); bloquearMultiTouch(cExp);
             }, 150);
             
@@ -623,6 +650,11 @@
         }
 
         function adicionarFoto(id, source) {
+            const fotosAtuais = document.querySelectorAll(`#fotosContainer_${id} .foto-item`).length;
+            if (fotosAtuais >= 6) {
+                mostrarToast('Limite de 6 fotos por OS atingido.', true);
+                return;
+            }
             const input = document.createElement('input');
             input.type = 'file'; 
             input.accept = 'image/*';
@@ -772,9 +804,15 @@
         function verificarServicoInternoGlobal() {
             const blocos = document.querySelectorAll('.os-bloco');
             if (blocos.length === 0) return false;
-            const primeiraId = blocos[0].getAttribute('data-id');
-            const cbServInterno = document.getElementById(`cbServInterno_${primeiraId}`);
-            return cbServInterno ? cbServInterno.checked : false;
+            let todosSaoInternos = true;
+            blocos.forEach(b => {
+                const id = b.getAttribute('data-id');
+                const cbServInterno = document.getElementById(`cbServInterno_${id}`);
+                if (!cbServInterno || !cbServInterno.checked) {
+                    todosSaoInternos = false;
+                }
+            });
+            return todosSaoInternos;
         }
 
         function atualizarVisibilidadeCamposPorBloco() {
@@ -942,9 +980,10 @@
                         <label class="flex items-center gap-1"><input type="checkbox" id="cbSemGarantia_${id}" checked> Sem Garantia</label>
                     </div>
                 </div>
+                
                 <div class="mb-4">
                     <label class="block text-sm font-semibold mb-1">Descrição do Serviço</label>
-                    <textarea id="descricao_${id}" rows="3" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none"></textarea>
+                    <textarea id="descricao_${id}" rows="3" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-blue-500"></textarea>
                 </div>
                 
                 <div class="mb-4">
@@ -1044,8 +1083,15 @@
             const hc = document.getElementById(`hc_${id}`).value, hs = document.getElementById(`hs_${id}`).value;
             if(hc && hs) {
                 let [ch, cm] = hc.split(':').map(Number), [sh, sm] = hs.split(':').map(Number);
-                let t = (sh*60+sm) - (ch*60+cm); if(t<0) t+=1440;
-                document.getElementById(`th_${id}`).value = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+                let t = (sh*60+sm) - (ch*60+cm); 
+                const elTh = document.getElementById(`th_${id}`);
+                if(t < 0) {
+                    t += 1440; 
+                    elTh.classList.add('text-orange-600');
+                } else {
+                    elTh.classList.remove('text-orange-600');
+                }
+                elTh.value = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
             }
         }
 
@@ -1108,7 +1154,7 @@
                 }
                 if (!silencioso && btnSalvar) btnSalvar.disabled = false;
                 return true;
-            } catch(e) { 
+            } catch(e) { console.error('Erro ao salvar form:', e);
                 if(!silencioso) mostrarToast('Erro ao salvar.', true); 
                 if (!silencioso && btnSalvar) btnSalvar.disabled = false;
                 return false;
@@ -1180,7 +1226,7 @@
         async function apagarTodoHistorico() {
             let historicoMeta = await obterHistoricoSalvo();
             if(historicoMeta.length === 0) { mostrarToast("O histórico já está vazio."); return; }
-            let p = prompt("ATENÇÃO: Isto apagará TODAS as Ordens de Serviço e fotos guardadas.\\nPara confirmar, digite APAGAR:");
+            let p = prompt("ATENÇÃO: Isto apagará TODAS as Ordens de Serviço e fotos guardadas.\nPara confirmar, digite APAGAR:");
             if(p === "APAGAR") {
                 await gravarHistoricoSalvo([]);
                 
@@ -1224,10 +1270,10 @@
                 
                 let cy = Math.max(30, 10 + finalH + 6);
                 docOS.setFontSize(9); docOS.setFont("helvetica", "normal");
-                docOS.text(`CLIENTE: ${document.getElementById(`cliente_${id}`).value}`, 15, cy);
-                docOS.text(`OS Nº: ${document.getElementById(`osNum_${id}`).value}`, 140, cy);
-                cy += 6; docOS.text(`EQUIP: ${document.getElementById(`equipamento_${id}`).value}`, 15, cy); docOS.text(`MODELO: ${document.getElementById(`modelo_${id}`).value}`, 140, cy);
-                cy += 6; docOS.text(`SÉRIE: ${document.getElementById(`serie_${id}`).value}`, 15, cy); docOS.text(`TAG: ${document.getElementById(`tag_${id}`).value}`, 140, cy);
+                docOS.text(`CLIENTE: ${truncarStr(getVal('cliente', id), 45)}`, 15, cy);
+                docOS.text(`OS Nº: ${truncarStr(getVal('osNum', id), 20)}`, 140, cy);
+                cy += 6; docOS.text(`EQUIP: ${truncarStr(getVal('equipamento', id), 45)}`, 15, cy); docOS.text(`MODELO: ${truncarStr(getVal('modelo', id), 25)}`, 140, cy);
+                cy += 6; docOS.text(`SÉRIE: ${truncarStr(getVal('serie', id), 45)}`, 15, cy); docOS.text(`TAG: ${truncarStr(getVal('tag', id), 25)}`, 140, cy);
                 
                 cy += 8; const cb = (eid) => document.getElementById(eid).checked ? "[X]" : "[ ]";
                 docOS.text(`${cb('cbOrcamento_'+id)} ORÇAMENTO`, 15, cy); docOS.text(`${cb('cbInstalacao_'+id)} INSTALAÇÃO`, 65, cy); docOS.text(`${cb('cbServInterno_'+id)} SERV INTERNO`, 115, cy);
@@ -1480,7 +1526,7 @@
                 
                 atualizarZoomPdf();
                 document.getElementById('modalPreviewPDF').classList.remove('hidden');
-            } catch (err) { mostrarToast(err.message || 'Erro ao pre-visualizar.', true); } 
+            } catch (err) { console.error('Erro PDF preview:', err); mostrarToast(err.message || 'Erro ao pre-visualizar.', true); } 
             finally { btn.disabled = false; btn.innerHTML = 'Ver Documento'; }
         }
 
@@ -1534,7 +1580,7 @@
                     link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link);
                     mostrarToast('PDF transferido!');
                 }
-            } catch (err) { mostrarToast(err.message || 'Erro ao gerar PDF.', true); } 
+            } catch (err) { console.error('Erro ao gerar PDF:', err); mostrarToast(err.message || 'Erro ao gerar PDF.', true); } 
             finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR E PARTILHAR (PDF)"; }
         }
     </script>
