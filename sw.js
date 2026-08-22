@@ -1,4 +1,4 @@
-const CACHE_NAME = 'multios-pro-v5'; // Aumentei para v5 para forçar nova atualização
+const CACHE_NAME = 'multios-pro-v6'; // Aumentei para v6 para forçar nova atualização
 const urlsToCache = [
   './', // Cobre o acesso ao domínio sem o index.html explícito
   './index.html',
