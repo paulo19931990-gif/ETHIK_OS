@@ -338,7 +338,7 @@
 
             <div class="bg-gray-800 text-white p-5 rounded-lg flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl">
                 <div class="text-center md:text-left">
-                    <p class="text-gray-400 text-xs font-bold uppercase tracking-wide mb-1">Saldo Líquido do Mês</p>
+                    <p id="label_saldo_total" class="text-gray-400 text-xs font-bold uppercase tracking-wide mb-1">Saldo Geral Acumulado (Todos os Meses)</p>
                     <div class="flex flex-wrap items-center gap-3 justify-center md:justify-start">
                         <span id="bh_total_horas" class="text-3xl font-bold font-mono text-white">00:00</span>
                         <span id="bh_status_saldo" class="px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-200">NEUTRO</span>
@@ -657,11 +657,10 @@
             const tbody = document.getElementById('bh_tabela_registos'); const filtroMes = document.getElementById('bh_mes_filtro').value;
             const regsFiltrados = filtroMes ? registosBancoHoras.filter(r => r.data.startsWith(filtroMes)) : registosBancoHoras;
             
-            let totalMensal = 0; let html = '';
+            let html = '';
             if(regsFiltrados.length === 0) { html = `<tr><td colspan="5" class="p-4 text-center text-gray-500">Nenhum registo de desvio neste mês.</td></tr>`; } 
             else {
                 regsFiltrados.forEach(reg => {
-                    totalMensal += reg.balancoFinal;
                     const textoBalanco = formatarMins(reg.balancoFinal);
                     const corBal = reg.balancoFinal > 0 ? 'text-green-600 font-bold' : (reg.balancoFinal < 0 ? 'text-red-600 font-bold' : 'text-gray-500 font-bold');
                     
@@ -677,10 +676,15 @@
             }
             tbody.innerHTML = html;
             
+            // AGORA CALCULA O TOTAL GLOBAL DE TODOS OS MESES
+            let totalGlobal = 0;
+            registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
+            
             const valTotalEl = document.getElementById('bh_total_horas'); const badgeStatus = document.getElementById('bh_status_saldo');
-            valTotalEl.textContent = formatarMins(totalMensal);
-            if(totalMensal > 0) { valTotalEl.className = "text-3xl font-bold font-mono text-green-400"; badgeStatus.textContent = "CRÉDITO LÍQUIDO A RECEBER"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-green-900 text-green-300"; } 
-            else if (totalMensal < 0) { valTotalEl.className = "text-3xl font-bold font-mono text-red-400"; badgeStatus.textContent = "DÉBITO LÍQUIDO (FALTAS)"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-300"; } 
+            valTotalEl.textContent = formatarMins(totalGlobal);
+            
+            if(totalGlobal > 0) { valTotalEl.className = "text-3xl font-bold font-mono text-green-400"; badgeStatus.textContent = "CRÉDITO GLOBAL ACUMULADO"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-green-900 text-green-300"; } 
+            else if (totalGlobal < 0) { valTotalEl.className = "text-3xl font-bold font-mono text-red-400"; badgeStatus.textContent = "DÉBITO GLOBAL ACUMULADO"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-300"; } 
             else { valTotalEl.className = "text-3xl font-bold font-mono text-white"; badgeStatus.textContent = "NEUTRO"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-200"; }
         }
 
@@ -694,7 +698,7 @@
             doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("RELATÓRIO DE HORAS EXTRAS E DESVIOS", 148, 15, { align: "center" });
             
             doc.setFontSize(10); doc.setFont("helvetica", "normal"); const dataAtual = new Date().toLocaleDateString('pt-PT');
-            doc.text(`Técnico: ${document.getElementById('tecnico').value || 'Não Preenchido'}`, 15, 25); doc.text(`Período Referência: ${filtroMes || 'Todos'}`, 280, 25, { align: "right" });
+            doc.text(`Técnico: ${document.getElementById('tecnico').value || 'Não Preenchido'}`, 15, 25); doc.text(`Período Impresso: ${filtroMes || 'Todos'}`, 280, 25, { align: "right" });
             
             let corpoTabela = []; let totalMensal = 0;
             regsFiltrados.forEach(reg => {
@@ -704,24 +708,31 @@
                 ]);
             });
             
+            let totalGlobal = 0;
+            registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
+
             doc.autoTable({
                 startY: 30, head: [['Data', 'Cliente', 'Motivo', 'Local', 'Período', 'Total Extra / Falta']],
                 body: corpoTabela, theme: 'grid', headStyles: { fillColor: [126, 34, 206] }, styles: { fontSize: 9, cellPadding: 3 },
                 columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 45 }, 2: { cellWidth: 50 }, 3: { cellWidth: 35 }, 4: { cellWidth: 25 }, 5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } }
             });
             
-            let posY = doc.lastAutoTable.finalY + 15; if (posY > 180) { doc.addPage(); posY = 30; }
-            doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text("BALANÇO LÍQUIDO DO MÊS:", 15, posY); doc.setFontSize(14);
+            let posY = doc.lastAutoTable.finalY + 15; if (posY > 170) { doc.addPage(); posY = 30; }
             
-            const textoSaldo = totalMensal > 0 ? "TOTAL CRÉDITO LÍQUIDO (HORAS EXTRAS)" : (totalMensal < 0 ? "TOTAL DÉBITO LÍQUIDO (FALTAS/ATRASOS)" : "SALDO NEUTRO");
-            const textColor = totalMensal > 0 ? [22, 163, 74] : (totalMensal < 0 ? [220, 38, 38] : [100, 100, 100]);
+            doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(100, 100, 100);
+            doc.text(`Subtotal Apenas Deste Relatório (${filtroMes || 'Todos'}): ${formatarMins(totalMensal)} HORAS`, 15, posY);
+            
+            posY += 10;
+            doc.setFontSize(14);
+            const textoSaldo = totalGlobal > 0 ? "SALDO GLOBAL ACUMULADO (A RECEBER)" : (totalGlobal < 0 ? "SALDO GLOBAL ACUMULADO (A PAGAR)" : "SALDO GLOBAL ACUMULADO (NEUTRO)");
+            const textColor = totalGlobal > 0 ? [22, 163, 74] : (totalGlobal < 0 ? [220, 38, 38] : [100, 100, 100]);
             
             doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-            doc.text(`${textoSaldo}: ${formatarMins(totalMensal)} HORAS`, 15, posY + 10);
+            doc.text(`${textoSaldo}: ${formatarMins(totalGlobal)} HORAS`, 15, posY);
             
             doc.setTextColor(0, 0, 0); doc.setFontSize(9); doc.setFont("helvetica", "normal");
             doc.line(80, posY + 40, 210, posY + 40); doc.text("ASSINATURA DO TÉCNICO / RESPONSÁVEL", 145, posY + 45, {align: "center"});
-            doc.save(`Folha_Extras_${filtroMes}.pdf`);
+            doc.save(`Folha_Extras_${filtroMes || 'Completa'}.pdf`);
         }
         // =========================================================================
 
@@ -1049,7 +1060,6 @@
                 
                 const isItemInstalacao = document.getElementById(`cbInstalacao_${id}`).checked; const isItemInterno = document.getElementById(`cbServInterno_${id}`).checked;
                 
-                // Quebra de página antes de injetar as datas de Instalação, caso a OBS seja longa
                 if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
 
                 if (isItemInstalacao) {
