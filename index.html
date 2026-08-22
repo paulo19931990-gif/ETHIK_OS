@@ -32,13 +32,12 @@
         canvas.sig-canvas { touch-action: none; width: 100%; height: 100%; display: block; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .locked-input { pointer-events: none; opacity: 0.6; background-color: #e5e7eb !important; }
+        .locked-input { pointer-events: none !important; opacity: 0.6 !important; background-color: #e5e7eb !important; }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .error-field { border-color: #ef4444 !important; border-width: 2px !important; background-color: #fef2f2 !important; }
-        
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #4f46e5; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
@@ -154,7 +153,6 @@
                     Horas
                 </button>
             </div>
-
         </div>
     </nav>
 
@@ -272,7 +270,7 @@
         <!-- ABA: BANCO DE HORAS -->
         <div id="bancoHoras" class="tab-content bg-white p-6 rounded-lg shadow-lg">
             <div class="flex justify-between items-center mb-6 border-b pb-2">
-                <h2 class="text-xl sm:text-2xl font-bold text-purple-700">Banco de Horas</h2>
+                <h2 class="text-xl sm:text-2xl font-bold text-purple-700">Lançamento de Desvios (Extra/Falta)</h2>
             </div>
             
             <div class="bg-purple-50 p-4 rounded-lg border border-purple-200 mb-6 shadow-sm">
@@ -281,15 +279,36 @@
                     <div><label class="block text-sm font-bold text-purple-900 mb-1">Cliente</label><input type="text" id="bh_cliente" placeholder="Nome do Cliente" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500"></div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div><label class="block text-sm font-bold text-purple-900 mb-1">Motivo / Atividade</label><input type="text" id="bh_motivo" placeholder="Ex: Manutenção Preventiva" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500"></div>
+                    <div><label class="block text-sm font-bold text-purple-900 mb-1">Motivo / Atividade</label><input type="text" id="bh_motivo" placeholder="Ex: Manutenção Preventiva Extra" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500"></div>
                     <div><label class="block text-sm font-bold text-purple-900 mb-1">Local / Obra</label><input type="text" id="bh_local" placeholder="Ex: Ibiúna - SP" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500"></div>
                 </div>
-                <div class="grid grid-cols-2 gap-4 mb-4">
-                    <div><label class="block text-sm font-bold text-purple-900 mb-1">Chegada</label><input type="time" id="bh_chegada" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500"></div>
-                    <div><label class="block text-sm font-bold text-purple-900 mb-1">Saída</label><input type="time" id="bh_saida" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500"></div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4 p-3 bg-white rounded border border-purple-100">
+                    <div>
+                        <span class="block text-sm font-bold text-purple-900 mb-2">Tipo de Registo</span>
+                        <div class="flex flex-col gap-2">
+                            <label class="flex items-center gap-2 p-2 border border-gray-200 rounded cursor-pointer hover:bg-green-50 transition-colors">
+                                <input type="radio" name="bh_tipo" id="bh_tipo_credito" checked class="w-4 h-4 text-green-600 focus:ring-green-500">
+                                <span class="font-bold text-green-700">[+] Hora Extra (Crédito)</span>
+                            </label>
+                            <label class="flex items-center gap-2 p-2 border border-gray-200 rounded cursor-pointer hover:bg-red-50 transition-colors">
+                                <input type="radio" name="bh_tipo" id="bh_tipo_debito" class="w-4 h-4 text-red-600 focus:ring-red-500">
+                                <span class="font-bold text-red-700">[-] Saída Antecipada / Falta (Débito)</span>
+                            </label>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2 italic">Dica: Registe apenas as horas fora do seu horário base (07h-17h).</p>
+                    </div>
+                    
+                    <div>
+                        <span class="block text-sm font-bold text-purple-900 mb-2">Período Referente ao Desvio</span>
+                        <div class="flex gap-2">
+                            <div class="w-1/2"><label class="block text-xs font-semibold text-gray-600 mb-1">Início (Hora)</label><input type="time" id="bh_chegada" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500"></div>
+                            <div class="w-1/2"><label class="block text-xs font-semibold text-gray-600 mb-1">Fim (Hora)</label><input type="time" id="bh_saida" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500"></div>
+                        </div>
+                    </div>
                 </div>
                 
-                <button onclick="adicionarRegistoBancoHoras()" class="w-full py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 shadow-md transition-colors">+ Registar Horas no Sistema</button>
+                <button onclick="adicionarRegistoBancoHoras()" class="w-full py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 shadow-md transition-colors">+ Lançar Registo no Banco</button>
             </div>
 
             <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3">
@@ -306,8 +325,8 @@
                         <tr class="bg-gray-100 text-gray-600 text-xs uppercase tracking-wider">
                             <th class="p-3 border-b">Data</th>
                             <th class="p-3 border-b">Cliente/Local</th>
-                            <th class="p-3 border-b">Período</th>
-                            <th class="p-3 border-b text-right text-purple-700">Balanço Diário</th>
+                            <th class="p-3 border-b">Período Declarado</th>
+                            <th class="p-3 border-b text-right text-purple-700">Horas (Crédito/Débito)</th>
                             <th class="p-3 border-b text-center">Ações</th>
                         </tr>
                     </thead>
@@ -319,12 +338,11 @@
 
             <div class="bg-gray-800 text-white p-5 rounded-lg flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl">
                 <div class="text-center md:text-left">
-                    <p class="text-gray-400 text-xs font-bold uppercase tracking-wide mb-1">Saldo do Mês (Filtro)</p>
+                    <p class="text-gray-400 text-xs font-bold uppercase tracking-wide mb-1">Saldo Líquido do Mês</p>
                     <div class="flex flex-wrap items-center gap-3 justify-center md:justify-start">
                         <span id="bh_total_horas" class="text-3xl font-bold font-mono text-white">00:00</span>
                         <span id="bh_status_saldo" class="px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-200">NEUTRO</span>
                     </div>
-                    <p class="text-xs text-gray-400 mt-2">Seg-Qui: 10h | Sex: 9h | Sáb/Dom: Extra Integral</p>
                 </div>
                 <button onclick="gerarPdfBancoHoras()" class="w-full md:w-auto px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all">
                     📄 GERAR FOLHA DE PONTO (PDF)
@@ -344,7 +362,7 @@
         let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
         
         let currentZoom = 1, startZoom = 1, startDist = 0;
-        let registosBancoHoras = []; // Array Global Banco Horas
+        let registosBancoHoras = [];
 
         const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
         const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
@@ -360,9 +378,7 @@
 
         async function acionarInstalacaoApp() {
             if (promptDeInstalacao) {
-                promptDeInstalacao.prompt();
-                const { outcome } = await promptDeInstalacao.userChoice;
-                promptDeInstalacao = null; 
+                promptDeInstalacao.prompt(); const { outcome } = await promptDeInstalacao.userChoice; promptDeInstalacao = null; 
             } else {
                 const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
                 if (isIos()) alert("Para instalar no iPhone (Ecrã Inteiro):\n\n1. Toque no ícone de Partilha (quadrado com seta) na barra do Safari.\n2. Escolha 'Adicionar ao Ecrã principal'.");
@@ -379,7 +395,7 @@
                     const usedMB = (usage / 1024 / 1024).toFixed(1); const totalGB = (quota / 1024 / 1024 / 1024).toFixed(2);
                     if(elText) elText.textContent = `${usedMB} MB usados de ~${totalGB} GB`;
                     if(elBar) { elBar.style.width = `${percent}%`; elBar.className = `h-3 rounded-full transition-all duration-500 ${percent > 80 ? 'bg-red-500' : 'bg-emerald-500'}`; }
-                } catch(e) {}
+                } catch(e) { console.error('Erro storage:', e); }
             }
         }
 
@@ -387,8 +403,7 @@
             try {
                 const logoSalvo = await localforage.getItem('oficialLogoApp');
                 if (logoSalvo) {
-                    logoImgData = logoSalvo;
-                    logoImgFormat = (logoSalvo.includes('image/jpeg') || logoSalvo.includes('image/jpg')) ? 'JPEG' : 'PNG';
+                    logoImgData = logoSalvo; logoImgFormat = (logoSalvo.includes('image/jpeg') || logoSalvo.includes('image/jpg')) ? 'JPEG' : 'PNG';
                     const img = new Image(); img.src = logoSalvo;
                     img.onload = () => {
                         imgObject = img;
@@ -397,27 +412,23 @@
                         if(document.getElementById('configLogoCard')) document.getElementById('configLogoCard').style.display = 'none';
                     };
                 }
-            } catch(e) {}
+            } catch(e) { console.error('Erro logo:', e); }
         }
 
         async function lerLogotipo(event) {
             const file = event.target.files[0];
             if (file) {
                 const reader = new FileReader();
-                reader.onload = async function(e) {
-                    await localforage.setItem('oficialLogoApp', e.target.result);
-                    await carregarLogoDoArmazenamento(); mostrarToast('Logótipo atualizado com sucesso!');
-                }; reader.readAsDataURL(file);
+                reader.onload = async function(e) { await localforage.setItem('oficialLogoApp', e.target.result); await carregarLogoDoArmazenamento(); mostrarToast('Logótipo atualizado!'); }; 
+                reader.readAsDataURL(file);
             }
         }
         
         function gerarMetadadosResumo(doc) {
             return {
                 id: doc.id, dataAtualizacao: doc.dataAtualizacao,
-                clienteEmpresa: doc.ordens && doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido', 
-                nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
-                osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS',
-                equipamentoResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].equipamento : ''
+                clienteEmpresa: doc.ordens && doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido', nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
+                osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS', equipamentoResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].equipamento : ''
             };
         }
 
@@ -430,10 +441,13 @@
                     await localforage.setItem('historico_os', novoMeta); return novoMeta;
                 }
                 return h; 
-            } catch(e) { return []; }
+            } catch(e) { console.error('Erro obterHistorico:', e); return []; }
         }
 
-        async function gravarHistoricoSalvo(historicoMeta) { try { await localforage.setItem('historico_os', historicoMeta); return true; } catch(e) { return false; } }
+        async function gravarHistoricoSalvo(historicoMeta) { 
+            try { await localforage.setItem('historico_os', historicoMeta); return true; } 
+            catch(e) { console.error('Erro gravarHistorico:', e); return false; } 
+        }
 
         function abrirModalExportar() { document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`; document.getElementById('modalExportar').classList.remove('hidden'); }
         function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
@@ -441,14 +455,9 @@
         async function confirmarExportacao() {
             let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${new Date().toISOString().split('T')[0]}`;
             let historicoMeta = await obterHistoricoSalvo();
-            
-            // NOVO: Pacote de backup completo com as OS e o Banco de Horas
             let backupCompleto = { historicoOS: [], bancoHoras: registosBancoHoras || [] };
             
-            for (let meta of historicoMeta) {
-                let docFull = await localforage.getItem(`os_doc_${meta.id}`);
-                if (docFull) backupCompleto.historicoOS.push(docFull);
-            }
+            for (let meta of historicoMeta) { let docFull = await localforage.getItem(`os_doc_${meta.id}`); if (docFull) backupCompleto.historicoOS.push(docFull); }
 
             const blob = new Blob([JSON.stringify(backupCompleto, null, 2)], { type: 'application/json' });
             if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado);
@@ -464,7 +473,6 @@
             reader.onload = async function(e) {
                 try {
                     const importados = JSON.parse(e.target.result);
-                    // Suporte retroativo a backups antigos (arrays) vs backups novos (objetos)
                     let listaOS = Array.isArray(importados) ? importados : (importados.historicoOS || []);
                     let listaBH = Array.isArray(importados) ? [] : (importados.bancoHoras || []);
 
@@ -478,72 +486,62 @@
                     }
                     await gravarHistoricoSalvo(historicoMeta);
                     
+                    // UPSERT do Banco de Horas
                     if (listaBH.length > 0) {
-                        registosBancoHoras = listaBH;
+                        for (let reg of listaBH) {
+                            let idx = registosBancoHoras.findIndex(r => r.id === reg.id);
+                            if (idx >= 0) registosBancoHoras[idx] = reg;
+                            else registosBancoHoras.push(reg);
+                        }
                         await localforage.setItem('banco_horas_data', registosBancoHoras);
                         if(document.getElementById('bancoHoras').classList.contains('active')) renderTabelaBancoHoras();
                     }
 
                     await carregarHistorico(); mostrarToast('Backup importado com sucesso!');
-                } catch(err) { mostrarToast('Ficheiro inválido.', true); }
+                } catch(err) { console.error('Erro importarBackup:', err); mostrarToast('Ficheiro inválido.', true); }
             }; reader.readAsText(file);
         }
 
         function mostrarToast(mensagem, isErro = false) {
-            const toast = document.getElementById('toast');
-            document.getElementById('toastMsg').textContent = mensagem;
+            const toast = document.getElementById('toast'); document.getElementById('toastMsg').textContent = mensagem;
             toast.className = `fixed bottom-4 right-4 text-white px-6 py-3 rounded shadow-lg transition-opacity duration-300 z-50 flex items-center gap-2 ${isErro ? 'bg-red-600' : 'bg-gray-800'}`;
             setTimeout(() => toast.classList.add('opacity-0'), 4000); toast.classList.remove('opacity-0');
         }
 
         async function abrirAbaHistoricoSegura() {
             let pinSalvo = await localforage.getItem('app_pin');
-            if (!pinSalvo) { document.getElementById('inputNovoPin').value = ''; document.getElementById('modalCriarPin').classList.remove('hidden');
-            } else { document.getElementById('inputDigitarPin').value = ''; document.getElementById('modalDigitarPin').classList.remove('hidden'); }
+            if (!pinSalvo) { document.getElementById('inputNovoPin').value = ''; document.getElementById('modalCriarPin').classList.remove('hidden'); } 
+            else { document.getElementById('inputDigitarPin').value = ''; document.getElementById('modalDigitarPin').classList.remove('hidden'); }
         }
 
         async function salvarNovoPin() {
             const novoPin = document.getElementById('inputNovoPin').value;
-            if(novoPin && novoPin.length >= 4) {
-                await localforage.setItem('app_pin', novoPin);
-                document.getElementById('modalCriarPin').classList.add('hidden');
-                switchTab('historico'); mostrarToast("PIN registado com sucesso!");
-            } else mostrarToast("O PIN deve ter no mínimo 4 dígitos.", true);
+            if(novoPin && novoPin.length >= 4) { await localforage.setItem('app_pin', novoPin); document.getElementById('modalCriarPin').classList.add('hidden'); switchTab('historico'); mostrarToast("PIN registado!"); } 
+            else mostrarToast("O PIN deve ter no mínimo 4 dígitos.", true);
         }
 
         async function validarPinAcesso() {
-            const digitado = document.getElementById('inputDigitarPin').value;
-            const pinSalvo = await localforage.getItem('app_pin');
-            if (digitado === pinSalvo) { document.getElementById('modalDigitarPin').classList.add('hidden'); switchTab('historico');
-            } else if (digitado === '2838') {
-                alert("Senha Master aceite. O PIN de segurança foi apagado.\nCrie um novo PIN.");
-                await localforage.removeItem('app_pin');
+            const digitado = document.getElementById('inputDigitarPin').value; const pinSalvo = await localforage.getItem('app_pin');
+            if (digitado === pinSalvo) { document.getElementById('modalDigitarPin').classList.add('hidden'); switchTab('historico'); } 
+            else if (digitado === '2838') {
+                alert("Senha Master aceite. O PIN de segurança foi apagado.\nCrie um novo PIN."); await localforage.removeItem('app_pin');
                 document.getElementById('modalDigitarPin').classList.add('hidden'); document.getElementById('modalCriarPin').classList.remove('hidden');
             } else { mostrarToast("PIN Incorreto!", true); document.getElementById('inputDigitarPin').value = ''; }
         }
 
         function resizeCanvasSeguro(canvas, pad, skipRestore = false) {
-            if(!canvas) return;
-            let dataURL = null;
-            if(!skipRestore && pad && !pad.isEmpty()) dataURL = pad.toDataURL(); 
+            if(!canvas) return; let dataURL = null; if(!skipRestore && pad && !pad.isEmpty()) dataURL = pad.toDataURL(); 
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
-            const width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 300;
-            const height = canvas.offsetHeight || canvas.parentElement.offsetHeight || 150;
+            const width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 300; const height = canvas.offsetHeight || canvas.parentElement.offsetHeight || 150;
             canvas.width = width * ratio; canvas.height = height * ratio;
             const ctx = canvas.getContext("2d"); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(ratio, ratio);
-            if (pad) pad.clear(); 
-            if(!skipRestore && dataURL && pad) pad.fromDataURL(dataURL); 
+            if (pad) pad.clear(); if(!skipRestore && dataURL && pad) pad.fromDataURL(dataURL); 
         }
 
         function bloquearMultiTouch(canvas) {
             if(!canvas) return;
-            const blockSecondary = (e) => {
-                if ((e.type.startsWith('pointer') && !e.isPrimary) || (e.touches && e.touches.length > 1)) { e.stopImmediatePropagation(); e.preventDefault(); }
-            };
-            canvas.addEventListener('pointerdown', blockSecondary, { capture: true, passive: false });
-            canvas.addEventListener('pointermove', blockSecondary, { capture: true, passive: false });
-            canvas.addEventListener('touchstart', blockSecondary, { capture: true, passive: false });
-            canvas.addEventListener('touchmove', blockSecondary, { capture: true, passive: false });
+            const blockSecondary = (e) => { if ((e.type.startsWith('pointer') && !e.isPrimary) || (e.touches && e.touches.length > 1)) { e.stopImmediatePropagation(); e.preventDefault(); } };
+            canvas.addEventListener('pointerdown', blockSecondary, { capture: true, passive: false }); canvas.addEventListener('pointermove', blockSecondary, { capture: true, passive: false }); canvas.addEventListener('touchstart', blockSecondary, { capture: true, passive: false }); canvas.addEventListener('touchmove', blockSecondary, { capture: true, passive: false });
         }
 
         document.addEventListener("DOMContentLoaded", async () => {
@@ -558,12 +556,9 @@
             setTimeout(() => {
                 const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
                 if (typeof SignaturePad !== 'undefined') {
-                    if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions);
-                    if(cCli) padCliente = new SignaturePad(cCli, signatureOptions);
-                    if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
+                    if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions); if(cCli) padCliente = new SignaturePad(cCli, signatureOptions); if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
                 }
-                resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
-                bloquearMultiTouch(cTec); bloquearMultiTouch(cCli); bloquearMultiTouch(cExp);
+                resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente); bloquearMultiTouch(cTec); bloquearMultiTouch(cCli); bloquearMultiTouch(cExp);
             }, 150);
             
             const pdfContainer = document.getElementById('pdfRenderContainer');
@@ -575,7 +570,6 @@
             adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco(); verificarRascunhoPendente();
             setInterval(autoSalvarRascunho, 10000);
 
-            // INICIALIZAÇÃO BANCO DE HORAS
             const hHoje = new Date().toISOString().split('T')[0];
             const bhDataEl = document.getElementById('bh_data'); if(bhDataEl) bhDataEl.value = hHoje;
             const bhMesFiltro = document.getElementById('bh_mes_filtro'); if(bhMesFiltro) bhMesFiltro.value = hHoje.slice(0, 7);
@@ -585,16 +579,9 @@
         });
 
         function atualizarZoomPdf() {
-            const wrapper = document.getElementById('pdfPagesWrapper'); const container = document.getElementById('pdfRenderContainer');
-            if (!wrapper || !container) return;
+            const wrapper = document.getElementById('pdfPagesWrapper'); const container = document.getElementById('pdfRenderContainer'); if (!wrapper || !container) return;
             const isDesktop = window.innerWidth > 600; const paddingLateral = isDesktop ? 48 : 16; const safeWidth = container.clientWidth - paddingLateral;
-            wrapper.querySelectorAll('canvas').forEach(c => {
-                c.style.height = 'auto'; c.style.display = 'inline-block'; c.style.maxWidth = 'none';
-                if (isDesktop) { c.style.width = (768 * currentZoom) + 'px'; wrapper.style.textAlign = 'center'; } else {
-                    c.style.width = (safeWidth * currentZoom) + 'px';
-                    wrapper.style.textAlign = currentZoom > 1 ? 'left' : 'center';
-                }
-            });
+            wrapper.querySelectorAll('canvas').forEach(c => { c.style.height = 'auto'; c.style.display = 'inline-block'; c.style.maxWidth = 'none'; if (isDesktop) { c.style.width = (768 * currentZoom) + 'px'; wrapper.style.textAlign = 'center'; } else { c.style.width = (safeWidth * currentZoom) + 'px'; wrapper.style.textAlign = currentZoom > 1 ? 'left' : 'center'; } });
             if(document.getElementById('zoomText')) document.getElementById('zoomText').innerText = Math.round(currentZoom * 100) + '%';
         }
         function zoomInPdf() { currentZoom = Math.min(currentZoom + 0.25, 4); atualizarZoomPdf(); }
@@ -613,42 +600,18 @@
             }
         }
 
-        // ========================== BANCO DE HORAS LÓGICA ==========================
+        // ========================== BANCO DE HORAS LÓGICA DE DESVIOS ==========================
         function formatarMins(minsTotais) {
             const isNegativo = minsTotais < 0; const absMins = Math.abs(minsTotais);
             const h = Math.floor(absMins / 60); const m = absMins % 60;
             return `${isNegativo ? '-' : (minsTotais > 0 ? '+' : '')}${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
         }
 
-        function calcularAlvoDiario(dataStr) {
-            // T12:00:00 evita bugs de timezone ao ler o dia da semana
-            const diaSemana = new Date(dataStr + 'T12:00:00').getDay();
-            if (diaSemana >= 1 && diaSemana <= 4) return 600; // Seg-Qui: 10h (07h às 17h)
-            if (diaSemana === 5) return 540; // Sexta: 9h (07h às 16h)
-            return 0; // Sab/Dom: 0h alvo (tudo é extra)
-        }
-
-        function calcularMinsTrabalhados(horaEntrada, horaSaida) {
-            const [eH, eM] = horaEntrada.split(':').map(Number);
-            const [sH, sM] = horaSaida.split(':').map(Number);
+        function calcularMinsDesvio(horaEntrada, horaSaida, isCredito) {
+            const [eH, eM] = horaEntrada.split(':').map(Number); const [sH, sM] = horaSaida.split(':').map(Number);
             let mins = (sH * 60 + sM) - (eH * 60 + eM);
             if (mins < 0) mins += 1440; // Passou da meia noite
-            return mins;
-        }
-
-        function agruparPorData(registos) {
-            let dias = {};
-            registos.forEach(reg => {
-                if(!dias[reg.data]) dias[reg.data] = { trabalhado: 0, alvo: calcularAlvoDiario(reg.data), registos: [] };
-                dias[reg.data].trabalhado += reg.trabalhadoMins;
-                dias[reg.data].registos.push(reg);
-            });
-            let totalMensal = 0;
-            for (let data in dias) {
-                dias[data].balancoFinal = dias[data].trabalhado - dias[data].alvo;
-                totalMensal += dias[data].balancoFinal;
-            }
-            return { dias, totalMensal };
+            return isCredito ? mins : -mins; // Positivo se for Crédito, Negativo se for Débito
         }
 
         async function adicionarRegistoBancoHoras() {
@@ -658,94 +621,66 @@
             const local = document.getElementById('bh_local').value;
             const chegada = document.getElementById('bh_chegada').value;
             const saida = document.getElementById('bh_saida').value;
+            const isCredito = document.getElementById('bh_tipo_credito').checked;
             
-            if(!data || !chegada || !saida) { mostrarToast("Preencha Data, Chegada e Saída!", true); return; }
+            if(!data || !chegada || !saida) { mostrarToast("Preencha Data, e os Horários de Início/Fim!", true); return; }
             
             const novoReg = {
-                id: Date.now().toString(), data, cliente, motivo, local, chegada, saida,
-                trabalhadoMins: calcularMinsTrabalhados(chegada, saida)
+                id: Date.now().toString(), data, cliente, motivo, local, chegada, saida, isCredito,
+                balancoFinal: calcularMinsDesvio(chegada, saida, isCredito)
             };
             
-            registosBancoHoras.push(novoReg);
-            registosBancoHoras.sort((a,b) => new Date(a.data) - new Date(b.data));
-            
+            registosBancoHoras.push(novoReg); registosBancoHoras.sort((a,b) => new Date(a.data) - new Date(b.data));
             await localforage.setItem('banco_horas_data', registosBancoHoras);
             
             document.getElementById('bh_cliente').value = ''; document.getElementById('bh_motivo').value = ''; document.getElementById('bh_local').value = '';
+            document.getElementById('bh_mes_filtro').value = data.slice(0, 7);
             
-            // Força o filtro mensal a ir para o mês que o técnico acabou de inserir
-            const mesInserido = data.slice(0, 7);
-            document.getElementById('bh_mes_filtro').value = mesInserido;
-            
-            renderTabelaBancoHoras(); mostrarToast("Registo Adicionado!");
+            renderTabelaBancoHoras(); mostrarToast("Registo de Horas Lançado!");
         }
 
         async function removerRegistoHora(id) {
             if(!confirm("Tem certeza que deseja apagar este registo?")) return;
             registosBancoHoras = registosBancoHoras.filter(r => r.id !== id);
-            await localforage.setItem('banco_horas_data', registosBancoHoras);
-            renderTabelaBancoHoras();
+            await localforage.setItem('banco_horas_data', registosBancoHoras); renderTabelaBancoHoras();
         }
 
         async function limparTabelaHoras() {
-            const filtroMes = document.getElementById('bh_mes_filtro').value;
-            if(!filtroMes) return;
+            const filtroMes = document.getElementById('bh_mes_filtro').value; if(!filtroMes) return;
             if(confirm(`Tem certeza que deseja apagar TODOS os registos do mês ${filtroMes}?`)) {
                 registosBancoHoras = registosBancoHoras.filter(r => !r.data.startsWith(filtroMes));
-                await localforage.setItem('banco_horas_data', registosBancoHoras);
-                renderTabelaBancoHoras();
+                await localforage.setItem('banco_horas_data', registosBancoHoras); renderTabelaBancoHoras();
             }
         }
 
         function renderTabelaBancoHoras() {
-            const tbody = document.getElementById('bh_tabela_registos');
-            const filtroMes = document.getElementById('bh_mes_filtro').value;
-            
+            const tbody = document.getElementById('bh_tabela_registos'); const filtroMes = document.getElementById('bh_mes_filtro').value;
             const regsFiltrados = filtroMes ? registosBancoHoras.filter(r => r.data.startsWith(filtroMes)) : registosBancoHoras;
             
-            if(regsFiltrados.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-500">Nenhum registo neste mês.</td></tr>`;
-                document.getElementById('bh_total_horas').textContent = "00:00";
-                document.getElementById('bh_status_saldo').textContent = "NEUTRO"; document.getElementById('bh_status_saldo').className = "px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-200";
-                return;
-            }
-
-            const analiseAgrupada = agruparPorData(regsFiltrados);
-            let html = '';
-            
-            const datasOrdenadas = Object.keys(analiseAgrupada.dias).sort();
-            datasOrdenadas.forEach(data => {
-                const infoDia = analiseAgrupada.dias[data];
-                infoDia.registos.forEach((reg, index) => {
-                    const isUltimoDoDia = index === infoDia.registos.length - 1;
+            let totalMensal = 0; let html = '';
+            if(regsFiltrados.length === 0) { html = `<tr><td colspan="5" class="p-4 text-center text-gray-500">Nenhum registo de desvio neste mês.</td></tr>`; } 
+            else {
+                regsFiltrados.forEach(reg => {
+                    totalMensal += reg.balancoFinal;
+                    const textoBalanco = formatarMins(reg.balancoFinal);
+                    const corBal = reg.balancoFinal > 0 ? 'text-green-600 font-bold' : (reg.balancoFinal < 0 ? 'text-red-600 font-bold' : 'text-gray-500 font-bold');
                     
-                    // Mostrar o saldo real apenas no último registo daquele dia (senão mostramos um traço)
-                    const textoBalanco = isUltimoDoDia ? formatarMins(infoDia.balancoFinal) : `<span class="text-xs text-gray-400">agrupado</span>`;
-                    const corBal = isUltimoDoDia ? (infoDia.balancoFinal > 0 ? 'text-green-600 font-bold' : (infoDia.balancoFinal < 0 ? 'text-red-600 font-bold' : 'text-gray-500 font-bold')) : '';
-
                     html += `
-                    <tr class="border-b hover:bg-purple-50 transition-colors ${isUltimoDoDia ? 'border-b-2 border-b-purple-100' : 'border-dashed'}">
-                        <td class="p-3 font-semibold text-gray-800">${index === 0 ? reg.data.split('-').reverse().join('/') : ''}</td>
-                        <td class="p-3">
-                            <div class="font-bold text-gray-800">${escapeHTML(reg.cliente || '-')}</div>
-                            <div class="text-xs text-gray-500">${escapeHTML(reg.local || '-')} | ${escapeHTML(reg.motivo || '-')}</div>
-                        </td>
+                    <tr class="border-b border-purple-100 hover:bg-purple-50 transition-colors">
+                        <td class="p-3 font-semibold text-gray-800">${reg.data.split('-').reverse().join('/')}</td>
+                        <td class="p-3"><div class="font-bold text-gray-800">${escapeHTML(reg.cliente || '-')}</div><div class="text-xs text-gray-500">${escapeHTML(reg.local || '-')} | ${escapeHTML(reg.motivo || '-')}</div></td>
                         <td class="p-3 font-mono text-gray-600">${reg.chegada} - ${reg.saida}</td>
                         <td class="p-3 text-right font-mono ${corBal}">${textoBalanco}</td>
-                        <td class="p-3 text-center">
-                            <button onclick="removerRegistoHora('${reg.id}')" class="text-red-500 hover:text-red-700 bg-red-50 px-2 py-1 rounded text-lg">✕</button>
-                        </td>
+                        <td class="p-3 text-center"><button onclick="removerRegistoHora('${reg.id}')" class="text-red-500 hover:text-red-700 bg-red-50 px-2 py-1 rounded text-lg">✕</button></td>
                     </tr>`;
                 });
-            });
+            }
             tbody.innerHTML = html;
             
             const valTotalEl = document.getElementById('bh_total_horas'); const badgeStatus = document.getElementById('bh_status_saldo');
-            const total = analiseAgrupada.totalMensal;
-            
-            valTotalEl.textContent = formatarMins(total);
-            if(total > 0) { valTotalEl.className = "text-3xl font-bold font-mono text-green-400"; badgeStatus.textContent = "CRÉDITO (A EMPRESA DEVE)"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-green-900 text-green-300"; } 
-            else if (total < 0) { valTotalEl.className = "text-3xl font-bold font-mono text-red-400"; badgeStatus.textContent = "DÉBITO (DEVE À EMPRESA)"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-300"; } 
+            valTotalEl.textContent = formatarMins(totalMensal);
+            if(totalMensal > 0) { valTotalEl.className = "text-3xl font-bold font-mono text-green-400"; badgeStatus.textContent = "CRÉDITO LÍQUIDO A RECEBER"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-green-900 text-green-300"; } 
+            else if (totalMensal < 0) { valTotalEl.className = "text-3xl font-bold font-mono text-red-400"; badgeStatus.textContent = "DÉBITO LÍQUIDO (FALTAS)"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-300"; } 
             else { valTotalEl.className = "text-3xl font-bold font-mono text-white"; badgeStatus.textContent = "NEUTRO"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-200"; }
         }
 
@@ -756,63 +691,50 @@
             if(regsFiltrados.length === 0) { mostrarToast("Não há dados no mês selecionado para gerar PDF", true); return; }
             
             const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape');
-            doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("FOLHA DE PONTO / BANCO DE HORAS", 148, 15, { align: "center" });
+            doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("RELATÓRIO DE HORAS EXTRAS E DESVIOS", 148, 15, { align: "center" });
             
             doc.setFontSize(10); doc.setFont("helvetica", "normal"); const dataAtual = new Date().toLocaleDateString('pt-PT');
-            doc.text(`Técnico: ${document.getElementById('tecnico').value || 'Não Preenchido'}`, 15, 25);
-            doc.text(`Período Referência: ${filtroMes || 'Todos'}`, 280, 25, { align: "right" });
+            doc.text(`Técnico: ${document.getElementById('tecnico').value || 'Não Preenchido'}`, 15, 25); doc.text(`Período Referência: ${filtroMes || 'Todos'}`, 280, 25, { align: "right" });
             
-            const analiseAgrupada = agruparPorData(regsFiltrados);
-            let corpoTabela = [];
-            
-            const datasOrdenadas = Object.keys(analiseAgrupada.dias).sort();
-            datasOrdenadas.forEach(data => {
-                const infoDia = analiseAgrupada.dias[data];
-                infoDia.registos.forEach((reg, index) => {
-                    const isUltimoDoDia = index === infoDia.registos.length - 1;
-                    corpoTabela.push([
-                        index === 0 ? reg.data.split('-').reverse().join('/') : '"',
-                        reg.cliente || '-', reg.motivo || '-', reg.local || '-', reg.chegada, reg.saida,
-                        isUltimoDoDia ? formatarMins(infoDia.balancoFinal) : '' // Ocultar parcial
-                    ]);
-                });
+            let corpoTabela = []; let totalMensal = 0;
+            regsFiltrados.forEach(reg => {
+                totalMensal += reg.balancoFinal;
+                corpoTabela.push([
+                    reg.data.split('-').reverse().join('/'), reg.cliente || '-', reg.motivo || '-', reg.local || '-', `${reg.chegada} - ${reg.saida}`, formatarMins(reg.balancoFinal)
+                ]);
             });
             
             doc.autoTable({
-                startY: 30, head: [['Data', 'Cliente', 'Motivo', 'Local', 'Chegada', 'Saída', 'Saldo Diário']],
+                startY: 30, head: [['Data', 'Cliente', 'Motivo', 'Local', 'Período', 'Total Extra / Falta']],
                 body: corpoTabela, theme: 'grid', headStyles: { fillColor: [126, 34, 206] }, styles: { fontSize: 9, cellPadding: 3 },
-                columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 45 }, 2: { cellWidth: 50 }, 3: { cellWidth: 35 }, 4: { cellWidth: 25 }, 5: { cellWidth: 25 }, 6: { cellWidth: 25, halign: 'right', fontStyle: 'bold' } }
+                columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 45 }, 2: { cellWidth: 50 }, 3: { cellWidth: 35 }, 4: { cellWidth: 25 }, 5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } }
             });
             
             let posY = doc.lastAutoTable.finalY + 15; if (posY > 180) { doc.addPage(); posY = 30; }
+            doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text("BALANÇO LÍQUIDO DO MÊS:", 15, posY); doc.setFontSize(14);
             
-            doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text("RESUMO MENSAL:", 15, posY); doc.setFontSize(14);
-            
-            const total = analiseAgrupada.totalMensal;
-            const textoSaldo = total > 0 ? "CRÉDITO A RECEBER DA EMPRESA" : (total < 0 ? "DÉBITO A DEVER À EMPRESA" : "SALDO NEUTRO");
-            const textColor = total > 0 ? [22, 163, 74] : (total < 0 ? [220, 38, 38] : [100, 100, 100]);
+            const textoSaldo = totalMensal > 0 ? "TOTAL CRÉDITO LÍQUIDO (HORAS EXTRAS)" : (totalMensal < 0 ? "TOTAL DÉBITO LÍQUIDO (FALTAS/ATRASOS)" : "SALDO NEUTRO");
+            const textColor = totalMensal > 0 ? [22, 163, 74] : (totalMensal < 0 ? [220, 38, 38] : [100, 100, 100]);
             
             doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-            doc.text(`${textoSaldo}: ${formatarMins(total)} HORAS`, 15, posY + 10);
+            doc.text(`${textoSaldo}: ${formatarMins(totalMensal)} HORAS`, 15, posY + 10);
             
             doc.setTextColor(0, 0, 0); doc.setFontSize(9); doc.setFont("helvetica", "normal");
             doc.line(80, posY + 40, 210, posY + 40); doc.text("ASSINATURA DO TÉCNICO / RESPONSÁVEL", 145, posY + 45, {align: "center"});
-            doc.save(`Folha_Ponto_${filtroMes}.pdf`);
+            doc.save(`Folha_Extras_${filtroMes}.pdf`);
         }
         // =========================================================================
 
         function adicionarFoto(id, source) {
             const fotosAtuais = document.querySelectorAll(`#fotosContainer_${id} .foto-item`).length;
             if (fotosAtuais >= 20) { mostrarToast('Limite de 20 fotos por OS atingido.', true); return; }
-            const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
-            if (source === 'camera') input.capture = 'environment'; 
+            const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; if (source === 'camera') input.capture = 'environment'; 
             input.onchange = (e) => {
                 const file = e.target.files[0]; if(!file) return;
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                     const img = new Image(); img.onload = () => {
-                        const canvas = document.createElement('canvas'); const MAX_WIDTH = 1000; const MAX_HEIGHT = 1000;
-                        let width = img.width; let height = img.height;
+                        const canvas = document.createElement('canvas'); const MAX_WIDTH = 1000; const MAX_HEIGHT = 1000; let width = img.width; let height = img.height;
                         if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
                         canvas.width = width; canvas.height = height; const ctx = canvas.getContext("2d"); ctx.drawImage(img, 0, 0, width, height);
                         renderFotoItem(id, canvas.toDataURL("image/jpeg", 0.7), '');
@@ -822,16 +744,14 @@
         }
 
         function renderFotoItem(id, base64, desc) {
-            const div = document.createElement('div');
-            div.className = "foto-item flex flex-col sm:flex-row items-start gap-3 bg-white p-3 rounded border border-gray-200 shadow-sm relative";
-            div.innerHTML = `<input type="hidden" class="foto-b64" value="${base64}"><img src="${base64}" class="w-24 h-24 object-cover rounded border border-gray-300 shrink-0 mx-auto sm:mx-0"><div class="flex-1 w-full"><label class="block text-xs font-bold text-gray-700 mb-1">Descrição</label><textarea rows="2" class="foto-desc w-full border border-gray-300 p-2 rounded text-sm outline-none focus:border-indigo-500 bg-indigo-50/30">${escapeHTML(desc)}</textarea></div><button type="button" onclick="this.closest('.foto-item').remove()" class="absolute top-2 right-2 sm:static sm:mt-6 text-red-500 font-bold p-1 hover:bg-red-50 rounded shrink-0">✕</button>`;
+            const div = document.createElement('div'); div.className = "foto-item flex flex-col sm:flex-row items-start gap-3 bg-white p-3 rounded border border-gray-200 shadow-sm relative";
+            div.innerHTML = `<input type="hidden" class="foto-b64" value="${base64}"><img src="${base64}" class="w-24 h-24 object-cover rounded border border-gray-300 shrink-0 mx-auto sm:mx-0"><div class="flex-1 w-full"><label class="block text-xs font-bold text-gray-700 mb-1">Descrição (Obrigatória no PDF)</label><textarea rows="2" class="foto-desc w-full border border-gray-300 p-2 rounded text-sm outline-none focus:border-indigo-500 bg-indigo-50/30">${escapeHTML(desc)}</textarea></div><button type="button" onclick="this.closest('.foto-item').remove()" class="absolute top-2 right-2 sm:static sm:mt-6 text-red-500 font-bold p-1 hover:bg-red-50 rounded shrink-0">✕</button>`;
             document.getElementById(`fotosContainer_${id}`).appendChild(div);
         }
 
         function processarAnexo(id, input) {
             const file = input.files[0]; if (!file) return removerAnexo(id);
-            const reader = new FileReader();
-            reader.onload = function(e) {
+            const reader = new FileReader(); reader.onload = function(e) {
                 if (document.getElementById(`anexoBase64_${id}`)) document.getElementById(`anexoBase64_${id}`).value = e.target.result;
                 if (document.getElementById(`anexoNome_${id}`)) { document.getElementById(`anexoNome_${id}`).textContent = '✅ Anexo salvo: ' + file.name; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); }
                 if (document.getElementById(`btnRemoverAnexo_${id}`)) document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden');
@@ -861,16 +781,13 @@
                 b.querySelectorAll('.peca-row-item').forEach(row => { let q = row.querySelector('.q').value, n = row.querySelector('.n').value, c = row.querySelector('.c').value; if(q || n || c) ordem.pecas.push({ q, n, c }); });
                 b.querySelectorAll('.foto-item').forEach(fItem => { ordem.fotos.push({ b64: fItem.querySelector('.foto-b64').value, desc: fItem.querySelector('.foto-desc').value }); });
                 dados.ordens.push(ordem);
-            });
-            return dados;
+            }); return dados;
         }
 
         function restaurarDadosParaFormulario(doc) {
-            desbloquearEdicao(); documentoAtualId = doc.id;
-            document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
+            desbloquearEdicao(); documentoAtualId = doc.id; document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
             if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
-            if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o));
-            ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
+            if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o)); ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
             switchTab('novaOs'); 
             setTimeout(() => {
                 if(document.getElementById('canvasTecnico') && padTecnico && doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); 
@@ -884,26 +801,11 @@
         function atualizarVisibilidadeCamposPorBloco() {
             document.querySelectorAll('.os-bloco').forEach(b => {
                 const id = b.getAttribute('data-id');
-                const isInterno = document.getElementById(`cbServInterno_${id}`).checked;
-                const isInstalacao = document.getElementById(`cbInstalacao_${id}`).checked;
-                const containerHoras = document.getElementById(`containerHoras_${id}`);
-                const containerDias = document.getElementById(`containerDias_${id}`);
-                const containerReagendar = document.getElementById(`containerReagendar_${id}`);
-
-                if (isInstalacao) {
-                    if(containerHoras) containerHoras.style.display = 'grid';
-                    if(containerDias) containerDias.style.display = 'grid'; calcDias(id);
-                    if(containerReagendar) containerReagendar.style.display = 'block';
-                } else if (isInterno) {
-                    if(containerHoras) containerHoras.style.display = 'none';
-                    if(containerDias) containerDias.style.display = 'grid'; calcDias(id);
-                    if(containerReagendar) containerReagendar.style.display = 'none';
-                    if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true;
-                } else {
-                    if(containerHoras) containerHoras.style.display = 'grid';
-                    if(containerDias) containerDias.style.display = 'none';
-                    if(containerReagendar) containerReagendar.style.display = 'block';
-                }
+                const isInterno = document.getElementById(`cbServInterno_${id}`).checked; const isInstalacao = document.getElementById(`cbInstalacao_${id}`).checked;
+                const containerHoras = document.getElementById(`containerHoras_${id}`); const containerDias = document.getElementById(`containerDias_${id}`); const containerReagendar = document.getElementById(`containerReagendar_${id}`);
+                if (isInstalacao) { if(containerHoras) containerHoras.style.display = 'grid'; if(containerDias) containerDias.style.display = 'grid'; calcDias(id); if(containerReagendar) containerReagendar.style.display = 'block'; } 
+                else if (isInterno) { if(containerHoras) containerHoras.style.display = 'none'; if(containerDias) containerDias.style.display = 'grid'; calcDias(id); if(containerReagendar) containerReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true; } 
+                else { if(containerHoras) containerHoras.style.display = 'grid'; if(containerDias) containerDias.style.display = 'none'; if(containerReagendar) containerReagendar.style.display = 'block'; }
             });
             atualizarVisibilidadeClienteGeral();
         }
@@ -941,40 +843,31 @@
 
         function toggleLock(locked) {
             document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico select, #listaOrdensServico button, #tecnico, #nomeClienteFinal, #cargo, #setor, #btnAddOs').forEach(el => { el.disabled = locked; locked ? el.classList.add('locked-input') : el.classList.remove('locked-input'); });
+            document.querySelectorAll('.canvas-container').forEach(el => { locked ? el.classList.add('locked-input') : el.classList.remove('locked-input'); });
             if(document.getElementById('lockStatus')) { document.getElementById('lockStatus').textContent = locked ? "🔒 FORMULÁRIO BLOQUEADO" : "🔓 Formulário Editável"; document.getElementById('lockStatus').className = locked ? "text-xs font-bold text-red-600" : "text-xs font-bold text-gray-400"; }
         }
-        function bloquearEdicao() { toggleLock(true); mostrarToast('Documento bloqueado (Cliente Assinou).'); }
+        function bloquearEdicao() { toggleLock(true); mostrarToast('Documento selado (Cliente Assinou).'); }
         function desbloquearEdicao() { toggleLock(false); }
         function limparAssinatura(pad, isCliente = false) { if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); }
 
         async function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            
-            if(tabId === 'historico') { await carregarHistorico(); await atualizarIndicadorArmazenamento(); } 
-            else if (tabId === 'bancoHoras') { renderTabelaBancoHoras(); }
-            else if(tabId === 'novaOs') setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active')); document.getElementById(tabId).classList.add('active');
+            if(tabId === 'historico') { await carregarHistorico(); await atualizarIndicadorArmazenamento(); } else if (tabId === 'bancoHoras') { renderTabelaBancoHoras(); } else if(tabId === 'novaOs') setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
             window.scrollTo(0, 0);
         }
 
         function iniciarNovaOS() {
             if(!confirm("Iniciar documento em branco?")) return;
             documentoAtualId = Date.now().toString(); document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0; 
-            if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
-            adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
-            desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco();
-            localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
+            if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
+            desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco(); localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
         }
 
         let contadorOS = 0;
         function adicionarBlocoOS(dados = null) {
-            contadorOS++; const id = contadorOS; const dataHoje = new Date().toISOString().split('T')[0];
-            const osManualValue = dados && dados.osNum ? dados.osNum : '';
+            contadorOS++; const id = contadorOS; const dataHoje = new Date().toISOString().split('T')[0]; const osManualValue = dados && dados.osNum ? dados.osNum : '';
             const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco();" class="text-red-600 text-xs font-bold bg-red-50 px-2 py-1 rounded border border-red-200">Remover</button>` : '';
-            
-            const bloco = document.createElement('div');
-            bloco.className = "os-bloco border-2 border-gray-200 p-4 sm:p-5 rounded-xl bg-gray-50/50 shadow-sm relative transition-all mb-4";
-            bloco.setAttribute('data-id', id);
+            const bloco = document.createElement('div'); bloco.className = "os-bloco border-2 border-gray-200 p-4 sm:p-5 rounded-xl bg-gray-50/50 shadow-sm relative transition-all mb-4"; bloco.setAttribute('data-id', id);
             
             bloco.innerHTML = `
                 <div class="flex justify-between items-center mb-4 border-b pb-2"><h3 class="font-bold text-lg text-blue-700">Ordem de Serviço</h3>${btnRemover}</div>
@@ -1044,26 +937,21 @@
                 ['cliente','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
                 ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','cbSemGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
                 if (dados.anexoBase64) { document.getElementById(`anexoBase64_${id}`).value = dados.anexoBase64; document.getElementById(`anexoNome_${id}`).textContent = dados.anexoNome || '✅ Anexo salvo'; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
-                if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { const pContainer = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1"; row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${escapeHTML(p.n)}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${escapeHTML(p.c)}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`; pContainer.appendChild(row); });
-                else { addPecaRow(id); addPecaRow(id); }
+                if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { const pContainer = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1"; row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${escapeHTML(p.n)}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${escapeHTML(p.c)}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`; pContainer.appendChild(row); }); else { addPecaRow(id); addPecaRow(id); }
                 if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
             } else { addPecaRow(id); addPecaRow(id); }
             atualizarVisibilidadeCamposPorBloco();
         }
 
         function addPecaRow(id) {
-            const container = document.getElementById(`pecasContainer_${id}`);
-            const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
-            row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`;
-            container.appendChild(row);
+            const container = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1";
+            row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`; container.appendChild(row);
         }
 
         function calcH(id) {
             const hc = document.getElementById(`hc_${id}`).value, hs = document.getElementById(`hs_${id}`).value;
             if(hc && hs) {
-                let [ch, cm] = hc.split(':').map(Number), [sh, sm] = hs.split(':').map(Number);
-                let t = (sh*60+sm) - (ch*60+cm); 
-                const elTh = document.getElementById(`th_${id}`);
+                let [ch, cm] = hc.split(':').map(Number), [sh, sm] = hs.split(':').map(Number); let t = (sh*60+sm) - (ch*60+cm); const elTh = document.getElementById(`th_${id}`);
                 if(t < 0) { t += 1440; elTh.classList.add('text-orange-600'); } else elTh.classList.remove('text-orange-600');
                 elTh.value = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
             }
@@ -1079,22 +967,27 @@
             blocos.forEach(b => { const id = b.getAttribute('data-id'); const cCliente = document.getElementById(`cliente_${id}`); const cOsNum = document.getElementById(`osNum_${id}`);
                 if (!cCliente.value.trim()) { cCliente.classList.add('error-field'); valido = false; }
                 if (!cOsNum.value.trim()) { cOsNum.classList.add('error-field'); valido = false; } });
+            
+            document.querySelectorAll('.foto-desc').forEach(el => { if(!el.value.trim()) { el.classList.add('error-field'); valido = false; } });
             return valido;
         }
 
         async function salvarDocumento(silencioso = false) {
             const btnSalvar = document.getElementById('btnSalvarOs');
-            if (!silencioso && btnSalvar && btnSalvar.disabled) return false;
-            if (!silencioso && btnSalvar) btnSalvar.disabled = true;
+            if (!silencioso && btnSalvar && btnSalvar.disabled) return false; if (!silencioso && btnSalvar) btnSalvar.disabled = true;
             if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos em destaque!', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
             try {
                 let dados = recolherDadosDoFormulario(); await localforage.setItem(`os_doc_${dados.id}`, dados);
                 let historicoMeta = await obterHistoricoSalvo(); let meta = gerarMetadadosResumo(dados);
                 let index = historicoMeta.findIndex(d => d.id === dados.id); if(index >= 0) historicoMeta[index] = meta; else historicoMeta.unshift(meta);
-                await gravarHistoricoSalvo(historicoMeta); await localforage.removeItem('draft_os');
+                
+                let gravou = await gravarHistoricoSalvo(historicoMeta);
+                if(!gravou) throw new Error("Falha ao gravar no armazenamento.");
+                
+                await localforage.removeItem('draft_os');
                 if(!silencioso) { mostrarToast('Salvo com sucesso na Base de Dados!'); await carregarHistorico(); }
                 if (!silencioso && btnSalvar) btnSalvar.disabled = false; return true;
-            } catch(e) { if(!silencioso) mostrarToast('Erro ao salvar.', true); if (!silencioso && btnSalvar) btnSalvar.disabled = false; return false; }
+            } catch(e) { console.error('Erro salvarDocumento:', e); if(!silencioso) mostrarToast('Erro ao salvar.', true); if (!silencioso && btnSalvar) btnSalvar.disabled = false; return false; }
         }
 
         function filtrarHistorico() { const termo = document.getElementById('buscaHistorico').value.toLowerCase(); document.querySelectorAll('.historico-item').forEach(item => { item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none'; }); }
@@ -1121,18 +1014,14 @@
         async function apagarTodoHistorico() {
             let historicoMeta = await obterHistoricoSalvo(); if(historicoMeta.length === 0) { mostrarToast("O histórico já está vazio."); return; }
             let p = prompt("ATENÇÃO: Isto apagará TODAS as Ordens de Serviço e fotos guardadas.\nPara confirmar, digite APAGAR:");
-            if(p === "APAGAR") {
-                await gravarHistoricoSalvo([]); let chaves = await localforage.keys(); for(let key of chaves) if(key.startsWith('os_doc_')) await localforage.removeItem(key);
-                iniciarNovaOS(); await carregarHistorico(); atualizarIndicadorArmazenamento(); mostrarToast("Todo o histórico foi apagado.");
-            }
+            if(p === "APAGAR") { await gravarHistoricoSalvo([]); let chaves = await localforage.keys(); for(let key of chaves) if(key.startsWith('os_doc_')) await localforage.removeItem(key); iniciarNovaOS(); await carregarHistorico(); atualizarIndicadorArmazenamento(); mostrarToast("Todo o histórico foi apagado."); }
         }
 
         async function construirPDFBytes() {
             if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios!");
             const blocosOS = document.querySelectorAll('.os-bloco'); const isServicoInterno = verificarServicoInternoGlobal(); const cb = (eid) => document.getElementById(eid).checked ? "[X]" : "[ ]";
             const { jsPDF } = window.jspdf; const { PDFDocument, rgb, StandardFonts } = window.PDFLib; const masterPdf = await PDFDocument.create();
-            let finalW = 0, finalH = 0;
-            if (imgObject && logoImgData) { let ratio = Math.min(45 / imgObject.width, 15 / imgObject.height); finalW = imgObject.width * ratio; finalH = imgObject.height * ratio; }
+            let finalW = 0, finalH = 0; if (imgObject && logoImgData) { let ratio = Math.min(45 / imgObject.width, 15 / imgObject.height); finalW = imgObject.width * ratio; finalH = imgObject.height * ratio; }
             const margemTopoSegura = Math.max(35, 10 + finalH + 5);
 
             for (let idx = 0; idx < blocosOS.length; idx++) {
@@ -1158,9 +1047,10 @@
                 cy+=4; let obsText = `OBS: ${getVal('liberacaoObs', id)}`; let obsLines = docOS.splitTextToSize(obsText, 180); docOS.text(obsLines, 15, cy); cy += (obsLines.length * 4) + 2;
                 docOS.text(`Status: ${cb('stOk_'+id)} OK  ${cb('stRes_'+id)} RESTRIÇÃO`, 15, cy); 
                 
-                // NOVO: Imprimir Horas E Dias se for Instalação
-                const isItemInstalacao = document.getElementById(`cbInstalacao_${id}`).checked;
-                const isItemInterno = document.getElementById(`cbServInterno_${id}`).checked;
+                const isItemInstalacao = document.getElementById(`cbInstalacao_${id}`).checked; const isItemInterno = document.getElementById(`cbServInterno_${id}`).checked;
+                
+                // Quebra de página antes de injetar as datas de Instalação, caso a OBS seja longa
+                if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
 
                 if (isItemInstalacao) {
                     docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy);
@@ -1203,7 +1093,7 @@
                         const binaryStr = atob(anexoB64.split(',')[1]); const bytes = new Uint8Array(binaryStr.length);
                         for (let i = 0; i < binaryStr.length; i++) { bytes[i] = binaryStr.charCodeAt(i); }
                         const anexoPdf = await PDFDocument.load(bytes); const anexoPages = await masterPdf.copyPages(anexoPdf, anexoPdf.getPageIndices()); anexoPages.forEach((p) => masterPdf.addPage(p));
-                    } catch (e) {}
+                    } catch (e) { console.error('Erro ao ler PDF anexo:', e); }
                 }
             }
             const docSig = new jsPDF();
@@ -1240,17 +1130,12 @@
                 const primeiraOs = document.querySelector('.os-bloco');
                 let pOs = 'Rascunho', pCliente = 'Cliente';
                 if(primeiraOs) { const pId = primeiraOs.getAttribute('data-id'); pOs = getVal('osNum', pId).trim() || 'Rascunho'; pCliente = getVal('cliente', pId).trim() || 'Cliente'; }
-                document.getElementById('linkPreviewExt').download = `Pre_Visualizacao_${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-                document.getElementById('linkPreviewExt').href = objUrlPreview; 
+                document.getElementById('linkPreviewExt').download = `Pre_Visualizacao_${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`; document.getElementById('linkPreviewExt').href = objUrlPreview; 
                 const pdf = await pdfjsLib.getDocument({data: bytesPdf}).promise; const wrapper = document.getElementById('pdfPagesWrapper'); wrapper.innerHTML = ''; 
                 currentZoom = 1; atualizarZoomPdf();
-                for(let num = 1; num <= pdf.numPages; num++) {
-                    const page = await pdf.getPage(num); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); 
-                    const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); canvas.height = viewport.height; canvas.width = viewport.width;
-                    canvas.className = 'mb-4 bg-white shadow-xl border border-gray-300'; await page.render({canvasContext: ctx, viewport: viewport}).promise; wrapper.appendChild(canvas);
-                }
+                for(let num = 1; num <= pdf.numPages; num++) { const page = await pdf.getPage(num); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); canvas.height = viewport.height; canvas.width = viewport.width; canvas.className = 'mb-4 bg-white shadow-xl border border-gray-300'; await page.render({canvasContext: ctx, viewport: viewport}).promise; wrapper.appendChild(canvas); }
                 atualizarZoomPdf(); document.getElementById('modalPreviewPDF').classList.remove('hidden');
-            } catch (err) { mostrarToast(err.message || 'Erro ao pre-visualizar.', true); } finally { btn.disabled = false; btn.innerHTML = 'Ver Documento'; }
+            } catch (err) { console.error('Erro Pre-visualizar PDF:', err); mostrarToast(err.message || 'Erro ao pre-visualizar.', true); } finally { btn.disabled = false; btn.innerHTML = 'Ver Documento'; }
         }
 
         function fecharPreviewPDF() { document.getElementById('modalPreviewPDF').classList.add('hidden'); }
@@ -1267,9 +1152,9 @@
                 if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado); urlDownloadGerado = URL.createObjectURL(blob);
                 if (navigator.canShare && navigator.canShare({ files: [ficheiroPdf] })) {
                     try { await navigator.share({ title: `Ordem de Serviço ${pOs}`, text: `Segue em anexo a Ordem de Serviço ${pOs} referente a ${pCliente}.`, files: [ficheiroPdf] }); mostrarToast('Documento partilhado!'); } 
-                    catch(err) { const link = document.createElement('a'); link.href = urlDownloadGerado; link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast('PDF transferido!'); }
+                    catch(err) { console.error('Erro navigator.share:', err); const link = document.createElement('a'); link.href = urlDownloadGerado; link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast('PDF transferido!'); }
                 } else { const link = document.createElement('a'); link.href = urlDownloadGerado; link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast('PDF transferido!'); }
-            } catch (err) { mostrarToast(err.message || 'Erro ao gerar PDF.', true); } finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR E PARTILHAR (PDF)"; }
+            } catch (err) { console.error('Erro ao gerar PDF Consolidado:', err); mostrarToast(err.message || 'Erro ao gerar PDF.', true); } finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR E PARTILHAR (PDF)"; }
         }
     </script>
 </body>
