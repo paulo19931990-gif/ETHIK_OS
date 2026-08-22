@@ -38,7 +38,7 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .error-field { border-color: #ef4444 !important; border-width: 2px !important; background-color: #fef2f2 !important; }
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #4f46e5; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 32px; height: 32px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -46,6 +46,26 @@
 
     <div id="toast" class="fixed bottom-4 right-4 text-white px-6 py-3 rounded shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
         <span id="toastMsg">Mensagem</span>
+    </div>
+
+    <!-- Modal de Progresso do PDF -->
+    <div id="pdfProgressOverlay" class="hidden fixed inset-0 bg-gray-900 bg-opacity-95 z-[100] flex flex-col items-center justify-center px-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-gray-800 p-8 rounded-2xl max-w-sm w-full shadow-[0_0_40px_rgba(16,185,129,0.2)] border border-gray-700 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-400"></div>
+            <div class="mb-6 mt-2">
+                <div class="loader mx-auto mb-5"></div>
+                <h3 class="text-xl font-bold text-white mb-2">A Gerar Documento PDF</h3>
+                <p id="pdfProgressText" class="text-sm text-emerald-400 font-semibold h-5">A preparar ficheiros...</p>
+            </div>
+            <div class="w-full bg-gray-700 rounded-full h-4 mb-2 overflow-hidden shadow-inner border border-gray-600 relative">
+                <div id="pdfProgressBar" class="bg-gradient-to-r from-emerald-400 to-teal-500 h-full rounded-full transition-all duration-200" style="width: 0%"></div>
+            </div>
+            <p id="pdfProgressPercent" class="text-right text-sm font-bold text-white mb-6">0%</p>
+            <div class="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <p class="text-xs text-gray-400 italic">⏳ Aguarde, não feche o aplicativo.</p>
+                <p class="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">O processamento de múltiplas fotos requer algum tempo.</p>
+            </div>
+        </div>
     </div>
 
     <!-- Modais de Segurança (PIN) -->
@@ -422,6 +442,7 @@
                 reader.onload = async function(e) { await localforage.setItem('oficialLogoApp', e.target.result); await carregarLogoDoArmazenamento(); mostrarToast('Logótipo atualizado!'); }; 
                 reader.readAsDataURL(file);
             }
+            event.target.value = ''; // Correção do Bug 3
         }
         
         function gerarMetadadosResumo(doc) {
@@ -486,7 +507,6 @@
                     }
                     await gravarHistoricoSalvo(historicoMeta);
                     
-                    // UPSERT do Banco de Horas
                     if (listaBH.length > 0) {
                         for (let reg of listaBH) {
                             let idx = registosBancoHoras.findIndex(r => r.id === reg.id);
@@ -500,6 +520,7 @@
                     await carregarHistorico(); mostrarToast('Backup importado com sucesso!');
                 } catch(err) { console.error('Erro importarBackup:', err); mostrarToast('Ficheiro inválido.', true); }
             }; reader.readAsText(file);
+            event.target.value = ''; // Correção do Bug 3
         }
 
         function mostrarToast(mensagem, isErro = false) {
@@ -553,17 +574,38 @@
 
             await carregarLogoDoArmazenamento();
             
-            setTimeout(() => {
-                const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
-                if (typeof SignaturePad !== 'undefined') {
-                    if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions); if(cCli) padCliente = new SignaturePad(cCli, signatureOptions); if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
+            // Correção Bug 1 (Condição de Corrida)
+            const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
+            if (typeof SignaturePad !== 'undefined') {
+                if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions); 
+                if(cCli) padCliente = new SignaturePad(cCli, signatureOptions); 
+                if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
+            }
+            
+            const observer = new ResizeObserver(() => {
+                if (document.getElementById('novaOs').classList.contains('active')) {
+                    resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
                 }
-                resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente); bloquearMultiTouch(cTec); bloquearMultiTouch(cCli); bloquearMultiTouch(cExp);
-            }, 150);
+            });
+            if(cTec && cTec.parentElement) observer.observe(cTec.parentElement);
+            if(cCli && cCli.parentElement) observer.observe(cCli.parentElement);
+
+            bloquearMultiTouch(cTec); bloquearMultiTouch(cCli); bloquearMultiTouch(cExp);
+            
+            // Correção Bug 2 (Rodar Ecrã)
+            window.addEventListener('resize', () => {
+                if (document.getElementById('novaOs').classList.contains('active')) {
+                    resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
+                }
+            });
             
             const pdfContainer = document.getElementById('pdfRenderContainer');
             if(pdfContainer) {
-                pdfContainer.addEventListener('touchstart', function(e) { if (e.touches.length === 2) { startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); startZoom = currentZoom; } }, {passive: false});
+                pdfContainer.addEventListener('touchstart', function(e) { if (e.touches.length === 2) { 
+                    startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); 
+                    if(startDist === 0) startDist = 1; // Correção Bug 4
+                    startZoom = currentZoom; 
+                } }, {passive: false});
                 pdfContainer.addEventListener('touchmove', function(e) { if (e.touches.length === 2) { e.preventDefault(); let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); currentZoom = Math.min(Math.max(0.5, startZoom * (dist / startDist)), 4); atualizarZoomPdf(); } }, {passive: false});
             }
 
@@ -587,11 +629,17 @@
         function zoomInPdf() { currentZoom = Math.min(currentZoom + 0.25, 4); atualizarZoomPdf(); }
         function zoomOutPdf() { currentZoom = Math.max(currentZoom - 0.25, 0.5); atualizarZoomPdf(); }
 
+        // Correção Bug 5 (Loop Rascunho)
         async function autoSalvarRascunho() {
-            if (!document.getElementById('novaOs').classList.contains('active') || document.getElementById('lockStatus').textContent.includes('BLOQUEADO')) return;
+            const clientePreenchido = document.querySelector('[id^="cliente_"]')?.value.trim();
+            if (!document.getElementById('novaOs').classList.contains('active') || 
+                document.getElementById('lockStatus').textContent.includes('BLOQUEADO') ||
+                !clientePreenchido) return;
+                
             await localforage.setItem('draft_os', recolherDadosDoFormulario());
             document.getElementById('autoSaveIndicator').textContent = `Rascunho guardado: ${new Date().toLocaleTimeString('pt-PT')}`;
         }
+        
         async function verificarRascunhoPendente() {
             const draft = await localforage.getItem('draft_os');
             if(draft && draft.ordens && draft.ordens.length > 0) {
@@ -600,7 +648,6 @@
             }
         }
 
-        // ========================== BANCO DE HORAS LÓGICA DE DESVIOS ==========================
         function formatarMins(minsTotais) {
             const isNegativo = minsTotais < 0; const absMins = Math.abs(minsTotais);
             const h = Math.floor(absMins / 60); const m = absMins % 60;
@@ -610,8 +657,8 @@
         function calcularMinsDesvio(horaEntrada, horaSaida, isCredito) {
             const [eH, eM] = horaEntrada.split(':').map(Number); const [sH, sM] = horaSaida.split(':').map(Number);
             let mins = (sH * 60 + sM) - (eH * 60 + eM);
-            if (mins < 0) mins += 1440; // Passou da meia noite
-            return isCredito ? mins : -mins; // Positivo se for Crédito, Negativo se for Débito
+            if (mins < 0) mins += 1440; 
+            return isCredito ? mins : -mins; 
         }
 
         async function adicionarRegistoBancoHoras() {
@@ -676,9 +723,7 @@
             }
             tbody.innerHTML = html;
             
-            // AGORA CALCULA O TOTAL GLOBAL DE TODOS OS MESES
-            let totalGlobal = 0;
-            registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
+            let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
             
             const valTotalEl = document.getElementById('bh_total_horas'); const badgeStatus = document.getElementById('bh_status_saldo');
             valTotalEl.textContent = formatarMins(totalGlobal);
@@ -697,19 +742,12 @@
             const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape');
             doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("RELATÓRIO DE HORAS EXTRAS E DESVIOS", 148, 15, { align: "center" });
             
-            doc.setFontSize(10); doc.setFont("helvetica", "normal"); const dataAtual = new Date().toLocaleDateString('pt-PT');
+            doc.setFontSize(10); doc.setFont("helvetica", "normal"); 
             doc.text(`Técnico: ${document.getElementById('tecnico').value || 'Não Preenchido'}`, 15, 25); doc.text(`Período Impresso: ${filtroMes || 'Todos'}`, 280, 25, { align: "right" });
             
             let corpoTabela = []; let totalMensal = 0;
-            regsFiltrados.forEach(reg => {
-                totalMensal += reg.balancoFinal;
-                corpoTabela.push([
-                    reg.data.split('-').reverse().join('/'), reg.cliente || '-', reg.motivo || '-', reg.local || '-', `${reg.chegada} - ${reg.saida}`, formatarMins(reg.balancoFinal)
-                ]);
-            });
-            
-            let totalGlobal = 0;
-            registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
+            regsFiltrados.forEach(reg => { totalMensal += reg.balancoFinal; corpoTabela.push([reg.data.split('-').reverse().join('/'), reg.cliente || '-', reg.motivo || '-', reg.local || '-', `${reg.chegada} - ${reg.saida}`, formatarMins(reg.balancoFinal)]); });
+            let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
 
             doc.autoTable({
                 startY: 30, head: [['Data', 'Cliente', 'Motivo', 'Local', 'Período', 'Total Extra / Falta']],
@@ -718,23 +756,16 @@
             });
             
             let posY = doc.lastAutoTable.finalY + 15; if (posY > 170) { doc.addPage(); posY = 30; }
-            
-            doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(100, 100, 100);
-            doc.text(`Subtotal Apenas Deste Relatório (${filtroMes || 'Todos'}): ${formatarMins(totalMensal)} HORAS`, 15, posY);
-            
-            posY += 10;
-            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(100, 100, 100); doc.text(`Subtotal Apenas Deste Relatório (${filtroMes || 'Todos'}): ${formatarMins(totalMensal)} HORAS`, 15, posY);
+            posY += 10; doc.setFontSize(14);
             const textoSaldo = totalGlobal > 0 ? "SALDO GLOBAL ACUMULADO (A RECEBER)" : (totalGlobal < 0 ? "SALDO GLOBAL ACUMULADO (A PAGAR)" : "SALDO GLOBAL ACUMULADO (NEUTRO)");
             const textColor = totalGlobal > 0 ? [22, 163, 74] : (totalGlobal < 0 ? [220, 38, 38] : [100, 100, 100]);
             
-            doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-            doc.text(`${textoSaldo}: ${formatarMins(totalGlobal)} HORAS`, 15, posY);
-            
+            doc.setTextColor(textColor[0], textColor[1], textColor[2]); doc.text(`${textoSaldo}: ${formatarMins(totalGlobal)} HORAS`, 15, posY);
             doc.setTextColor(0, 0, 0); doc.setFontSize(9); doc.setFont("helvetica", "normal");
             doc.line(80, posY + 40, 210, posY + 40); doc.text("ASSINATURA DO TÉCNICO / RESPONSÁVEL", 145, posY + 45, {align: "center"});
             doc.save(`Folha_Extras_${filtroMes || 'Completa'}.pdf`);
         }
-        // =========================================================================
 
         function adicionarFoto(id, source) {
             const fotosAtuais = document.querySelectorAll(`#fotosContainer_${id} .foto-item`).length;
@@ -761,12 +792,13 @@
         }
 
         function processarAnexo(id, input) {
-            const file = input.files[0]; if (!file) return removerAnexo(id);
+            const file = input.files[0]; if (!file) { removerAnexo(id); return; }
             const reader = new FileReader(); reader.onload = function(e) {
                 if (document.getElementById(`anexoBase64_${id}`)) document.getElementById(`anexoBase64_${id}`).value = e.target.result;
                 if (document.getElementById(`anexoNome_${id}`)) { document.getElementById(`anexoNome_${id}`).textContent = '✅ Anexo salvo: ' + file.name; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); }
                 if (document.getElementById(`btnRemoverAnexo_${id}`)) document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden');
             }; reader.readAsDataURL(file);
+            input.value = ''; // Correção do Bug 3
         }
 
         function removerAnexo(id) {
@@ -1028,14 +1060,36 @@
             if(p === "APAGAR") { await gravarHistoricoSalvo([]); let chaves = await localforage.keys(); for(let key of chaves) if(key.startsWith('os_doc_')) await localforage.removeItem(key); iniciarNovaOS(); await carregarHistorico(); atualizarIndicadorArmazenamento(); mostrarToast("Todo o histórico foi apagado."); }
         }
 
-        async function construirPDFBytes() {
+        // Função de controlo da Barra de Progresso Modal
+        function atualizarProgressoPDF(percentual, texto) {
+            const overlay = document.getElementById('pdfProgressOverlay'); const barra = document.getElementById('pdfProgressBar');
+            const txt = document.getElementById('pdfProgressText'); const percent = document.getElementById('pdfProgressPercent');
+            overlay.classList.remove('hidden');
+            barra.style.width = percentual + '%'; txt.textContent = texto; percent.textContent = Math.round(percentual) + '%';
+            if (percentual >= 100) setTimeout(() => overlay.classList.add('hidden'), 800);
+        }
+
+        // Função de compilação alterada para injetar atualizações de progresso
+        async function construirPDFBytes(onProgressCallback) {
             if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios!");
+            
+            const reportProgress = async (pct, txt) => {
+                if(onProgressCallback) { onProgressCallback(pct, txt); await new Promise(r => setTimeout(r, 15)); }
+            };
+            
+            await reportProgress(5, "A iniciar motor PDF...");
+
             const blocosOS = document.querySelectorAll('.os-bloco'); const isServicoInterno = verificarServicoInternoGlobal(); const cb = (eid) => document.getElementById(eid).checked ? "[X]" : "[ ]";
             const { jsPDF } = window.jspdf; const { PDFDocument, rgb, StandardFonts } = window.PDFLib; const masterPdf = await PDFDocument.create();
             let finalW = 0, finalH = 0; if (imgObject && logoImgData) { let ratio = Math.min(45 / imgObject.width, 15 / imgObject.height); finalW = imgObject.width * ratio; finalH = imgObject.height * ratio; }
             const margemTopoSegura = Math.max(35, 10 + finalH + 5);
 
+            await reportProgress(10, "A compilar formulários...");
+
             for (let idx = 0; idx < blocosOS.length; idx++) {
+                let basePct = 10 + (idx / blocosOS.length) * 75; 
+                await reportProgress(basePct, `A processar OS ${idx + 1} de ${blocosOS.length}...`);
+
                 const b = blocosOS[idx]; const id = b.getAttribute('data-id'); const docOS = new jsPDF();
                 docOS.setFont("helvetica", "bold"); docOS.setFontSize(13); docOS.text("RELATÓRIO DE ORDEM DE SERVIÇO", 105, 18, { align: "center" });
                 let cy = Math.max(30, 10 + finalH + 6); docOS.setFontSize(9); docOS.setFont("helvetica", "normal");
@@ -1080,7 +1134,12 @@
                     cy += 12; if (cy > 260) { docOS.addPage(); cy = margemTopoSegura; }
                     docOS.setFont("helvetica", "bold"); docOS.setFontSize(10); docOS.text("EVIDÊNCIAS FOTOGRÁFICAS", 15, cy); cy += 8;
                     let col = 0; let maxRowH = 0; let startY = cy;
+                    
                     for(let f = 0; f < fotoItems.length; f++) {
+                        
+                        let fotoPct = basePct + ((f / fotoItems.length) * (75 / blocosOS.length) * 0.7); // Fotos pesam 70% do tempo de uma OS
+                        await reportProgress(fotoPct, `Anexando foto ${f + 1} de ${fotoItems.length} (OS ${idx + 1})...`);
+
                         if (col === 0 && startY > 195) { docOS.addPage(); startY = margemTopoSegura; }
                         const fItem = fotoItems[f]; const base64 = fItem.querySelector('.foto-b64').value; const desc = fItem.querySelector('.foto-desc').value;
                         const imgProps = await new Promise((resolve) => { const i = new Image(); i.onload = () => resolve({ w: i.width, h: i.height }); i.src = base64; });
@@ -1106,6 +1165,9 @@
                     } catch (e) { console.error('Erro ao ler PDF anexo:', e); }
                 }
             }
+
+            await reportProgress(88, "A gerar secção de assinaturas...");
+
             const docSig = new jsPDF();
             if (imgObject && logoImgData) docSig.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH); let fy = Math.max(35, 10 + finalH + 10);
             docSig.setFont("helvetica", "bold"); docSig.setFontSize(12); docSig.text(isServicoInterno ? "ASSINATURA DO TÉCNICO" : "ASSINATURAS GERAIS", 105, 20, {align:"center"});
@@ -1126,16 +1188,23 @@
                 fy+=20; docSig.setFontSize(8); docSig.setFont("helvetica", "italic"); docSig.text("Obs: a assinatura deste relatório implica na aceitação dos serviços executados e posterior cobrança.", 105, fy, {align: "center"});
             }
             const sigBuffer = docSig.output('arraybuffer'); const sigPdfLib = await PDFDocument.load(sigBuffer); const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices()); sigPages.forEach((p) => masterPdf.addPage(p));
+            
+            await reportProgress(95, "A finalizar compressão e empacotamento...");
+
             const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica); const todasAsPaginas = masterPdf.getPages();
             const textoAuditoria = `Documento gerado eletronicamente por ${document.getElementById('tecnico').value || "Não Identificado"} em ${new Date().toLocaleDateString('pt-PT')}.`;
             todasAsPaginas.forEach((pagina, idx) => { const { width } = pagina.getSize(); pagina.drawText(textoAuditoria, { x: 15, y: 15, size: 6, font: fonteNormal, color: rgb(0.6, 0.6, 0.6) }); const textoPags = `Página ${idx + 1} de ${todasAsPaginas.length}`; pagina.drawText(textoPags, { x: width - fonteNormal.widthOfTextAtSize(textoPags, 8) - 15, y: 15, size: 8, font: fonteNormal, color: rgb(0.5, 0.5, 0.5) }); });
-            return await masterPdf.save();
+            
+            const finalPDF = await masterPdf.save();
+            await reportProgress(100, "Concluído!");
+            return finalPDF;
         }
 
         async function preVisualizarPDF() {
             const btn = document.getElementById('btnPreview'); if (btn.disabled) return;
             try {
-                btn.disabled = true; btn.innerHTML = 'A Renderizar...'; const bytesPdf = await construirPDFBytes();
+                btn.disabled = true;
+                const bytesPdf = await construirPDFBytes(atualizarProgressoPDF);
                 if(objUrlPreview) URL.revokeObjectURL(objUrlPreview); const blob = new Blob([bytesPdf], { type: 'application/pdf' }); objUrlPreview = URL.createObjectURL(blob);
                 const primeiraOs = document.querySelector('.os-bloco');
                 let pOs = 'Rascunho', pCliente = 'Cliente';
@@ -1145,7 +1214,11 @@
                 currentZoom = 1; atualizarZoomPdf();
                 for(let num = 1; num <= pdf.numPages; num++) { const page = await pdf.getPage(num); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); canvas.height = viewport.height; canvas.width = viewport.width; canvas.className = 'mb-4 bg-white shadow-xl border border-gray-300'; await page.render({canvasContext: ctx, viewport: viewport}).promise; wrapper.appendChild(canvas); }
                 atualizarZoomPdf(); document.getElementById('modalPreviewPDF').classList.remove('hidden');
-            } catch (err) { console.error('Erro Pre-visualizar PDF:', err); mostrarToast(err.message || 'Erro ao pre-visualizar.', true); } finally { btn.disabled = false; btn.innerHTML = 'Ver Documento'; }
+            } catch (err) { 
+                console.error('Erro Pre-visualizar PDF:', err); 
+                mostrarToast(err.message || 'Erro ao pre-visualizar.', true);
+                document.getElementById('pdfProgressOverlay').classList.add('hidden'); // Esconde modal se falhar 
+            } finally { btn.disabled = false; }
         }
 
         function fecharPreviewPDF() { document.getElementById('modalPreviewPDF').classList.add('hidden'); }
@@ -1155,7 +1228,9 @@
             try {
                 btn.disabled = true; btnTxt.innerText = "A SALVAR...";
                 if(!await salvarDocumento(false)) { btn.disabled = false; btnTxt.innerText = "📄 GERAR E PARTILHAR (PDF)"; return; }
-                btnTxt.innerText = "A COMPILAR PDF..."; const bytesPdfFinal = await construirPDFBytes();
+                
+                const bytesPdfFinal = await construirPDFBytes(atualizarProgressoPDF);
+                
                 const pId = document.querySelector('.os-bloco').getAttribute('data-id'); const pOs = getVal('osNum', pId).trim(); const pCliente = getVal('cliente', pId).trim();
                 const nomeFicheiro = `${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`;
                 const blob = new Blob([bytesPdfFinal], { type: 'application/pdf' }); const ficheiroPdf = new File([blob], nomeFicheiro, { type: "application/pdf" });
@@ -1164,7 +1239,11 @@
                     try { await navigator.share({ title: `Ordem de Serviço ${pOs}`, text: `Segue em anexo a Ordem de Serviço ${pOs} referente a ${pCliente}.`, files: [ficheiroPdf] }); mostrarToast('Documento partilhado!'); } 
                     catch(err) { console.error('Erro navigator.share:', err); const link = document.createElement('a'); link.href = urlDownloadGerado; link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast('PDF transferido!'); }
                 } else { const link = document.createElement('a'); link.href = urlDownloadGerado; link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast('PDF transferido!'); }
-            } catch (err) { console.error('Erro ao gerar PDF Consolidado:', err); mostrarToast(err.message || 'Erro ao gerar PDF.', true); } finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR E PARTILHAR (PDF)"; }
+            } catch (err) { 
+                console.error('Erro ao gerar PDF Consolidado:', err); 
+                mostrarToast(err.message || 'Erro ao gerar PDF.', true); 
+                document.getElementById('pdfProgressOverlay').classList.add('hidden');
+            } finally { btn.disabled = false; btnTxt.innerText = "📄 GERAR E PARTILHAR (PDF)"; }
         }
     </script>
 </body>
