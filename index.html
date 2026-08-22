@@ -331,12 +331,17 @@
                 <button onclick="adicionarRegistoBancoHoras()" class="w-full py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 shadow-md transition-colors">+ Lançar Registo no Banco</button>
             </div>
 
-            <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3">
-                <div class="flex items-center gap-2">
-                    <h3 class="font-bold text-gray-700">Registos de:</h3>
-                    <input type="month" id="bh_mes_filtro" onchange="renderTabelaBancoHoras()" class="border border-gray-300 rounded p-1.5 text-sm outline-none font-bold text-purple-800">
+            <!-- Filtro e Controlo de Tabela -->
+            <div class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full">
+                    <h3 class="font-bold text-gray-700 whitespace-nowrap">Filtrar Período:</h3>
+                    <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                        <input type="month" id="bh_mes_inicio" onchange="renderTabelaBancoHoras()" class="border border-gray-300 rounded p-1.5 text-sm outline-none font-bold text-purple-800 w-full sm:w-auto">
+                        <span class="text-gray-500 font-bold hidden sm:inline">até</span>
+                        <input type="month" id="bh_mes_fim" onchange="renderTabelaBancoHoras()" class="border border-gray-300 rounded p-1.5 text-sm outline-none font-bold text-purple-800 w-full sm:w-auto mt-2 sm:mt-0">
+                    </div>
                 </div>
-                <button onclick="limparTabelaHoras()" class="text-xs text-red-500 underline font-semibold hover:text-red-700">Apagar Dados do Mês</button>
+                <button onclick="limparTabelaHoras()" class="text-xs text-red-500 underline font-semibold hover:text-red-700 whitespace-nowrap mt-2 sm:mt-0 px-2 py-1 bg-white rounded border border-red-200 shadow-sm">Apagar Dados do Período</button>
             </div>
             
             <div class="overflow-x-auto bg-white border border-gray-200 rounded-lg shadow-sm mb-6">
@@ -356,15 +361,31 @@
                 </table>
             </div>
 
+            <!-- Dash de Saldos Separados -->
             <div class="bg-gray-800 text-white p-5 rounded-lg flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl">
-                <div class="text-center md:text-left">
-                    <p id="label_saldo_total" class="text-gray-400 text-xs font-bold uppercase tracking-wide mb-1">Saldo Geral Acumulado (Todos os Meses)</p>
-                    <div class="flex flex-wrap items-center gap-3 justify-center md:justify-start">
-                        <span id="bh_total_horas" class="text-3xl font-bold font-mono text-white">00:00</span>
-                        <span id="bh_status_saldo" class="px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-200">NEUTRO</span>
+                
+                <div class="flex flex-col gap-4 w-full md:w-auto">
+                    <!-- Saldo Líquido do Filtro -->
+                    <div class="text-center md:text-left p-3 bg-gray-700 rounded-lg border border-gray-600 relative overflow-hidden shadow-inner">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
+                        <p class="text-gray-300 text-xs font-bold uppercase tracking-wide mb-1 ml-2">Saldo Líquido (Período Selecionado)</p>
+                        <div class="flex flex-wrap items-center gap-3 justify-center md:justify-start ml-2">
+                            <span id="bh_periodo_horas" class="text-2xl font-bold font-mono text-white">00:00</span>
+                            <span id="bh_status_periodo" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-500 text-gray-200 uppercase tracking-wider shadow-sm">NEUTRO</span>
+                        </div>
+                    </div>
+
+                    <!-- Saldo Global Acumulado -->
+                    <div class="text-center md:text-left p-2">
+                        <p class="text-gray-400 text-xs font-bold uppercase tracking-wide mb-1">Saldo Global Acumulado (Todos os Meses)</p>
+                        <div class="flex flex-wrap items-center gap-3 justify-center md:justify-start">
+                            <span id="bh_total_horas" class="text-3xl font-bold font-mono text-white">00:00</span>
+                            <span id="bh_status_saldo" class="px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-200 uppercase tracking-wider shadow-sm">NEUTRO</span>
+                        </div>
                     </div>
                 </div>
-                <button onclick="gerarPdfBancoHoras()" class="w-full md:w-auto px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all">
+
+                <button onclick="gerarPdfBancoHoras()" class="w-full md:w-auto h-full px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all">
                     📄 GERAR FOLHA DE PONTO (PDF)
                 </button>
             </div>
@@ -442,7 +463,7 @@
                 reader.onload = async function(e) { await localforage.setItem('oficialLogoApp', e.target.result); await carregarLogoDoArmazenamento(); mostrarToast('Logótipo atualizado!'); }; 
                 reader.readAsDataURL(file);
             }
-            event.target.value = ''; // Correção do Bug 3
+            event.target.value = ''; 
         }
         
         function gerarMetadadosResumo(doc) {
@@ -520,7 +541,7 @@
                     await carregarHistorico(); mostrarToast('Backup importado com sucesso!');
                 } catch(err) { console.error('Erro importarBackup:', err); mostrarToast('Ficheiro inválido.', true); }
             }; reader.readAsText(file);
-            event.target.value = ''; // Correção do Bug 3
+            event.target.value = ''; 
         }
 
         function mostrarToast(mensagem, isErro = false) {
@@ -574,7 +595,6 @@
 
             await carregarLogoDoArmazenamento();
             
-            // Correção Bug 1 (Condição de Corrida)
             const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
             if (typeof SignaturePad !== 'undefined') {
                 if(cTec) padTecnico = new SignaturePad(cTec, signatureOptions); 
@@ -592,7 +612,6 @@
 
             bloquearMultiTouch(cTec); bloquearMultiTouch(cCli); bloquearMultiTouch(cExp);
             
-            // Correção Bug 2 (Rodar Ecrã)
             window.addEventListener('resize', () => {
                 if (document.getElementById('novaOs').classList.contains('active')) {
                     resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente);
@@ -603,7 +622,7 @@
             if(pdfContainer) {
                 pdfContainer.addEventListener('touchstart', function(e) { if (e.touches.length === 2) { 
                     startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); 
-                    if(startDist === 0) startDist = 1; // Correção Bug 4
+                    if(startDist === 0) startDist = 1; 
                     startZoom = currentZoom; 
                 } }, {passive: false});
                 pdfContainer.addEventListener('touchmove', function(e) { if (e.touches.length === 2) { e.preventDefault(); let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); currentZoom = Math.min(Math.max(0.5, startZoom * (dist / startDist)), 4); atualizarZoomPdf(); } }, {passive: false});
@@ -614,7 +633,10 @@
 
             const hHoje = new Date().toISOString().split('T')[0];
             const bhDataEl = document.getElementById('bh_data'); if(bhDataEl) bhDataEl.value = hHoje;
-            const bhMesFiltro = document.getElementById('bh_mes_filtro'); if(bhMesFiltro) bhMesFiltro.value = hHoje.slice(0, 7);
+            
+            const mesAtual = hHoje.slice(0, 7);
+            const bhMesInicio = document.getElementById('bh_mes_inicio'); if(bhMesInicio) bhMesInicio.value = mesAtual;
+            const bhMesFim = document.getElementById('bh_mes_fim'); if(bhMesFim) bhMesFim.value = mesAtual;
             
             const horasSalvas = await localforage.getItem('banco_horas_data');
             if (horasSalvas) registosBancoHoras = horasSalvas;
@@ -629,7 +651,6 @@
         function zoomInPdf() { currentZoom = Math.min(currentZoom + 0.25, 4); atualizarZoomPdf(); }
         function zoomOutPdf() { currentZoom = Math.max(currentZoom - 0.25, 0.5); atualizarZoomPdf(); }
 
-        // Correção Bug 5 (Loop Rascunho)
         async function autoSalvarRascunho() {
             const clientePreenchido = document.querySelector('[id^="cliente_"]')?.value.trim();
             if (!document.getElementById('novaOs').classList.contains('active') || 
@@ -681,7 +702,10 @@
             await localforage.setItem('banco_horas_data', registosBancoHoras);
             
             document.getElementById('bh_cliente').value = ''; document.getElementById('bh_motivo').value = ''; document.getElementById('bh_local').value = '';
-            document.getElementById('bh_mes_filtro').value = data.slice(0, 7);
+            
+            const mesDoRegisto = data.slice(0, 7);
+            document.getElementById('bh_mes_inicio').value = mesDoRegisto;
+            document.getElementById('bh_mes_fim').value = mesDoRegisto;
             
             renderTabelaBancoHoras(); mostrarToast("Registo de Horas Lançado!");
         }
@@ -693,26 +717,53 @@
         }
 
         async function limparTabelaHoras() {
-            const filtroMes = document.getElementById('bh_mes_filtro').value; if(!filtroMes) return;
-            if(confirm(`Tem certeza que deseja apagar TODOS os registos do mês ${filtroMes}?`)) {
-                registosBancoHoras = registosBancoHoras.filter(r => !r.data.startsWith(filtroMes));
-                await localforage.setItem('banco_horas_data', registosBancoHoras); renderTabelaBancoHoras();
+            const inicioVal = document.getElementById('bh_mes_inicio').value;
+            const fimVal = document.getElementById('bh_mes_fim').value;
+            
+            if(!inicioVal || !fimVal) { mostrarToast("Selecione o Mês Inicial e Final.", true); return; }
+            
+            if(confirm(`Tem certeza que deseja apagar TODOS os registos entre ${inicioVal} e ${fimVal}?`)) {
+                registosBancoHoras = registosBancoHoras.filter(r => {
+                    const mesRegisto = r.data.slice(0, 7);
+                    return !(mesRegisto >= inicioVal && mesRegisto <= fimVal); // Mantém apenas o que estiver fora do período
+                });
+                await localforage.setItem('banco_horas_data', registosBancoHoras); 
+                renderTabelaBancoHoras();
+                mostrarToast("Dados do período apagados.");
             }
         }
 
         function renderTabelaBancoHoras() {
-            const tbody = document.getElementById('bh_tabela_registos'); const filtroMes = document.getElementById('bh_mes_filtro').value;
-            const regsFiltrados = filtroMes ? registosBancoHoras.filter(r => r.data.startsWith(filtroMes)) : registosBancoHoras;
+            const tbody = document.getElementById('bh_tabela_registos'); 
+            const inicioVal = document.getElementById('bh_mes_inicio').value;
+            const fimVal = document.getElementById('bh_mes_fim').value;
+            
+            let regsFiltrados = registosBancoHoras;
+            
+            if (inicioVal && fimVal) {
+                regsFiltrados = registosBancoHoras.filter(r => {
+                    const mesRegisto = r.data.slice(0, 7);
+                    return mesRegisto >= inicioVal && mesRegisto <= fimVal;
+                });
+            } else if (inicioVal) {
+                regsFiltrados = registosBancoHoras.filter(r => r.data.slice(0, 7) >= inicioVal);
+            } else if (fimVal) {
+                regsFiltrados = registosBancoHoras.filter(r => r.data.slice(0, 7) <= fimVal);
+            }
             
             let html = '';
-            if(regsFiltrados.length === 0) { html = `<tr><td colspan="5" class="p-4 text-center text-gray-500">Nenhum registo de desvio neste mês.</td></tr>`; } 
-            else {
+            let totalPeriodo = 0;
+            
+            if(regsFiltrados.length === 0) { 
+                html = `<tr><td colspan="5" class="p-4 text-center text-gray-500">Nenhum registo no período selecionado.</td></tr>`; 
+            } else {
                 regsFiltrados.forEach(reg => {
+                    totalPeriodo += reg.balancoFinal;
                     const textoBalanco = formatarMins(reg.balancoFinal);
                     const corBal = reg.balancoFinal > 0 ? 'text-green-600 font-bold' : (reg.balancoFinal < 0 ? 'text-red-600 font-bold' : 'text-gray-500 font-bold');
                     
                     html += `
-                    <tr class="border-b border-purple-100 hover:bg-purple-50 transition-colors">
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td class="p-3 font-semibold text-gray-800">${reg.data.split('-').reverse().join('/')}</td>
                         <td class="p-3"><div class="font-bold text-gray-800">${escapeHTML(reg.cliente || '-')}</div><div class="text-xs text-gray-500">${escapeHTML(reg.local || '-')} | ${escapeHTML(reg.motivo || '-')}</div></td>
                         <td class="p-3 font-mono text-gray-600">${reg.chegada} - ${reg.saida}</td>
@@ -723,30 +774,55 @@
             }
             tbody.innerHTML = html;
             
+            // Calculo Total Global
             let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
             
+            // Render Saldo Período
+            const valPeriodoEl = document.getElementById('bh_periodo_horas'); const badgePeriodo = document.getElementById('bh_status_periodo');
+            valPeriodoEl.textContent = formatarMins(totalPeriodo);
+            
+            if(totalPeriodo > 0) { valPeriodoEl.className = "text-2xl font-bold font-mono text-green-400"; badgePeriodo.textContent = "CRÉDITO"; badgePeriodo.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-900 text-green-300 uppercase tracking-wider shadow-sm"; } 
+            else if (totalPeriodo < 0) { valPeriodoEl.className = "text-2xl font-bold font-mono text-red-400"; badgePeriodo.textContent = "DÉBITO"; badgePeriodo.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-900 text-red-300 uppercase tracking-wider shadow-sm"; } 
+            else { valPeriodoEl.className = "text-2xl font-bold font-mono text-white"; badgePeriodo.textContent = "NEUTRO"; badgePeriodo.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-500 text-gray-200 uppercase tracking-wider shadow-sm"; }
+
+            // Render Saldo Global
             const valTotalEl = document.getElementById('bh_total_horas'); const badgeStatus = document.getElementById('bh_status_saldo');
             valTotalEl.textContent = formatarMins(totalGlobal);
             
-            if(totalGlobal > 0) { valTotalEl.className = "text-3xl font-bold font-mono text-green-400"; badgeStatus.textContent = "CRÉDITO GLOBAL ACUMULADO"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-green-900 text-green-300"; } 
-            else if (totalGlobal < 0) { valTotalEl.className = "text-3xl font-bold font-mono text-red-400"; badgeStatus.textContent = "DÉBITO GLOBAL ACUMULADO"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-300"; } 
-            else { valTotalEl.className = "text-3xl font-bold font-mono text-white"; badgeStatus.textContent = "NEUTRO"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-200"; }
+            if(totalGlobal > 0) { valTotalEl.className = "text-3xl font-bold font-mono text-green-400"; badgeStatus.textContent = "CRÉDITO GLOBAL"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-green-900 text-green-300 uppercase tracking-wider shadow-sm"; } 
+            else if (totalGlobal < 0) { valTotalEl.className = "text-3xl font-bold font-mono text-red-400"; badgeStatus.textContent = "DÉBITO GLOBAL"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-300 uppercase tracking-wider shadow-sm"; } 
+            else { valTotalEl.className = "text-3xl font-bold font-mono text-white"; badgeStatus.textContent = "NEUTRO"; badgeStatus.className = "px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-200 uppercase tracking-wider shadow-sm"; }
         }
 
         function gerarPdfBancoHoras() {
-            const filtroMes = document.getElementById('bh_mes_filtro').value;
-            const regsFiltrados = filtroMes ? registosBancoHoras.filter(r => r.data.startsWith(filtroMes)) : registosBancoHoras;
+            const inicioVal = document.getElementById('bh_mes_inicio').value;
+            const fimVal = document.getElementById('bh_mes_fim').value;
+            let regsFiltrados = registosBancoHoras;
+            let strPeriodo = 'Todos os Registos';
             
-            if(regsFiltrados.length === 0) { mostrarToast("Não há dados no mês selecionado para gerar PDF", true); return; }
+            if (inicioVal && fimVal) {
+                regsFiltrados = registosBancoHoras.filter(r => {
+                    const mesRegisto = r.data.slice(0, 7);
+                    return mesRegisto >= inicioVal && mesRegisto <= fimVal;
+                });
+                strPeriodo = `${inicioVal.split('-').reverse().join('/')} a ${fimVal.split('-').reverse().join('/')}`;
+            }
+            
+            if(regsFiltrados.length === 0) { mostrarToast("Não há dados no período selecionado para gerar PDF", true); return; }
             
             const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape');
             doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("RELATÓRIO DE HORAS EXTRAS E DESVIOS", 148, 15, { align: "center" });
             
             doc.setFontSize(10); doc.setFont("helvetica", "normal"); 
-            doc.text(`Técnico: ${document.getElementById('tecnico').value || 'Não Preenchido'}`, 15, 25); doc.text(`Período Impresso: ${filtroMes || 'Todos'}`, 280, 25, { align: "right" });
+            doc.text(`Técnico: ${document.getElementById('tecnico').value || 'Não Preenchido'}`, 15, 25); 
+            doc.text(`Período Relatório: ${strPeriodo}`, 280, 25, { align: "right" });
             
-            let corpoTabela = []; let totalMensal = 0;
-            regsFiltrados.forEach(reg => { totalMensal += reg.balancoFinal; corpoTabela.push([reg.data.split('-').reverse().join('/'), reg.cliente || '-', reg.motivo || '-', reg.local || '-', `${reg.chegada} - ${reg.saida}`, formatarMins(reg.balancoFinal)]); });
+            let corpoTabela = []; let totalPeriodo = 0;
+            regsFiltrados.forEach(reg => { 
+                totalPeriodo += reg.balancoFinal; 
+                corpoTabela.push([reg.data.split('-').reverse().join('/'), reg.cliente || '-', reg.motivo || '-', reg.local || '-', `${reg.chegada} - ${reg.saida}`, formatarMins(reg.balancoFinal)]); 
+            });
+            
             let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
 
             doc.autoTable({
@@ -755,16 +831,27 @@
                 columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 45 }, 2: { cellWidth: 50 }, 3: { cellWidth: 35 }, 4: { cellWidth: 25 }, 5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } }
             });
             
-            let posY = doc.lastAutoTable.finalY + 15; if (posY > 170) { doc.addPage(); posY = 30; }
-            doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(100, 100, 100); doc.text(`Subtotal Apenas Deste Relatório (${filtroMes || 'Todos'}): ${formatarMins(totalMensal)} HORAS`, 15, posY);
-            posY += 10; doc.setFontSize(14);
+            let posY = doc.lastAutoTable.finalY + 15; if (posY > 160) { doc.addPage(); posY = 30; }
+            
+            // TEXTO DE SALDO DO PERÍODO
+            doc.setFont("helvetica", "bold"); doc.setFontSize(11); 
+            const textSaldoPeriodo = totalPeriodo > 0 ? "SALDO LÍQUIDO DESTE RELATÓRIO (CRÉDITO)" : (totalPeriodo < 0 ? "SALDO LÍQUIDO DESTE RELATÓRIO (DÉBITO)" : "SALDO LÍQUIDO DESTE RELATÓRIO (NEUTRO)");
+            const colorPer = totalPeriodo > 0 ? [22, 163, 74] : (totalPeriodo < 0 ? [220, 38, 38] : [100, 100, 100]);
+            doc.setTextColor(colorPer[0], colorPer[1], colorPer[2]);
+            doc.text(`${textSaldoPeriodo}: ${formatarMins(totalPeriodo)} HORAS`, 15, posY);
+            
+            posY += 10; 
+            // TEXTO DE SALDO GLOBAL ACUMULADO
+            doc.setFontSize(14);
             const textoSaldo = totalGlobal > 0 ? "SALDO GLOBAL ACUMULADO (A RECEBER)" : (totalGlobal < 0 ? "SALDO GLOBAL ACUMULADO (A PAGAR)" : "SALDO GLOBAL ACUMULADO (NEUTRO)");
             const textColor = totalGlobal > 0 ? [22, 163, 74] : (totalGlobal < 0 ? [220, 38, 38] : [100, 100, 100]);
-            
             doc.setTextColor(textColor[0], textColor[1], textColor[2]); doc.text(`${textoSaldo}: ${formatarMins(totalGlobal)} HORAS`, 15, posY);
+            
             doc.setTextColor(0, 0, 0); doc.setFontSize(9); doc.setFont("helvetica", "normal");
-            doc.line(80, posY + 40, 210, posY + 40); doc.text("ASSINATURA DO TÉCNICO / RESPONSÁVEL", 145, posY + 45, {align: "center"});
-            doc.save(`Folha_Extras_${filtroMes || 'Completa'}.pdf`);
+            doc.line(80, posY + 35, 210, posY + 35); doc.text("ASSINATURA DO TÉCNICO / RESPONSÁVEL", 145, posY + 40, {align: "center"});
+            
+            const nomeArquivo = (inicioVal && fimVal) ? `Folha_Extras_${inicioVal}_a_${fimVal}.pdf` : `Folha_Extras_Completa.pdf`;
+            doc.save(nomeArquivo);
         }
 
         function adicionarFoto(id, source) {
@@ -798,7 +885,7 @@
                 if (document.getElementById(`anexoNome_${id}`)) { document.getElementById(`anexoNome_${id}`).textContent = '✅ Anexo salvo: ' + file.name; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); }
                 if (document.getElementById(`btnRemoverAnexo_${id}`)) document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden');
             }; reader.readAsDataURL(file);
-            input.value = ''; // Correção do Bug 3
+            input.value = ''; 
         }
 
         function removerAnexo(id) {
@@ -1060,7 +1147,6 @@
             if(p === "APAGAR") { await gravarHistoricoSalvo([]); let chaves = await localforage.keys(); for(let key of chaves) if(key.startsWith('os_doc_')) await localforage.removeItem(key); iniciarNovaOS(); await carregarHistorico(); atualizarIndicadorArmazenamento(); mostrarToast("Todo o histórico foi apagado."); }
         }
 
-        // Função de controlo da Barra de Progresso Modal
         function atualizarProgressoPDF(percentual, texto) {
             const overlay = document.getElementById('pdfProgressOverlay'); const barra = document.getElementById('pdfProgressBar');
             const txt = document.getElementById('pdfProgressText'); const percent = document.getElementById('pdfProgressPercent');
@@ -1069,7 +1155,6 @@
             if (percentual >= 100) setTimeout(() => overlay.classList.add('hidden'), 800);
         }
 
-        // Função de compilação alterada para injetar atualizações de progresso
         async function construirPDFBytes(onProgressCallback) {
             if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios!");
             
@@ -1137,7 +1222,7 @@
                     
                     for(let f = 0; f < fotoItems.length; f++) {
                         
-                        let fotoPct = basePct + ((f / fotoItems.length) * (75 / blocosOS.length) * 0.7); // Fotos pesam 70% do tempo de uma OS
+                        let fotoPct = basePct + ((f / fotoItems.length) * (75 / blocosOS.length) * 0.7); 
                         await reportProgress(fotoPct, `Anexando foto ${f + 1} de ${fotoItems.length} (OS ${idx + 1})...`);
 
                         if (col === 0 && startY > 195) { docOS.addPage(); startY = margemTopoSegura; }
@@ -1217,7 +1302,7 @@
             } catch (err) { 
                 console.error('Erro Pre-visualizar PDF:', err); 
                 mostrarToast(err.message || 'Erro ao pre-visualizar.', true);
-                document.getElementById('pdfProgressOverlay').classList.add('hidden'); // Esconde modal se falhar 
+                document.getElementById('pdfProgressOverlay').classList.add('hidden'); 
             } finally { btn.disabled = false; }
         }
 
