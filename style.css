@@ -1,14 +1,31 @@
 /* style.css */
-body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; }
-.canvas-container { border: 2px dashed #93c5fd; border-radius: 0.5rem; background-color: #ffffff; overflow: hidden; touch-action: none; position: relative; cursor: pointer; }
-canvas.sig-canvas { touch-action: none; width: 100%; height: 100%; display: block; }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
-.locked-input { pointer-events: none !important; opacity: 0.6 !important; background-color: #e5e7eb !important; }
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: #f1f1f1; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-.error-field { border-color: #ef4444 !important; border-width: 2px !important; background-color: #fef2f2 !important; }
-.loader { border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 32px; height: 32px; animation: spin 1s linear infinite; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+/* Tailwind já cuida da maior parte do design, aqui ficam apenas regras base e exceções */
+
+.hide-scrollbar::-webkit-scrollbar { 
+    display: none; 
+}
+.hide-scrollbar { 
+    -ms-overflow-style: none; 
+    scrollbar-width: none; 
+}
+
+.sig-canvas {
+    width: 100%;
+    height: 100%;
+    touch-action: none; 
+}
+
+/* Loader customizado para a barra de progresso do PDF */
+.loader {
+    border: 4px solid rgba(255, 255, 255, 0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border-left-color: #3b82f6; /* Azul Tailwind */
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin { 
+    0% { transform: rotate(0deg); } 
+    100% { transform: rotate(360deg); } 
+}
