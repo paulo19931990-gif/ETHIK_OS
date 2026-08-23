@@ -10,10 +10,10 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <!-- Link para o MANIFESTO FÍSICO e ÍCONES LOCAIS -->
+    <!-- Link para o MANIFESTO e ÍCONE VERDE COM 'OS' -->
     <link rel="manifest" href="./manifest.json">
-    <link rel="icon" type="image/png" href="./icone.png">
-    <link rel="apple-touch-icon" href="./icone.png">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='110' fill='%2310B981'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial, sans-serif' font-weight='900' font-size='230' fill='%23FFFFFF'%3EOS%3C/text%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" href="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='110' fill='%2310B981'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial, sans-serif' font-weight='900' font-size='230' fill='%23FFFFFF'%3EOS%3C/text%3E%3C/svg%3E">
     
     <meta name="theme-color" content="#111827">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -36,7 +36,7 @@
                     registration.unregister(); 
                 }
             });
-            navigator.serviceWorker.register('./sw.js?v=22');
+            navigator.serviceWorker.register('./sw.js?v=23');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -46,7 +46,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=22">
+    <link rel="stylesheet" href="style.css?v=23">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -187,7 +187,7 @@
                         <span class="text-[10px] text-gray-400 font-medium uppercase tracking-widest leading-tight">Enterprise</span>
                     </div>
                 </div>
-                <!-- Botão Instalar App visível em todos os ecrãs (telemóvel e PC) -->
+                <!-- Botão Instalar App -->
                 <button onclick="acionarInstalacaoApp()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-xs font-semibold">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                     Instalar App
@@ -425,6 +425,6 @@
 
     </div>
 
-    <script src="app.js?v=22"></script>
+    <script src="app.js?v=23"></script>
 </body>
 </html>
