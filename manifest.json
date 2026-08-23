@@ -7,9 +7,9 @@
   "theme_color": "#111827",
   "icons": [
     {
-      "src": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='110' fill='%2310B981'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial, sans-serif' font-weight='900' font-size='230' fill='%23FFFFFF'%3EOS%3C/text%3E%3C/svg%3E",
+      "src": "https://cdn-icons-png.flaticon.com/512/3094/3094890.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
