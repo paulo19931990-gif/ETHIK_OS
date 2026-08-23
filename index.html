@@ -289,10 +289,16 @@
 
         <!-- ABA: BANCO DE HORAS -->
         <div id="bancoHoras" class="tab-content bg-white p-6 rounded-lg shadow-lg">
-            <div class="flex justify-between items-center mb-6 border-b pb-2">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-2 gap-4">
                 <h2 class="text-xl sm:text-2xl font-bold text-purple-700">Lançamento de Desvios (Extra/Falta)</h2>
             </div>
             
+            <!-- Guardar Nome do Técnico para PDF -->
+            <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
+                <label class="block text-sm font-bold text-gray-700 mb-1">O seu nome (Aparecerá automaticamente no PDF das Horas)</label>
+                <input type="text" id="bh_nome_tecnico" onchange="salvarNomeTecnicoBh()" placeholder="Ex: João Técnico" class="w-full sm:w-1/2 border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500">
+            </div>
+
             <div class="bg-purple-50 p-4 rounded-lg border border-purple-200 mb-6 shadow-sm">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div><label class="block text-sm font-bold text-purple-900 mb-1">Data</label><input type="date" id="bh_data" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-purple-500"></div>
@@ -586,6 +592,11 @@
             canvas.addEventListener('pointerdown', blockSecondary, { capture: true, passive: false }); canvas.addEventListener('pointermove', blockSecondary, { capture: true, passive: false }); canvas.addEventListener('touchstart', blockSecondary, { capture: true, passive: false }); canvas.addEventListener('touchmove', blockSecondary, { capture: true, passive: false });
         }
 
+        async function salvarNomeTecnicoBh() {
+            const val = document.getElementById('bh_nome_tecnico').value;
+            await localforage.setItem('bh_nome_tecnico_salvo', val);
+        }
+
         document.addEventListener("DOMContentLoaded", async () => {
             const manifest = { name: "Multi-OS Pro", short_name: "Multi-OS", start_url: "./index.html", display: "standalone", background_color: "#f3f4f6", theme_color: "#1f2937", icons: [{ src: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2310b981' width='100' height='100'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>OS</text></svg>", sizes: "192x192", type: "image/svg+xml" }] };
             const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
@@ -638,6 +649,9 @@
             const bhMesInicio = document.getElementById('bh_mes_inicio'); if(bhMesInicio) bhMesInicio.value = mesAtual;
             const bhMesFim = document.getElementById('bh_mes_fim'); if(bhMesFim) bhMesFim.value = mesAtual;
             
+            const nomeSalvo = await localforage.getItem('bh_nome_tecnico_salvo');
+            if (nomeSalvo && document.getElementById('bh_nome_tecnico')) document.getElementById('bh_nome_tecnico').value = nomeSalvo;
+
             const horasSalvas = await localforage.getItem('banco_horas_data');
             if (horasSalvas) registosBancoHoras = horasSalvas;
         });
@@ -725,7 +739,7 @@
             if(confirm(`Tem certeza que deseja apagar TODOS os registos entre ${inicioVal} e ${fimVal}?`)) {
                 registosBancoHoras = registosBancoHoras.filter(r => {
                     const mesRegisto = r.data.slice(0, 7);
-                    return !(mesRegisto >= inicioVal && mesRegisto <= fimVal); // Mantém apenas o que estiver fora do período
+                    return !(mesRegisto >= inicioVal && mesRegisto <= fimVal); 
                 });
                 await localforage.setItem('banco_horas_data', registosBancoHoras); 
                 renderTabelaBancoHoras();
@@ -811,11 +825,22 @@
             if(regsFiltrados.length === 0) { mostrarToast("Não há dados no período selecionado para gerar PDF", true); return; }
             
             const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape');
+            let startYHeader = 25;
+
+            // Insere o Logo no PDF do Banco de Horas
+            if (imgObject && logoImgData) {
+                let ratio = Math.min(45 / imgObject.width, 15 / imgObject.height);
+                let finalW = imgObject.width * ratio;
+                let finalH = imgObject.height * ratio;
+                doc.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH);
+                startYHeader = Math.max(25, 10 + finalH + 5);
+            }
+
             doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("RELATÓRIO DE HORAS EXTRAS E DESVIOS", 148, 15, { align: "center" });
             
             doc.setFontSize(10); doc.setFont("helvetica", "normal"); 
-            doc.text(`Técnico: ${document.getElementById('tecnico').value || 'Não Preenchido'}`, 15, 25); 
-            doc.text(`Período Relatório: ${strPeriodo}`, 280, 25, { align: "right" });
+            doc.text(`Técnico: ${document.getElementById('bh_nome_tecnico').value || 'Não Preenchido'}`, 15, startYHeader); 
+            doc.text(`Período Relatório: ${strPeriodo}`, 280, startYHeader, { align: "right" });
             
             let corpoTabela = []; let totalPeriodo = 0;
             regsFiltrados.forEach(reg => { 
@@ -826,7 +851,7 @@
             let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
 
             doc.autoTable({
-                startY: 30, head: [['Data', 'Cliente', 'Motivo', 'Local', 'Período', 'Total Extra / Falta']],
+                startY: startYHeader + 5, head: [['Data', 'Cliente', 'Motivo', 'Local', 'Período', 'Total Extra / Falta']],
                 body: corpoTabela, theme: 'grid', headStyles: { fillColor: [126, 34, 206] }, styles: { fontSize: 9, cellPadding: 3 },
                 columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 45 }, 2: { cellWidth: 50 }, 3: { cellWidth: 35 }, 4: { cellWidth: 25 }, 5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } }
             });
@@ -904,7 +929,7 @@
                 const id = b.getAttribute('data-id');
                 let ordem = {
                     cliente: getVal('cliente', id), osNum: getVal('osNum', id), equipamento: getVal('equipamento', id), modelo: getVal('modelo', id), serie: getVal('serie', id), tag: getVal('tag', id),
-                    cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbSemGarantia: document.getElementById(`cbSemGarantia_${id}`).checked,
+                    cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked,
                     descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
                     dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id), anexoBase64: document.getElementById(`anexoBase64_${id}`) ? document.getElementById(`anexoBase64_${id}`).value : null, anexoNome: document.getElementById(`anexoNome_${id}`) ? document.getElementById(`anexoNome_${id}`).textContent : null, fotos: []
                 };
@@ -931,11 +956,27 @@
         function atualizarVisibilidadeCamposPorBloco() {
             document.querySelectorAll('.os-bloco').forEach(b => {
                 const id = b.getAttribute('data-id');
-                const isInterno = document.getElementById(`cbServInterno_${id}`).checked; const isInstalacao = document.getElementById(`cbInstalacao_${id}`).checked;
-                const containerHoras = document.getElementById(`containerHoras_${id}`); const containerDias = document.getElementById(`containerDias_${id}`); const containerReagendar = document.getElementById(`containerReagendar_${id}`);
-                if (isInstalacao) { if(containerHoras) containerHoras.style.display = 'grid'; if(containerDias) containerDias.style.display = 'grid'; calcDias(id); if(containerReagendar) containerReagendar.style.display = 'block'; } 
-                else if (isInterno) { if(containerHoras) containerHoras.style.display = 'none'; if(containerDias) containerDias.style.display = 'grid'; calcDias(id); if(containerReagendar) containerReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true; } 
-                else { if(containerHoras) containerHoras.style.display = 'grid'; if(containerDias) containerDias.style.display = 'none'; if(containerReagendar) containerReagendar.style.display = 'block'; }
+                const isInterno = document.getElementById(`cbServInterno_${id}`).checked; 
+                const isMontagem = document.getElementById(`cbMontagemSala_${id}`).checked;
+                
+                const containerHoras = document.getElementById(`containerHoras_${id}`); 
+                const containerDias = document.getElementById(`containerDias_${id}`); 
+                const containerReagendar = document.getElementById(`containerReagendar_${id}`);
+                
+                if (isMontagem) { 
+                    if(containerHoras) containerHoras.style.display = 'none'; 
+                    if(containerDias) containerDias.style.display = 'grid'; calcDias(id); 
+                    if(containerReagendar) containerReagendar.style.display = 'block'; 
+                } else if (isInterno) { 
+                    if(containerHoras) containerHoras.style.display = 'none'; 
+                    if(containerDias) containerDias.style.display = 'grid'; calcDias(id); 
+                    if(containerReagendar) containerReagendar.style.display = 'none'; 
+                    if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true; 
+                } else { 
+                    if(containerHoras) containerHoras.style.display = 'grid'; 
+                    if(containerDias) containerDias.style.display = 'none'; 
+                    if(containerReagendar) containerReagendar.style.display = 'block'; 
+                }
             });
             atualizarVisibilidadeClienteGeral();
         }
@@ -1017,7 +1058,7 @@
                         <label class="flex items-center gap-1"><input type="checkbox" id="cbServInterno_${id}" checked onchange="atualizarVisibilidadeCamposPorBloco()"> Serv. Interno</label>
                         <label class="flex items-center gap-1"><input type="checkbox" id="cbServExterno_${id}" onchange="atualizarVisibilidadeCamposPorBloco()"> Serv. Externo</label>
                         <label class="flex items-center gap-1"><input type="checkbox" id="cbGarantia_${id}"> Garantia</label>
-                        <label class="flex items-center gap-1"><input type="checkbox" id="cbSemGarantia_${id}" checked> Sem Garantia</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" id="cbMontagemSala_${id}" onchange="atualizarVisibilidadeCamposPorBloco()"> Montagem Sala</label>
                     </div>
                 </div>
                 <div class="mb-4"><label class="block text-sm font-semibold mb-1">Descrição do Serviço</label><textarea id="descricao_${id}" rows="3" class="w-full border border-gray-300 p-2.5 rounded bg-white outline-none focus:border-blue-500"></textarea></div>
@@ -1065,7 +1106,14 @@
 
             if (dados) {
                 ['cliente','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
-                ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','cbSemGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
+                
+                ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
+                
+                // Migração suave caso hajam backups antigos com "cbSemGarantia"
+                if(document.getElementById(`cbMontagemSala_${id}`)) {
+                    document.getElementById(`cbMontagemSala_${id}`).checked = dados.cbMontagemSala !== undefined ? !!dados.cbMontagemSala : !!dados.cbSemGarantia;
+                }
+
                 if (dados.anexoBase64) { document.getElementById(`anexoBase64_${id}`).value = dados.anexoBase64; document.getElementById(`anexoNome_${id}`).textContent = dados.anexoNome || '✅ Anexo salvo'; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
                 if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { const pContainer = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-1"; row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-16 border border-gray-300 p-1 rounded text-xs q bg-white"><input type="text" placeholder="Nome" value="${escapeHTML(p.n)}" class="flex-1 border border-gray-300 p-1 rounded text-xs n bg-white"><input type="text" placeholder="Cód" value="${escapeHTML(p.c)}" class="w-24 border border-gray-300 p-1 rounded text-xs c bg-white">`; pContainer.appendChild(row); }); else { addPecaRow(id); addPecaRow(id); }
                 if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
@@ -1182,7 +1230,7 @@
                 cy += 6; docOS.text(`EQUIP: ${truncarStr(getVal('equipamento', id), 45)}`, 15, cy); docOS.text(`MODELO: ${truncarStr(getVal('modelo', id), 25)}`, 140, cy);
                 cy += 6; docOS.text(`SÉRIE: ${truncarStr(getVal('serie', id), 45)}`, 15, cy); docOS.text(`TAG: ${truncarStr(getVal('tag', id), 25)}`, 140, cy);
                 cy += 8; docOS.text(`${cb('cbOrcamento_'+id)} ORÇAMENTO`, 15, cy); docOS.text(`${cb('cbInstalacao_'+id)} INSTALAÇÃO`, 65, cy); docOS.text(`${cb('cbServInterno_'+id)} SERV INTERNO`, 115, cy);
-                cy += 6; docOS.text(`${cb('cbGarantia_'+id)} GARANTIA`, 15, cy); docOS.text(`${cb('cbSemGarantia_'+id)} SEM GARANTIA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
+                cy += 6; docOS.text(`${cb('cbGarantia_'+id)} GARANTIA`, 15, cy); docOS.text(`${cb('cbMontagemSala_'+id)} MONTAGEM SALA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
                 cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal"); cy += 4; 
                 docOS.autoTable({ startY: cy, margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, body: [[getVal('descricao', id) || ' ']], theme: 'plain', styles: { lineWidth: 0.2, lineColor: [150, 150, 150], textColor: [0, 0, 0], fontSize: 9, cellPadding: 4, valign: 'middle' } });
                 cy = docOS.lastAutoTable.finalY + 8; if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
@@ -1197,20 +1245,21 @@
                 cy+=4; let obsText = `OBS: ${getVal('liberacaoObs', id)}`; let obsLines = docOS.splitTextToSize(obsText, 180); docOS.text(obsLines, 15, cy); cy += (obsLines.length * 4) + 2;
                 docOS.text(`Status: ${cb('stOk_'+id)} OK  ${cb('stRes_'+id)} RESTRIÇÃO`, 15, cy); 
                 
-                const isItemInstalacao = document.getElementById(`cbInstalacao_${id}`).checked; const isItemInterno = document.getElementById(`cbServInterno_${id}`).checked;
+                const isItemMontagem = document.getElementById(`cbMontagemSala_${id}`).checked; 
+                const isItemInterno = document.getElementById(`cbServInterno_${id}`).checked;
                 
                 if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
 
-                if (isItemInstalacao) {
+                if (isItemMontagem) {
                     docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy);
                     cy+=8; docOS.text(`DATA INÍCIO: ${getVal('dtInicio', id).split('-').reverse().join('/')}`, 15, cy); docOS.text(`DATA FINAL: ${getVal('dtFim', id).split('-').reverse().join('/')}`, 75, cy); docOS.text(`TOTAL DE DIAS: ${getVal('totalDias', id)}`, 140, cy);
-                    cy+=6; docOS.text(`DATA (HORAS): ${getVal('dt', id).split('-').reverse().join('/')}`, 15, cy); docOS.text(`CHEGADA: ${getVal('hc', id)}`, 75, cy); docOS.text(`SAÍDA: ${getVal('hs', id)}`, 140, cy);
-                    cy+=6; docOS.text(`TOTAL HORAS: ${getVal('th', id)}`, 15, cy);
                 } else if (!isItemInterno) {
+                    // Instalação, Externo, Orçamento, Garantia (Usam formato de Horas)
                     docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy);
                     cy+=10; docOS.text(`DATA: ${getVal('dt', id).split('-').reverse().join('/')}`, 15, cy); docOS.text(`CHEGADA: ${getVal('hc', id)}`, 75, cy); docOS.text(`SAÍDA: ${getVal('hs', id)}`, 140, cy);
                     cy+=6; docOS.text(`TOTAL HORAS: ${getVal('th', id)}`, 15, cy);
                 } else {
+                    // Serviço Interno puro (Dias, sem reagendar)
                     cy+=10; docOS.text(`DATA INÍCIO: ${getVal('dtInicio', id).split('-').reverse().join('/')}`, 15, cy); docOS.text(`DATA FINAL: ${getVal('dtFim', id).split('-').reverse().join('/')}`, 75, cy); docOS.text(`TOTAL DE DIAS: ${getVal('totalDias', id)}`, 140, cy);
                 }
 
