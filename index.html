@@ -29,9 +29,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
     <script>
-        // REGISTO DO SERVICE WORKER (MODO HÍBRIDO OFFLINE/ONLINE)
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js?v=26');
+            navigator.serviceWorker.register('./sw.js?v=27');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -41,7 +40,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=26">
+    <link rel="stylesheet" href="style.css?v=27">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -353,7 +352,7 @@
                             </div>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Período de Desvio</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Período de Desvio (Opcional p/ Horário)</label>
                             <div class="flex items-center gap-3">
                                 <input type="time" id="bh_chegada" class="w-full border border-gray-300 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-center">
                                 <span class="text-gray-400 font-bold">às</span>
@@ -362,9 +361,15 @@
                         </div>
                     </div>
                     
-                    <button onclick="adicionarRegistoBancoHoras()" class="w-full py-4 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900 shadow-md transition-colors text-sm uppercase tracking-wide">
-                        Adicionar ao Banco
-                    </button>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                        <button onclick="adicionarRegistoBancoHoras()" class="py-4 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900 shadow-md transition-colors text-sm uppercase tracking-wide">
+                            Adicionar por Horário
+                        </button>
+                        <button onclick="adicionarDiaCompletoBancoHoras()" class="py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            Adicionar Dia Completo (Auto)
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -420,6 +425,6 @@
 
     </div>
 
-    <script src="app.js?v=26"></script>
+    <script src="app.js?v=27"></script>
 </body>
 </html>
