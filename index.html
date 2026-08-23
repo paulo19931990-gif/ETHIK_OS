@@ -5,7 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Multi-OS Pro</title>
     
-    <link rel="manifest" id="dynamicManifest">
+    <!-- Metatags Anti-Cache Poderosas -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
+    <!-- Link para o MANIFESTO FÍSICO que resolve o ícone genérico -->
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#111827">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -20,13 +26,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
     <script>
-        // Limpa qualquer Service Worker preso para forçar a atualização imediata
+        // ROTINA PARA DESTRUIR O SERVICE WORKER ANTIGO NO TELEMÓVEL
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function(registrations) {
                 for(let registration of registrations) {
-                    registration.unregister();
+                    registration.unregister(); 
                 }
             });
+            navigator.serviceWorker.register('./sw.js?v=21');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -36,7 +43,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -415,6 +422,6 @@
 
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=21"></script>
 </body>
 </html>
