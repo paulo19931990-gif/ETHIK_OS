@@ -59,7 +59,7 @@ async function carregarLogoDoArmazenamento() {
                 imgObject = img;
                 if(document.getElementById('headerLogo')) document.getElementById('headerLogo').src = logoSalvo;
                 if(document.getElementById('headerLogoContainer')) document.getElementById('headerLogoContainer').classList.remove('hidden');
-                if(document.getElementById('configLogoCard')) document.getElementById('configLogoCard').style.display = 'none';
+                // Ocultar card antigo removido para permitir trocar sempre
             };
         }
     } catch(e) { console.error('Erro logo:', e); }
@@ -162,6 +162,15 @@ function importarBackupJSON(event) {
         } catch(err) { mostrarToast('Ficheiro inválido.', true); }
     }; reader.readAsText(file); event.target.value = ''; 
 }
+async function limparTodoHistorico() {
+    if(!confirm("Tem a certeza que deseja APAGAR TODO o histórico de O.S.? Esta ação não pode ser desfeita e os ficheiros não exportados serão perdidos.")) return;
+    let historicoMeta = await obterHistoricoSalvo();
+    for (let meta of historicoMeta) { await localforage.removeItem(`os_doc_${meta.id}`); }
+    await localforage.removeItem('historico_os');
+    if (documentoAtualId) iniciarNovaOS();
+    await carregarHistorico();
+    mostrarToast('Todo o histórico foi apagado.');
+}
 
 function atualizarZoomPdf() {
     const wrapper = document.getElementById('pdfPagesWrapper'); const container = document.getElementById('pdfRenderContainer'); if (!wrapper || !container) return;
@@ -214,6 +223,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
     }
     
+    // Bloquear MultiTouch em todos os Canvas criados
+    bloquearMultiTouch(cTec);
+    bloquearMultiTouch(cCli);
+    bloquearMultiTouch(cExp);
+    
     const observer = new ResizeObserver(() => {
         if (!document.getElementById('novaOs').classList.contains('hidden')) { resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente); }
     });
@@ -234,7 +248,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco(); verificarRascunhoPendente();
 
-    // Sistema de Auto-Save Inteligente (Debounce 3 segundos) em vez do setInterval cego de 10s
+    // Sistema de Auto-Save Inteligente (Debounce 3 segundos)
     const formOs = document.getElementById('osForm');
     if(formOs) {
         formOs.addEventListener('input', () => {
@@ -545,11 +559,11 @@ function adicionarBlocoOS(dados = null) {
 
             <div>
                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">Equipamento</h4>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="col-span-2"><label class="block text-xs font-bold text-gray-600 mb-1">Máquina / Equip.</label><input type="text" id="equipamento_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
-                    <div><label class="block text-xs font-bold text-gray-600 mb-1">Modelo</label><input type="text" id="modelo_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
-                    <div><label class="block text-xs font-bold text-gray-600 mb-1">Série / Tag</label><input type="text" id="serie_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
-                    <input type="hidden" id="tag_${id}">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="col-span-1 md:col-span-2"><label class="block text-xs font-bold text-gray-600 mb-1">Máquina / Equip.</label><input type="text" id="equipamento_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
+                    <div class="col-span-1 md:col-span-2"><label class="block text-xs font-bold text-gray-600 mb-1">Modelo</label><input type="text" id="modelo_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
+                    <div><label class="block text-xs font-bold text-gray-600 mb-1">Nº Série</label><input type="text" id="serie_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
+                    <div><label class="block text-xs font-bold text-gray-600 mb-1">Tag</label><input type="text" id="tag_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
                 </div>
             </div>
 
@@ -644,16 +658,25 @@ function adicionarBlocoOS(dados = null) {
         ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
         if(document.getElementById(`cbMontagemSala_${id}`)) document.getElementById(`cbMontagemSala_${id}`).checked = dados.cbMontagemSala !== undefined ? !!dados.cbMontagemSala : !!dados.cbSemGarantia;
         if (dados.anexoBase64) { document.getElementById(`anexoBase64_${id}`).value = dados.anexoBase64; document.getElementById(`anexoNome_${id}`).innerHTML = `<svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Anexado`; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
-        if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { const pContainer = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-2"; row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-16 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Designação da Peça" value="${escapeHTML(p.n)}" class="flex-1 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Cód/Ref" value="${escapeHTML(p.c)}" class="w-24 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">`; pContainer.appendChild(row); }); else { addPecaRow(id); addPecaRow(id); }
+        if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { 
+            const pContainer = document.getElementById(`pecasContainer_${id}`); 
+            const row = document.createElement('div'); 
+            row.className = "grid grid-cols-4 sm:grid-cols-12 gap-2 peca-row-item mb-2"; 
+            row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="col-span-1 sm:col-span-2 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Designação da Peça" value="${escapeHTML(p.n)}" class="col-span-3 sm:col-span-7 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Cód/Ref" value="${escapeHTML(p.c)}" class="col-span-4 sm:col-span-3 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">`; 
+            pContainer.appendChild(row); 
+        }); else { addPecaRow(id); addPecaRow(id); }
         if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
     } else { addPecaRow(id); addPecaRow(id); }
     atualizarVisibilidadeCamposPorBloco();
 }
 
 function addPecaRow(id) {
-    const container = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); row.className = "flex gap-2 peca-row-item mb-2";
-    row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Designação da Peça" class="flex-1 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Cód/Ref" class="w-24 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">`; container.appendChild(row);
+    const container = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); 
+    row.className = "grid grid-cols-4 sm:grid-cols-12 gap-2 peca-row-item mb-2";
+    row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="col-span-1 sm:col-span-2 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Designação da Peça" class="col-span-3 sm:col-span-7 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Cód/Ref" class="col-span-4 sm:col-span-3 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">`; 
+    container.appendChild(row);
 }
+
 function calcH(id) {
     const hc = document.getElementById(`hc_${id}`).value, hs = document.getElementById(`hs_${id}`).value;
     if(hc && hs) { let [ch, cm] = hc.split(':').map(Number), [sh, sm] = hs.split(':').map(Number); let t = (sh*60+sm) - (ch*60+cm); const elTh = document.getElementById(`th_${id}`); if(t < 0) t += 1440; elTh.value = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`; }
