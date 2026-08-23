@@ -1,5 +1,5 @@
 /* sw.js */
-const CACHE_NAME = 'multi-os-pro-v15';
+const CACHE_NAME = 'multi-os-pro-v16';
 const urlsToCache = [
     './',
     './index.html',
