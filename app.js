@@ -17,7 +17,7 @@ let contadorOS = 0;
 
 let mediaStreamCamera = null;
 let osIdAtualFoto = null;
-let timeoutRascunho = null; // Variável para o debounce do auto-save
+let timeoutRascunho = null;
 
 const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
 const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
@@ -59,7 +59,6 @@ async function carregarLogoDoArmazenamento() {
                 imgObject = img;
                 if(document.getElementById('headerLogo')) document.getElementById('headerLogo').src = logoSalvo;
                 if(document.getElementById('headerLogoContainer')) document.getElementById('headerLogoContainer').classList.remove('hidden');
-                // Ocultar card antigo removido para permitir trocar sempre
             };
         }
     } catch(e) { console.error('Erro logo:', e); }
@@ -201,7 +200,6 @@ async function salvarNomeTecnicoBh() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-    // Injeção dinâmica do manifest.json
     const manifestJSON = {
         "name": "Multi-OS Pro",
         "short_name": "Multi-OS",
@@ -223,7 +221,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(cExp) padExpandido = new SignaturePad(cExp, signatureOptions);
     }
     
-    // Bloquear MultiTouch em todos os Canvas criados
     bloquearMultiTouch(cTec);
     bloquearMultiTouch(cCli);
     bloquearMultiTouch(cExp);
@@ -248,7 +245,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco(); verificarRascunhoPendente();
 
-    // Sistema de Auto-Save Inteligente (Debounce 3 segundos)
     const formOs = document.getElementById('osForm');
     if(formOs) {
         formOs.addEventListener('input', () => {
@@ -790,7 +786,7 @@ async function construirPDFBytes(onProgressCallback) {
                 const imgProps = await new Promise((resolve) => { 
                     const i = new Image(); 
                     i.onload = () => resolve({ w: i.width, h: i.height }); 
-                    i.onerror = () => resolve({ w: 1, h: 1 }); // Previne bloqueio caso o base64 esteja corrompido
+                    i.onerror = () => resolve({ w: 1, h: 1 });
                     i.src = base64; 
                 });
                 let renderW = 85; let renderH = (imgProps.h / imgProps.w) * 85; if (renderH > 65) { renderH = 65; renderW = (imgProps.w / imgProps.h) * 65; }
