@@ -388,10 +388,8 @@ function renderTabelaBancoHoras() {
     }
     tbody.innerHTML = html;
     
-    // Calculo Total Global
     let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
     
-    // Render Saldo Período
     const valPeriodoEl = document.getElementById('bh_periodo_horas'); const badgePeriodo = document.getElementById('bh_status_periodo');
     valPeriodoEl.textContent = formatarMins(totalPeriodo);
     
@@ -399,7 +397,6 @@ function renderTabelaBancoHoras() {
     else if (totalPeriodo < 0) { valPeriodoEl.className = "text-2xl font-bold font-mono text-red-400"; badgePeriodo.textContent = "DÉBITO"; badgePeriodo.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-900 text-red-300 uppercase tracking-wider shadow-sm"; } 
     else { valPeriodoEl.className = "text-2xl font-bold font-mono text-white"; badgePeriodo.textContent = "NEUTRO"; badgePeriodo.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-500 text-gray-200 uppercase tracking-wider shadow-sm"; }
 
-    // Render Saldo Global
     const valTotalEl = document.getElementById('bh_total_horas'); const badgeStatus = document.getElementById('bh_status_saldo');
     valTotalEl.textContent = formatarMins(totalGlobal);
     
@@ -476,22 +473,57 @@ function gerarPdfBancoHoras() {
     doc.save(nomeArquivo);
 }
 
+// CORREÇÃO DE MEMÓRIA (OOM) PARA FOTOS NO TELEMÓVEL
 function adicionarFoto(id, source) {
     const fotosAtuais = document.querySelectorAll(`#fotosContainer_${id} .foto-item`).length;
     if (fotosAtuais >= 20) { mostrarToast('Limite de 20 fotos por OS atingido.', true); return; }
-    const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; if (source === 'camera') input.capture = 'environment'; 
+    
+    const input = document.createElement('input'); 
+    input.type = 'file'; 
+    input.accept = 'image/*'; 
+    if (source === 'camera') input.capture = 'environment'; 
+    
     input.onchange = (e) => {
-        const file = e.target.files[0]; if(!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            const img = new Image(); img.onload = () => {
-                const canvas = document.createElement('canvas'); const MAX_WIDTH = 1000; const MAX_HEIGHT = 1000; let width = img.width; let height = img.height;
-                if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-                canvas.width = width; canvas.height = height; const ctx = canvas.getContext("2d"); ctx.drawImage(img, 0, 0, width, height);
-                renderFotoItem(id, canvas.toDataURL("image/jpeg", 0.7), '');
-            }; img.src = ev.target.result;
-        }; reader.readAsDataURL(file);
-    }; input.click();
+        const file = e.target.files[0]; 
+        if(!file) return;
+
+        // Usa Object URL em vez de carregar o ficheiro bruto gigante na RAM
+        const objectUrl = URL.createObjectURL(file);
+        const img = new Image(); 
+        
+        img.onload = () => {
+            URL.revokeObjectURL(objectUrl); // Liberta a memória do ponteiro
+            
+            const canvas = document.createElement('canvas'); 
+            const MAX_WIDTH = 800; // Otimizado para poupar RAM no telemóvel
+            const MAX_HEIGHT = 800; 
+            let width = img.width; 
+            let height = img.height;
+            
+            if (width > height) { 
+                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } 
+            } else { 
+                if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } 
+            }
+            
+            canvas.width = width; 
+            canvas.height = height; 
+            const ctx = canvas.getContext("2d"); 
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Converte para JPEG comprimido (60% qualidade)
+            const compressedBase64 = canvas.toDataURL("image/jpeg", 0.6);
+            renderFotoItem(id, compressedBase64, '');
+        }; 
+        
+        img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            mostrarToast('Erro ao carregar a imagem da câmara.', true);
+        };
+        
+        img.src = objectUrl;
+    }; 
+    input.click();
 }
 
 function renderFotoItem(id, base64, desc) {
