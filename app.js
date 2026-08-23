@@ -477,7 +477,7 @@ function gerarPdfBancoHoras() {
     doc.save(nomeArquivo);
 }
 
-// CÂMARA INTERNA DIRETA (Evita crash por falta de memória do Android)
+// CÂMARA INTERNA DIRETA + CORREÇÃO DE LIMPEZA DE INPUT DA GALERIA
 function adicionarFoto(id, source) {
     const fotosAtuais = document.querySelectorAll(`#fotosContainer_${id} .foto-item`).length;
     if (fotosAtuais >= 20) { mostrarToast('Limite de 20 fotos por OS atingido.', true); return; }
@@ -493,6 +493,7 @@ function adicionarFoto(id, source) {
             const file = e.target.files[0]; 
             if(!file) return;
             processarFicheiroImagem(id, file);
+            e.target.value = ''; // <--- Limpeza aplicada para permitir re-selecionar o ficheiro
         }; 
         input.click();
     }
@@ -514,6 +515,7 @@ async function abrirCameraInterna() {
         console.error('Erro ao aceder à câmara:', err);
         mostrarToast('Não foi possível aceder à câmara. Verifique as permissões.', true);
         fecharCameraInterna();
+        document.getElementById('modalCameraInterna').classList.add('hidden'); // <--- Garante que fecha visualmente o modal preto em caso de negação
     }
 }
 
