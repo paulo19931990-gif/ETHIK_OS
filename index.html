@@ -35,6 +35,22 @@
         <span id="toastMsg">Mensagem</span>
     </div>
 
+    <!-- Modal da Câmara Interna (Evita que o Android feche a app) -->
+    <div id="modalCameraInterna" class="hidden fixed inset-0 bg-black z-[110] flex flex-col items-center justify-center">
+        <div class="relative w-full h-full flex flex-col justify-between p-4">
+            <div class="flex justify-between items-center text-white z-10 bg-gray-900/80 p-3 rounded-lg backdrop-blur-sm">
+                <h3 class="font-bold text-lg">Tirar Fotografia</h3>
+                <button onclick="fecharCameraInterna()" class="text-white text-2xl font-bold px-3 py-1 bg-red-600 rounded-lg">✕</button>
+            </div>
+            <div class="flex-1 relative flex items-center justify-center overflow-hidden my-2">
+                <video id="videoCamera" autoplay playsinline class="max-h-full max-w-full object-contain rounded-xl"></video>
+            </div>
+            <div class="flex justify-center p-4 z-10 bg-gray-900/80 rounded-lg backdrop-blur-sm">
+                <button type="button" onclick="tirarFotoDoVideo()" class="bg-emerald-500 text-white rounded-full w-20 h-20 flex items-center justify-center shadow-2xl font-bold text-2xl border-4 border-white active:scale-95 transition-transform">📸</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal de Progresso do PDF -->
     <div id="pdfProgressOverlay" class="hidden fixed inset-0 bg-gray-900 bg-opacity-95 z-[100] flex flex-col items-center justify-center px-4 backdrop-blur-sm transition-opacity">
         <div class="bg-gray-800 p-8 rounded-2xl max-w-sm w-full shadow-[0_0_40px_rgba(16,185,129,0.2)] border border-gray-700 text-center relative overflow-hidden">
