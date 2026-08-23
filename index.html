@@ -6,7 +6,7 @@
     <title>Multi-OS Pro</title>
     
     <link rel="manifest" id="dynamicManifest">
-    <meta name="theme-color" content="#1f2937">
+    <meta name="theme-color" content="#111827">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
@@ -29,12 +29,12 @@
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
-    <div id="toast" class="fixed bottom-4 right-4 text-white px-6 py-3 rounded-lg shadow-xl transition-all duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-3">
+    <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 sm:translate-x-0 sm:left-auto sm:right-6 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-[200] flex items-center gap-3 font-semibold bg-gray-900">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         <span id="toastMsg" class="font-medium text-sm">Mensagem</span>
     </div>
 
-    <!-- Modais (Câmara, PDF Progress, Segurança, etc mantêm-se iguais na lógica, mas com design mais limpo) -->
+    <!-- MODAL: Câmara Interna -->
     <div id="modalCameraInterna" class="hidden fixed inset-0 bg-black z-[110] flex flex-col items-center justify-center">
         <div class="relative w-full h-full flex flex-col justify-between p-4 pb-8">
             <div class="flex justify-between items-center text-white z-10 p-3">
@@ -55,14 +55,108 @@
         </div>
     </div>
 
-    <!-- Restantes modais ocultos por brevidade visual (códigos mantidos originais, adicione-os aqui) -->
-    <!-- [MANTENHA OS SEUS MODAIS AQUI: pdfProgressOverlay, modalCriarPin, modalDigitarPin, modalExportar, modalPreviewPDF, modalAssinaturaExpandida] -->
+    <!-- MODAL: Assinatura Expandida (Corrigido e Restaurado) -->
+    <div id="modalAssinaturaExpandida" class="hidden fixed inset-0 bg-gray-900/95 backdrop-blur-sm z-[100] flex flex-col">
+        <div class="p-4 text-white flex justify-between items-center shrink-0 z-10">
+            <h3 id="tituloModalAssinatura" class="font-bold text-lg">Área de Assinatura</h3>
+            <button onclick="fecharModalAssinatura()" class="text-gray-300 hover:text-white p-2 bg-gray-800 rounded-full"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="flex-1 bg-white relative w-full h-full overflow-hidden mx-4 rounded-xl">
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                <span class="text-3xl font-bold text-gray-300 select-none">Assine Aqui</span>
+            </div>
+            <canvas id="canvasExpandido" class="absolute inset-0 w-full h-full touch-none"></canvas>
+        </div>
+        <div class="p-4 pb-8 sm:pb-4 flex justify-between gap-3 shrink-0 z-10">
+            <button onclick="limparPadExpandido()" class="px-4 py-4 bg-gray-800 text-white font-bold rounded-xl w-1/3 text-sm uppercase tracking-wider">Limpar</button>
+            <button onclick="confirmarAssinaturaExpandida()" class="px-4 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl w-2/3 text-sm uppercase tracking-wider shadow-lg transition-colors">Confirmar Assinatura</button>
+        </div>
+    </div>
+
+    <!-- MODAL: Progresso PDF (Restaurado) -->
+    <div id="pdfProgressOverlay" class="hidden fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center px-4 backdrop-blur-md transition-opacity">
+        <div class="bg-gray-800 p-8 rounded-3xl max-w-sm w-full shadow-2xl border border-gray-700 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-blue-500"></div>
+            <div class="mb-6 mt-2">
+                <div class="loader mx-auto mb-5"></div>
+                <h3 class="text-xl font-bold text-white mb-2">A Gerar Documento PDF</h3>
+                <p id="pdfProgressText" class="text-sm text-blue-400 font-semibold h-5">A preparar ficheiros...</p>
+            </div>
+            <div class="w-full bg-gray-900 rounded-full h-4 mb-2 overflow-hidden shadow-inner border border-gray-700 relative">
+                <div id="pdfProgressBar" class="bg-blue-500 h-full rounded-full transition-all duration-200" style="width: 0%"></div>
+            </div>
+            <p id="pdfProgressPercent" class="text-right text-sm font-bold text-white mb-6">0%</p>
+            <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-700">
+                <p class="text-xs text-gray-400 italic">⏳ Aguarde, não feche a aplicação.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Pré-visualização do PDF (Restaurado) -->
+    <div id="modalPreviewPDF" class="hidden fixed inset-0 bg-gray-900/95 flex items-center justify-center z-[90] p-2 sm:p-4 backdrop-blur-sm">
+        <div class="bg-gray-100 rounded-2xl w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden relative border border-gray-700">
+            <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-white shrink-0 z-10 shadow-sm">
+                <h3 class="text-base font-bold text-gray-800">Visualização</h3>
+                <div class="flex gap-2">
+                    <a id="linkPreviewExt" target="_blank" class="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-blue-100 flex items-center gap-1 border border-blue-200">Download</a>
+                    <button onclick="fecharPreviewPDF()" class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-gray-900">Fechar</button>
+                </div>
+            </div>
+            <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-900 text-white rounded-full shadow-2xl px-2 py-1.5 z-20 gap-2 border border-gray-700">
+                <button onclick="zoomOutPdf()" class="w-10 h-10 flex items-center justify-center hover:bg-gray-700 rounded-full text-xl font-bold transition-all">−</button>
+                <span id="zoomText" class="text-xs font-bold w-12 text-center tracking-wider">100%</span>
+                <button onclick="zoomInPdf()" class="w-10 h-10 flex items-center justify-center hover:bg-gray-700 rounded-full text-xl font-bold transition-all">+</button>
+            </div>
+            <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-200 overflow-auto touch-pan-x touch-pan-y relative p-4">
+                <div id="pdfPagesWrapper" class="w-full pb-24 mx-auto flex flex-col items-center gap-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: PIN Segurança - Criar (Restaurado) -->
+    <div id="modalCriarPin" class="hidden fixed inset-0 bg-gray-900/90 flex items-center justify-center z-[100] px-4 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
+            <h3 class="text-2xl font-black mb-2 text-gray-900">Segurança</h3>
+            <p class="mb-6 text-sm text-gray-500 font-medium">Crie um PIN numérico (mín. 4 dígitos) para proteger o acesso aos dados dos clientes.</p>
+            <input type="password" id="inputNovoPin" inputmode="numeric" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" placeholder="••••">
+            <button onclick="salvarNovoPin()" class="w-full py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 uppercase tracking-wider text-sm shadow-lg">Guardar PIN</button>
+            <button onclick="document.getElementById('modalCriarPin').classList.add('hidden')" class="w-full mt-3 py-3 text-gray-500 font-bold text-sm uppercase tracking-wider">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- MODAL: PIN Segurança - Digitar (Restaurado) -->
+    <div id="modalDigitarPin" class="hidden fixed inset-0 bg-gray-900/90 flex items-center justify-center z-[100] px-4 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
+            <h3 class="text-2xl font-black mb-2 text-gray-900 flex items-center gap-2"><svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg> Acesso Restrito</h3>
+            <p class="mb-6 text-sm text-gray-500 font-medium">Digite o seu PIN para aceder ao Histórico.</p>
+            <input type="password" id="inputDigitarPin" inputmode="numeric" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" placeholder="••••">
+            <button onclick="validarPinAcesso()" class="w-full py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 uppercase tracking-wider text-sm shadow-lg">Desbloquear</button>
+            <button onclick="document.getElementById('modalDigitarPin').classList.add('hidden')" class="w-full mt-3 py-3 text-gray-500 font-bold text-sm uppercase tracking-wider">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- MODAL: Exportar Backup (Restaurado) -->
+    <div id="modalExportar" class="hidden fixed inset-0 bg-gray-900/90 flex items-center justify-center z-[100] px-4 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
+            <h3 class="text-2xl font-black mb-2 text-gray-900">Salvar Backup</h3>
+            <p class="mb-6 text-sm text-gray-500 font-medium">Baixe um ficheiro com todas as OS e Horas.</p>
+            <div class="mb-6">
+                <div class="flex rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden bg-gray-50 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 transition-all">
+                    <input type="text" id="inputNomeBackup" class="flex-1 w-full px-4 py-3 outline-none text-sm font-medium bg-transparent" placeholder="Ex: meu_backup">
+                    <span class="inline-flex items-center px-4 text-gray-400 text-sm border-l border-gray-200 font-mono font-bold">.json</span>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="fecharModalExportar()" class="w-1/3 py-4 text-gray-500 font-bold text-sm uppercase tracking-wider bg-gray-100 rounded-xl hover:bg-gray-200">Cancelar</button>
+                <button onclick="confirmarExportacao()" class="w-2/3 py-4 bg-gray-900 text-white font-bold rounded-xl hover:bg-black uppercase tracking-wider text-sm shadow-lg">Baixar Ficheiro</button>
+            </div>
+        </div>
+    </div>
     
     <!-- BARRA DE NAVEGAÇÃO ENTERPRISE -->
     <nav class="bg-gray-900 text-white shadow-lg sticky top-0 z-40">
         <div class="max-w-5xl mx-auto px-4">
             <div class="flex justify-between items-center h-16">
-                <!-- Logo & Brand -->
                 <div class="flex items-center gap-3">
                     <div id="headerLogoContainer" class="hidden bg-white p-1 rounded-md shadow-sm">
                         <img id="headerLogo" src="" alt="Logo" class="h-8 object-contain" />
@@ -72,15 +166,11 @@
                         <span class="text-[10px] text-gray-400 font-medium uppercase tracking-widest leading-tight">Enterprise</span>
                     </div>
                 </div>
-                
-                <!-- Install Button (Secondary) -->
                 <button onclick="acionarInstalacaoApp()" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-xs font-semibold">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                     Instalar App
                 </button>
             </div>
-
-            <!-- Tab Navigation (Active State Managed by JS) -->
             <div class="flex overflow-x-auto hide-scrollbar border-t border-gray-800">
                 <button id="btnNavNovaOs" onclick="switchTab('novaOs')" class="nav-btn active flex-1 flex justify-center items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 border-blue-500 text-white bg-gray-800/50 transition-all whitespace-nowrap">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
@@ -101,7 +191,7 @@
     <div class="max-w-5xl mx-auto p-4 md:p-6 mt-2 mb-24">
         
         <!-- ABA: NOVA OS -->
-        <div id="novaOs" class="tab-content block">
+        <div id="novaOs" class="tab-content">
             <div id="configLogoCard" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 flex items-center justify-between gap-4">
                 <div>
                     <h3 class="font-bold text-sm text-gray-800">Logótipo da Empresa</h3>
@@ -116,10 +206,9 @@
             <form id="osForm" class="space-y-6" onsubmit="event.preventDefault();">
                 <div class="flex justify-between items-center px-1">
                     <h2 class="text-2xl font-black text-gray-900 tracking-tight">Relatório de Serviço</h2>
-                    <span id="autoSaveIndicator" class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100"></span>
+                    <span id="autoSaveIndicator" class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100"></span>
                 </div>
 
-                <!-- Aqui entram os blocos gerados dinamicamente via JS -->
                 <div id="listaOrdensServico" class="space-y-6"></div>
 
                 <button type="button" id="btnAddOs" onclick="adicionarBlocoOS()" class="w-full py-4 bg-white text-blue-600 border-2 border-dashed border-blue-300 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm flex items-center justify-center gap-2">
@@ -127,7 +216,6 @@
                     Adicionar Nova O.S. ao Documento
                 </button>
 
-                <!-- Área de Conclusão e Assinaturas -->
                 <div class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden mt-8">
                     <div class="bg-gray-900 p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div>
@@ -142,26 +230,24 @@
 
                     <div class="p-5 space-y-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <!-- Assinatura Técnico -->
                             <div class="space-y-3">
                                 <label class="block text-sm font-bold text-gray-700 uppercase tracking-wide">Técnico Responsável</label>
-                                <input type="text" id="tecnico" placeholder="Seu nome" class="w-full border border-gray-300 p-3 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium">
+                                <input type="text" id="tecnico" placeholder="Seu nome" class="w-full border border-gray-300 p-3 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium">
                                 <div class="canvas-container w-full h-32 relative bg-white border border-gray-300 rounded-lg shadow-sm" onclick="abrirModalAssinatura('tecnico')">
                                     <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
                                         <span class="text-sm font-semibold text-gray-500">Tocar para Assinar</span>
                                     </div>
-                                    <canvas id="canvasTecnico" class="sig-canvas pointer-events-none z-10 relative"></canvas>
+                                    <canvas id="canvasTecnico" class="sig-canvas pointer-events-none z-10 relative w-full h-full"></canvas>
                                 </div>
                                 <div class="flex justify-end"><button type="button" onclick="limparAssinatura(padTecnico, false)" class="text-gray-500 hover:text-red-600 text-xs font-bold uppercase tracking-wider transition-colors">Limpar</button></div>
                             </div>
 
-                            <!-- Assinatura Cliente -->
                             <div id="secaoClienteContainer" class="space-y-3 relative">
                                 <div class="flex justify-between items-end">
                                     <label class="block text-sm font-bold text-gray-700 uppercase tracking-wide">Assinatura do Cliente</label>
-                                    <span id="lockStatus" class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider bg-emerald-50 px-2 py-1 rounded">Editável</span>
+                                    <span id="lockStatus" class="text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-1 rounded">Editável</span>
                                 </div>
-                                <input type="text" id="nomeClienteFinal" placeholder="Nome do Cliente" class="w-full border border-gray-300 p-3 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium">
+                                <input type="text" id="nomeClienteFinal" placeholder="Nome do Cliente" class="w-full border border-gray-300 p-3 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium">
                                 <div class="grid grid-cols-2 gap-3">
                                     <input type="text" id="cargo" placeholder="Cargo" class="w-full border border-gray-300 p-2.5 rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all">
                                     <input type="text" id="setor" placeholder="Setor" class="w-full border border-gray-300 p-2.5 rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all">
@@ -170,7 +256,7 @@
                                     <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
                                         <span class="text-sm font-semibold text-gray-500">Tocar para Assinar</span>
                                     </div>
-                                    <canvas id="canvasCliente" class="sig-canvas pointer-events-none z-10 relative"></canvas>
+                                    <canvas id="canvasCliente" class="sig-canvas pointer-events-none z-10 relative w-full h-full"></canvas>
                                 </div>
                                 <div class="flex justify-end"><button type="button" onclick="limparAssinatura(padCliente, true)" class="text-gray-500 hover:text-red-600 text-xs font-bold uppercase tracking-wider transition-colors">Limpar</button></div>
                             </div>
@@ -178,7 +264,6 @@
                     </div>
                 </div>
 
-                <!-- Botões de Ação Final -->
                 <div class="flex flex-col sm:flex-row gap-4 pt-4">
                     <button type="button" id="btnSalvarOs" onclick="salvarDocumento(false)" class="w-full sm:w-1/3 bg-gray-800 hover:bg-gray-900 text-white font-bold py-4 rounded-xl text-sm uppercase tracking-wide shadow-lg transition-colors flex items-center justify-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
@@ -194,15 +279,29 @@
 
         <!-- ABA: HISTÓRICO -->
         <div id="historico" class="tab-content hidden">
-            <!-- Estrutura simplificada, lógica mantida. O JS renderiza a lista. -->
             <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
                 <h2 class="text-2xl font-black text-gray-900 tracking-tight">Histórico</h2>
-                <div class="flex gap-2 w-full sm:w-auto">
+                <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="Buscar cliente..." class="w-full sm:w-48 px-4 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                    <button onclick="iniciarNovaOS()" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold shadow hover:bg-blue-700 shrink-0">Novo</button>
+                    <button onclick="abrirModalExportar()" class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold shadow-sm hover:bg-gray-900 text-sm">Backup</button>
+                    <label class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-bold shadow-sm hover:bg-gray-300 text-sm cursor-pointer">
+                        Importar <input type="file" accept=".json" onchange="importarBackupJSON(event)" class="hidden">
+                    </label>
                 </div>
             </div>
-            <!-- O JS injeta o conteúdo em #historicoList com as novas classes Tailwind -->
+            
+            <div class="mb-6 bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex justify-between items-center gap-4">
+                <div class="flex-1">
+                    <div class="flex justify-between text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+                        <span>Armazenamento Dispositivo</span>
+                        <span id="storage-text">Calculando...</span>
+                    </div>
+                    <div class="w-full bg-gray-100 rounded-full h-2">
+                        <div id="storage-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
             <div id="historicoList" class="space-y-4"></div>
         </div>
 
@@ -218,47 +317,23 @@
 
                 <div class="p-5 space-y-5">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Data</label>
-                            <input type="date" id="bh_data" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Cliente / Empresa</label>
-                            <input type="text" id="bh_cliente" placeholder="Onde foi o serviço?" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                        </div>
+                        <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Data</label><input type="date" id="bh_data" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono"></div>
+                        <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Cliente / Empresa</label><input type="text" id="bh_cliente" placeholder="Onde foi o serviço?" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium"></div>
                     </div>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Motivo / Atividade</label>
-                            <input type="text" id="bh_motivo" placeholder="Ex: Preventiva fora de hora" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Local / Obra</label>
-                            <input type="text" id="bh_local" placeholder="Ex: Ibiúna - SP" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                        </div>
+                        <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Motivo / Atividade</label><input type="text" id="bh_motivo" placeholder="Ex: Preventiva fora de hora" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium"></div>
+                        <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Local / Obra</label><input type="text" id="bh_local" placeholder="Ex: Ibiúna - SP" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium"></div>
                     </div>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Natureza do Registo</label>
-                            <!-- Segmented Control Enterprise -->
                             <div class="flex p-1 bg-gray-200/80 rounded-lg">
-                                <label class="flex-1 text-center cursor-pointer relative">
-                                    <input type="radio" name="bh_tipo" id="bh_tipo_credito" checked class="peer sr-only">
-                                    <div class="py-2.5 rounded-md text-sm font-bold text-gray-500 peer-checked:bg-emerald-500 peer-checked:text-white peer-checked:shadow-sm transition-all z-10 relative">
-                                        + Crédito (Extra)
-                                    </div>
-                                </label>
-                                <label class="flex-1 text-center cursor-pointer relative">
-                                    <input type="radio" name="bh_tipo" id="bh_tipo_debito" class="peer sr-only">
-                                    <div class="py-2.5 rounded-md text-sm font-bold text-gray-500 peer-checked:bg-red-500 peer-checked:text-white peer-checked:shadow-sm transition-all z-10 relative">
-                                        - Débito (Falta)
-                                    </div>
-                                </label>
+                                <label class="flex-1 text-center cursor-pointer relative"><input type="radio" name="bh_tipo" id="bh_tipo_credito" checked class="peer sr-only"><div class="py-2.5 rounded-md text-sm font-bold text-gray-500 peer-checked:bg-blue-600 peer-checked:text-white transition-all">+ Crédito (Extra)</div></label>
+                                <label class="flex-1 text-center cursor-pointer relative"><input type="radio" name="bh_tipo" id="bh_tipo_debito" class="peer sr-only"><div class="py-2.5 rounded-md text-sm font-bold text-gray-500 peer-checked:bg-red-500 peer-checked:text-white transition-all">- Débito (Falta)</div></label>
                             </div>
                         </div>
-                        
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Período de Desvio</label>
                             <div class="flex items-center gap-3">
@@ -275,7 +350,6 @@
                 </div>
             </div>
 
-            <!-- Tabela & Filtros -->
             <div class="flex justify-between items-center mb-4 px-1">
                 <div class="flex items-center gap-3">
                     <input type="month" id="bh_mes_inicio" onchange="renderTabelaBancoHoras()" class="border-none bg-white shadow-sm rounded-lg p-2 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
@@ -293,32 +367,25 @@
                         <tr class="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider font-bold">
                             <th class="p-4">Data</th>
                             <th class="p-4">Registo</th>
-                            <th class="p-4">Horário</th>
+                            <th class="p-4 text-center">Horário</th>
                             <th class="p-4 text-right">Saldo</th>
                             <th class="p-4 text-center w-16">Ação</th>
                         </tr>
                     </thead>
-                    <tbody id="bh_tabela_registos" class="divide-y divide-gray-100 text-sm">
-                        <!-- JS injects here -->
-                    </tbody>
+                    <tbody id="bh_tabela_registos" class="divide-y divide-gray-100 text-sm"></tbody>
                 </table>
             </div>
 
-            <!-- Dashboard de Saldos Enterprise -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <!-- Cartão Mensal -->
-                <div class="bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center border border-gray-800 shadow-lg">
-                    <div class="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 rounded-bl-full pointer-events-none"></div>
-                    <span class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Saldo do Período</span>
+                <div class="bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center shadow-lg">
+                    <span class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Saldo do Filtro</span>
                     <div class="flex items-baseline gap-3">
                         <span id="bh_periodo_horas" class="text-4xl font-black font-mono text-white tracking-tight">00:00</span>
                         <span id="bh_status_periodo" class="px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest">NEUTRO</span>
                     </div>
                 </div>
 
-                <!-- Cartão Global Glow -->
                 <div id="card_global_glow" class="bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center border border-gray-800 shadow-lg transition-all duration-500">
-                    <div class="absolute top-0 right-0 w-32 h-32 bg-white opacity-5 rounded-bl-full pointer-events-none"></div>
                     <span class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Saldo Global Acumulado</span>
                     <div class="flex items-baseline gap-3">
                         <span id="bh_total_horas" class="text-4xl font-black font-mono text-white tracking-tight">00:00</span>
