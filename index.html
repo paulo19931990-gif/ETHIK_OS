@@ -10,8 +10,11 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <!-- Link para o MANIFESTO FÍSICO que resolve o ícone genérico -->
+    <!-- Link para o MANIFESTO FÍSICO e ÍCONES LOCAIS -->
     <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/png" href="./icone.png">
+    <link rel="apple-touch-icon" href="./icone.png">
+    
     <meta name="theme-color" content="#111827">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -33,7 +36,7 @@
                     registration.unregister(); 
                 }
             });
-            navigator.serviceWorker.register('./sw.js?v=21');
+            navigator.serviceWorker.register('./sw.js?v=22');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -43,7 +46,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=21">
+    <link rel="stylesheet" href="style.css?v=22">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -422,6 +425,6 @@
 
     </div>
 
-    <script src="app.js?v=21"></script>
+    <script src="app.js?v=22"></script>
 </body>
 </html>
