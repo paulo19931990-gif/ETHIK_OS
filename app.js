@@ -1,5 +1,9 @@
 /* app.js */
-localforage.config({ name: 'MultiOSProDB', storeName: 'app_data', description: 'Armazenamento offline robusto para Multi-OS Pro' });
+if (typeof localforage !== 'undefined') {
+    localforage.config({ name: 'MultiOSProDB', storeName: 'app_data', description: 'Armazenamento offline robusto' });
+} else {
+    console.warn("Aviso: localforage indisponível. Cache offline falhou.");
+}
 
 let documentoAtualId = Date.now().toString();
 let logoImgData = null, logoImgFormat = 'PNG', imgObject = null;
@@ -13,6 +17,7 @@ let contadorOS = 0;
 
 let mediaStreamCamera = null;
 let osIdAtualFoto = null;
+let timeoutRascunho = null; // Variável para o debounce do auto-save
 
 const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
 const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
@@ -102,7 +107,6 @@ function mostrarToast(mensagem, isErro = false) {
     setTimeout(() => toast.classList.add('opacity-0', 'translate-y-4'), 4000); 
 }
 
-// RESTAURADAS: FUNÇÕES DE PIN E SEGURANÇA NO HISTÓRICO
 async function abrirAbaHistoricoSegura() {
     let pinSalvo = await localforage.getItem('app_pin');
     if (!pinSalvo) { document.getElementById('inputNovoPin').value = ''; document.getElementById('modalCriarPin').classList.remove('hidden'); } 
@@ -122,7 +126,6 @@ async function validarPinAcesso() {
     } else { mostrarToast("PIN Incorreto!", true); document.getElementById('inputDigitarPin').value = ''; }
 }
 
-// RESTAURADAS: FUNÇÕES DE EXPORTAR / IMPORTAR
 function abrirModalExportar() { document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`; document.getElementById('modalExportar').classList.remove('hidden'); }
 function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
 async function confirmarExportacao() {
@@ -160,7 +163,6 @@ function importarBackupJSON(event) {
     }; reader.readAsText(file); event.target.value = ''; 
 }
 
-// RESTAURADAS: FUNÇÕES DE ZOOM DO PDF
 function atualizarZoomPdf() {
     const wrapper = document.getElementById('pdfPagesWrapper'); const container = document.getElementById('pdfRenderContainer'); if (!wrapper || !container) return;
     const isDesktop = window.innerWidth > 600; const paddingLateral = isDesktop ? 48 : 16; const safeWidth = container.clientWidth - paddingLateral;
@@ -190,6 +192,18 @@ async function salvarNomeTecnicoBh() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+    // Injeção dinâmica do manifest.json
+    const manifestJSON = {
+        "name": "Multi-OS Pro",
+        "short_name": "Multi-OS",
+        "start_url": "./index.html",
+        "display": "standalone",
+        "background_color": "#111827",
+        "theme_color": "#111827",
+        "icons": [{"src": "https://cdn-icons-png.flaticon.com/512/323/323354.png", "sizes": "512x512", "type": "image/png"}]
+    };
+    document.getElementById('dynamicManifest').href = URL.createObjectURL(new Blob([JSON.stringify(manifestJSON)], {type: 'application/json'}));
+
     if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => {}));
     await carregarLogoDoArmazenamento();
     
@@ -219,7 +233,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco(); verificarRascunhoPendente();
-    setInterval(autoSalvarRascunho, 10000);
+
+    // Sistema de Auto-Save Inteligente (Debounce 3 segundos) em vez do setInterval cego de 10s
+    const formOs = document.getElementById('osForm');
+    if(formOs) {
+        formOs.addEventListener('input', () => {
+            clearTimeout(timeoutRascunho);
+            timeoutRascunho = setTimeout(autoSalvarRascunho, 3000);
+        });
+    }
 
     const hHoje = new Date().toISOString().split('T')[0]; const bhDataEl = document.getElementById('bh_data'); if(bhDataEl) bhDataEl.value = hHoje;
     const mesAtual = hHoje.slice(0, 7); const bhMesInicio = document.getElementById('bh_mes_inicio'); if(bhMesInicio) bhMesInicio.value = mesAtual; const bhMesFim = document.getElementById('bh_mes_fim'); if(bhMesFim) bhMesFim.value = mesAtual;
@@ -385,7 +407,7 @@ function renderFotoItem(id, base64, desc) {
         <input type="hidden" class="foto-b64" value="${base64}">
         <div class="relative w-full aspect-video bg-gray-100">
             <img src="${base64}" class="w-full h-full object-cover">
-            <button type="button" onclick="this.closest('.foto-item').remove()" class="absolute top-2 right-2 bg-white/90 text-red-600 p-2 rounded-lg shadow backdrop-blur-sm hover:bg-red-50 transition-colors">
+            <button type="button" onclick="this.closest('.foto-item').remove(); autoSalvarRascunho();" class="absolute top-2 right-2 bg-white/90 text-red-600 p-2 rounded-lg shadow backdrop-blur-sm hover:bg-red-50 transition-colors">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
             </button>
         </div>
@@ -393,6 +415,7 @@ function renderFotoItem(id, base64, desc) {
             <textarea rows="2" placeholder="Descreva a foto (obrigatório para PDF)..." class="foto-desc w-full border-0 p-1 text-xs outline-none resize-none bg-transparent focus:ring-0 text-gray-700 font-medium">${escapeHTML(desc)}</textarea>
         </div>`;
     document.getElementById(`fotosContainer_${id}`).appendChild(div);
+    autoSalvarRascunho();
 }
 
 function processarAnexo(id, input) {
@@ -401,6 +424,7 @@ function processarAnexo(id, input) {
         if (document.getElementById(`anexoBase64_${id}`)) document.getElementById(`anexoBase64_${id}`).value = e.target.result;
         if (document.getElementById(`anexoNome_${id}`)) { document.getElementById(`anexoNome_${id}`).innerHTML = `<svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Anexado: ${file.name}`; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); }
         if (document.getElementById(`btnRemoverAnexo_${id}`)) document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden');
+        autoSalvarRascunho();
     }; reader.readAsDataURL(file); input.value = ''; 
 }
 function removerAnexo(id) {
@@ -408,6 +432,7 @@ function removerAnexo(id) {
     if (document.getElementById(`anexoBase64_${id}`)) document.getElementById(`anexoBase64_${id}`).value = '';
     if (document.getElementById(`anexoNome_${id}`)) { document.getElementById(`anexoNome_${id}`).innerHTML = ''; document.getElementById(`anexoNome_${id}`).classList.add('hidden'); }
     if (document.getElementById(`btnRemoverAnexo_${id}`)) document.getElementById(`btnRemoverAnexo_${id}`).classList.add('hidden');
+    autoSalvarRascunho();
 }
 
 function recolherDadosDoFormulario() {
@@ -459,6 +484,7 @@ function limparPadExpandido() { if(padExpandido) padExpandido.clear(); }
 function confirmarAssinaturaExpandida() {
     const padDestino = alvoAssinaturaAtual === 'tecnico' ? padTecnico : padCliente; const canvasEl = alvoAssinaturaAtual === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
     if (padExpandido && padDestino) { resizeCanvasSeguro(canvasEl, padDestino, true); if (padExpandido.isEmpty()) { padDestino.clear(); if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao(); } else { padDestino.clear(); padDestino.fromDataURL(padExpandido.toDataURL()); if (alvoAssinaturaAtual === 'cliente') bloquearEdicao(); } } fecharModalAssinatura();
+    autoSalvarRascunho();
 }
 
 function toggleLock(locked) {
@@ -467,7 +493,7 @@ function toggleLock(locked) {
 }
 function bloquearEdicao() { toggleLock(true); mostrarToast('Formulário selado pela Assinatura do Cliente.'); }
 function desbloquearEdicao() { toggleLock(false); }
-function limparAssinatura(pad, isCliente = false) { if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); }
+function limparAssinatura(pad, isCliente = false) { if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); autoSalvarRascunho(); }
 
 async function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden')); 
@@ -491,7 +517,7 @@ function iniciarNovaOS() {
 
 function adicionarBlocoOS(dados = null) {
     contadorOS++; const id = contadorOS; const dataHoje = new Date().toISOString().split('T')[0]; const osManualValue = dados && dados.osNum ? dados.osNum : '';
-    const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco();" class="text-gray-400 hover:text-red-600 transition-colors p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
+    const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco(); autoSalvarRascunho();" class="text-gray-400 hover:text-red-600 transition-colors p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
     const bloco = document.createElement('div'); bloco.className = "os-bloco bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden relative transition-all"; bloco.setAttribute('data-id', id);
     
     const genToggle = (tid, label, checked, oc = false) => `
@@ -738,7 +764,12 @@ async function construirPDFBytes(onProgressCallback) {
                 let fotoPct = basePct + ((f / fotoItems.length) * (75 / blocosOS.length) * 0.7); await reportProgress(fotoPct, `Anexando foto ${f + 1} de ${fotoItems.length} (OS ${idx + 1})...`);
                 if (col === 0 && startY > 195) { docOS.addPage(); startY = margemTopoSegura; }
                 const fItem = fotoItems[f]; const base64 = fItem.querySelector('.foto-b64').value; const desc = fItem.querySelector('.foto-desc').value;
-                const imgProps = await new Promise((resolve) => { const i = new Image(); i.onload = () => resolve({ w: i.width, h: i.height }); i.src = base64; });
+                const imgProps = await new Promise((resolve) => { 
+                    const i = new Image(); 
+                    i.onload = () => resolve({ w: i.width, h: i.height }); 
+                    i.onerror = () => resolve({ w: 1, h: 1 }); // Previne bloqueio caso o base64 esteja corrompido
+                    i.src = base64; 
+                });
                 let renderW = 85; let renderH = (imgProps.h / imgProps.w) * 85; if (renderH > 65) { renderH = 65; renderW = (imgProps.w / imgProps.h) * 65; }
                 let boxX = col === 0 ? 15 : 110; let imgX = boxX + (85 - renderW) / 2;
                 docOS.addImage(base64, base64.includes('image/png') ? 'PNG' : 'JPEG', imgX, startY, renderW, renderH);
