@@ -166,7 +166,8 @@
                         <span class="text-[10px] text-gray-400 font-medium uppercase tracking-widest leading-tight">Enterprise</span>
                     </div>
                 </div>
-                <button onclick="acionarInstalacaoApp()" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-xs font-semibold">
+                <!-- Botão Instalar App visível em todos os ecrãs (telemóvel e PC) -->
+                <button onclick="acionarInstalacaoApp()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-xs font-semibold">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                     Instalar App
                 </button>
@@ -195,7 +196,7 @@
             <div id="configLogoCard" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 flex items-center justify-between gap-4">
                 <div>
                     <h3 class="font-bold text-sm text-gray-800">Logótipo da Empresa</h3>
-                    <p class="text-xs text-gray-500">Defina ou troque o logótipo que aparecerá no PDF.</p>
+                    <p class="text-xs text-gray-500">Defina ou troque o logótipo que aparecerá no PDF a qualquer momento.</p>
                 </div>
                 <label class="px-4 py-2 bg-blue-50 text-blue-700 font-semibold text-sm rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
                     Fazer Upload
