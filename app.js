@@ -285,6 +285,56 @@ async function adicionarRegistoBancoHoras() {
     renderTabelaBancoHoras(); mostrarToast("Lançamento efetuado!");
 }
 
+async function adicionarDiaCompletoBancoHoras() {
+    const data = document.getElementById('bh_data').value; 
+    const cliente = document.getElementById('bh_cliente').value; 
+    const motivoInput = document.getElementById('bh_motivo').value.trim(); 
+    const local = document.getElementById('bh_local').value; 
+    const isCredito = document.getElementById('bh_tipo_credito').checked;
+    
+    if(!data) { mostrarToast("Selecione a Data!", true); return; }
+    
+    const dateObj = new Date(data + 'T00:00:00');
+    const dayOfWeek = dateObj.getDay(); // 0: Dom, 1: Seg, 2: Ter, 3: Qua, 4: Qui, 5: Sex, 6: Sáb
+    
+    let mins = 0;
+    let chegada = "08:00";
+    let saida = "17:00";
+    
+    if (dayOfWeek >= 0 && dayOfWeek <= 4) { // Domingo a Quinta (9 horas já com almoço embutido)
+        mins = 540; 
+        chegada = "08:00";
+        saida = "17:00";
+    } else if (dayOfWeek === 5) { // Sexta (8 horas já com almoço embutido)
+        mins = 480; 
+        chegada = "08:00";
+        saida = "16:00";
+    } else { // Sábado
+        mostrarToast("Aviso: Sábado considerado 0h (fim de semana).", true);
+        return;
+    }
+    
+    const balancoFinal = isCredito ? mins : -mins;
+    const motivoFinal = motivoInput ? `${motivoInput} (Dia Completo)` : "Dia Completo";
+    
+    const novoReg = { id: Date.now().toString(), data, cliente, motivo: motivoFinal, local, chegada, saida, isCredito, balancoFinal };
+    
+    registosBancoHoras.push(novoReg); 
+    registosBancoHoras.sort((a,b) => new Date(a.data) - new Date(b.data)); 
+    await localforage.setItem('banco_horas_data', registosBancoHoras);
+    
+    document.getElementById('bh_cliente').value = ''; 
+    document.getElementById('bh_motivo').value = ''; 
+    document.getElementById('bh_local').value = '';
+    
+    const mesDoRegisto = data.slice(0, 7); 
+    document.getElementById('bh_mes_inicio').value = mesDoRegisto; 
+    document.getElementById('bh_mes_fim').value = mesDoRegisto;
+    
+    renderTabelaBancoHoras(); 
+    mostrarToast(`Dia completo adicionado (${mins/60}h)!`);
+}
+
 async function removerRegistoHora(id) {
     if(!confirm("Apagar este registo?")) return; registosBancoHoras = registosBancoHoras.filter(r => r.id !== id); await localforage.setItem('banco_horas_data', registosBancoHoras); renderTabelaBancoHoras();
 }
@@ -358,7 +408,7 @@ function gerarPdfBancoHoras() {
     doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("RELATÓRIO DE HORAS", 148, 15, { align: "center" }); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(`Técnico: ${document.getElementById('bh_nome_tecnico').value || 'Não Preenchido'}`, 15, startYHeader); doc.text(`Período: ${strPeriodo}`, 280, startYHeader, { align: "right" });
     let corpoTabela = []; let totalPeriodo = 0; regsFiltrados.forEach(reg => { totalPeriodo += reg.balancoFinal; corpoTabela.push([reg.data.split('-').reverse().join('/'), reg.cliente || '-', reg.motivo || '-', reg.local || '-', `${reg.chegada} - ${reg.saida}`, formatarMins(reg.balancoFinal)]); });
     let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
-    doc.autoTable({ startY: startYHeader + 5, head: [['Data', 'Cliente', 'Motivo', 'Local', 'Período', 'Extra/Falta']], body: corpoTabela, theme: 'grid', headStyles: { fillColor: [31, 41, 55] }, styles: { fontSize: 9, cellPadding: 3 }, columnStyles: { 5: { halign: 'right', fontStyle: 'bold' } } });
+    doc.autoTable({ startY: startYHeader + 5, head: [['Data', 'Cliente', 'Motivo', 'Local', 'Período', 'Extra/Falta']], body: corpoTabela, theme: 'grid', headStyles: { fillColor: [16, 185, 129] }, styles: { fontSize: 9, cellPadding: 3 }, columnStyles: { 5: { halign: 'right', fontStyle: 'bold' } } });
     let posY = doc.lastAutoTable.finalY + 15; if (posY > 160) { doc.addPage(); posY = 30; }
     doc.setFont("helvetica", "bold"); doc.setFontSize(11); const textSaldoPeriodo = totalPeriodo >= 0 ? "SALDO PERÍODO (CRÉDITO)" : "SALDO PERÍODO (DÉBITO)"; const colorPer = totalPeriodo >= 0 ? [37, 99, 235] : [239, 68, 68]; doc.setTextColor(...colorPer); doc.text(`${textSaldoPeriodo}: ${formatarMins(totalPeriodo)}`, 15, posY);
     posY += 10; doc.setFontSize(14); const textoSaldo = totalGlobal >= 0 ? "SALDO ACUMULADO (CRÉDITO)" : "SALDO ACUMULADO (DÉBITO)"; const textColor = totalGlobal >= 0 ? [37, 99, 235] : [239, 68, 68]; doc.setTextColor(...textColor); doc.text(`${textoSaldo}: ${formatarMins(totalGlobal)}`, 15, posY);
@@ -589,7 +639,7 @@ function adicionarBlocoOS(dados = null) {
             </div>
 
             <div>
-                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">Peças Aplicadas</h4>
+                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">PEÇA</h4>
                 <div id="pecasContainer_${id}" class="space-y-2 mb-3"></div>
                 <button type="button" onclick="addPecaRow(${id})" class="text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-800"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Nova Peça</button>
             </div>
@@ -645,8 +695,12 @@ function adicionarBlocoOS(dados = null) {
         if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { 
             const pContainer = document.getElementById(`pecasContainer_${id}`); 
             const row = document.createElement('div'); 
-            row.className = "grid grid-cols-4 sm:grid-cols-12 gap-2 peca-row-item mb-2"; 
-            row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="col-span-1 sm:col-span-2 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Designação da Peça" value="${escapeHTML(p.n)}" class="col-span-3 sm:col-span-7 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Cód/Ref" value="${escapeHTML(p.c)}" class="col-span-4 sm:col-span-3 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">`; 
+            row.className = "flex items-center gap-2 peca-row-item mb-2"; 
+            row.innerHTML = `
+                <input type="number" min="0" max="99" maxlength="2" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-16 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
+                <input type="text" placeholder="Designação da Peça" value="${escapeHTML(p.n)}" class="flex-1 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
+                <input type="text" maxlength="12" placeholder="Cód/Ref" value="${escapeHTML(p.c)}" class="w-32 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono">
+            `; 
             pContainer.appendChild(row); 
         }); else { addPecaRow(id); addPecaRow(id); }
         if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
@@ -656,8 +710,12 @@ function adicionarBlocoOS(dados = null) {
 
 function addPecaRow(id) {
     const container = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); 
-    row.className = "grid grid-cols-4 sm:grid-cols-12 gap-2 peca-row-item mb-2";
-    row.innerHTML = `<input type="number" min="0" oninput="this.value = Math.abs(this.value)" placeholder="Qtd" class="col-span-1 sm:col-span-2 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Designação da Peça" class="col-span-3 sm:col-span-7 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500"><input type="text" placeholder="Cód/Ref" class="col-span-4 sm:col-span-3 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">`; 
+    row.className = "flex items-center gap-2 peca-row-item mb-2";
+    row.innerHTML = `
+        <input type="number" min="0" max="99" maxlength="2" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
+        <input type="text" placeholder="Designação da Peça" class="flex-1 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
+        <input type="text" maxlength="12" placeholder="Cód/Ref" class="w-32 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono">
+    `; 
     container.appendChild(row);
 }
 
@@ -753,7 +811,7 @@ async function construirPDFBytes(onProgressCallback) {
         docOS.setFont("helvetica", "bold"); docOS.text("PEÇAS", 15, cy); cy+=4; let tb = []; const pRows = b.querySelectorAll('.peca-row-item');
         for(let i=0; i<pRows.length; i+=2) { let r1=pRows[i], r2=pRows[i+1]; let r1q=r1.querySelector('.q').value, r1n=r1.querySelector('.n').value, r1c=r1.querySelector('.c').value; let r2q=r2?r2.querySelector('.q').value:'', r2n=r2?r2.querySelector('.n').value:'', r2c=r2?r2.querySelector('.c').value:''; if(r1q||r1n||r1c||r2q||r2n||r2c) tb.push([r1q, r1n, r1c, '', r2q, r2n, r2c]); }
         if(tb.length===0) tb.push(['','','','','','','']);
-        docOS.autoTable({ startY: cy, margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, theme: 'grid', styles: { fontSize: 8, cellPadding: 2, lineWidth: 0.2, lineColor: [150, 150, 150] }, headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255] }, head: [['Qtd', 'Nome', 'Cód', '', 'Qtd', 'Nome', 'Cód']], body: tb, columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 50 }, 2: { cellWidth: 28 }, 3: { cellWidth: 4 }, 4: { cellWidth: 10 }, 5: { cellWidth: 50 }, 6: { cellWidth: 28 } }, didDrawCell: function(data) { if (data.column.index === 3) { docOS.setFillColor(255, 255, 255); docOS.rect(data.cell.x, data.cell.y - 0.5, data.cell.width, data.cell.height + 1, 'F'); } } });
+        docOS.autoTable({ startY: cy, margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, theme: 'grid', styles: { fontSize: 8, cellPadding: 2, lineWidth: 0.2, lineColor: [150, 150, 150] }, headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] }, head: [['Qtd', 'Nome', 'Cód', '', 'Qtd', 'Nome', 'Cód']], body: tb, columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 50 }, 2: { cellWidth: 28 }, 3: { cellWidth: 4 }, 4: { cellWidth: 10 }, 5: { cellWidth: 50 }, 6: { cellWidth: 28 } }, didDrawCell: function(data) { if (data.column.index === 3) { docOS.setFillColor(255, 255, 255); docOS.rect(data.cell.x, data.cell.y - 0.5, data.cell.width, data.cell.height + 1, 'F'); } } });
         cy = docOS.lastAutoTable.finalY + 6; if (cy > 250) { docOS.addPage(); cy = margemTopoSegura; }
         docOS.setFont("helvetica", "bold"); docOS.text("LIBERAÇÃO", 15, cy); docOS.setFont("helvetica", "normal");
         cy+=4; let obsText = `OBS: ${getVal('liberacaoObs', id)}`; let obsLines = docOS.splitTextToSize(obsText, 180); docOS.text(obsLines, 15, cy); cy += (obsLines.length * 4) + 2;
@@ -851,3 +909,4 @@ async function gerarPDFConsolidado() {
         } else { const link = document.createElement('a'); link.href = urlDownloadGerado; link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast('Transferido!'); }
     } catch (err) { mostrarToast(err.message || 'Erro ao gerar.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden'); } finally { btn.disabled = false; btnTxt.innerText = "Gerar PDF & Partilhar"; }
 }
+
