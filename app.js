@@ -11,6 +11,10 @@ let currentZoom = 1, startZoom = 1, startDist = 0;
 let registosBancoHoras = [];
 let contadorOS = 0;
 
+// Variáveis para a Câmara Interna
+let mediaStreamCamera = null;
+let osIdAtualFoto = null;
+
 const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
 const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
 const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(0,0,50)", backgroundColor: "rgba(255,255,255,0)" };
@@ -473,57 +477,109 @@ function gerarPdfBancoHoras() {
     doc.save(nomeArquivo);
 }
 
-// CORREÇÃO DE MEMÓRIA (OOM) PARA FOTOS NO TELEMÓVEL
+// CÂMARA INTERNA DIRETA (Evita crash por falta de memória do Android)
 function adicionarFoto(id, source) {
     const fotosAtuais = document.querySelectorAll(`#fotosContainer_${id} .foto-item`).length;
     if (fotosAtuais >= 20) { mostrarToast('Limite de 20 fotos por OS atingido.', true); return; }
     
-    const input = document.createElement('input'); 
-    input.type = 'file'; 
-    input.accept = 'image/*'; 
-    if (source === 'camera') input.capture = 'environment'; 
-    
-    input.onchange = (e) => {
-        const file = e.target.files[0]; 
-        if(!file) return;
-
-        // Usa Object URL em vez de carregar o ficheiro bruto gigante na RAM
-        const objectUrl = URL.createObjectURL(file);
-        const img = new Image(); 
-        
-        img.onload = () => {
-            URL.revokeObjectURL(objectUrl); // Liberta a memória do ponteiro
-            
-            const canvas = document.createElement('canvas'); 
-            const MAX_WIDTH = 800; // Otimizado para poupar RAM no telemóvel
-            const MAX_HEIGHT = 800; 
-            let width = img.width; 
-            let height = img.height;
-            
-            if (width > height) { 
-                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } 
-            } else { 
-                if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } 
-            }
-            
-            canvas.width = width; 
-            canvas.height = height; 
-            const ctx = canvas.getContext("2d"); 
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            // Converte para JPEG comprimido (60% qualidade)
-            const compressedBase64 = canvas.toDataURL("image/jpeg", 0.6);
-            renderFotoItem(id, compressedBase64, '');
+    if (source === 'camera') {
+        osIdAtualFoto = id;
+        abrirCameraInterna();
+    } else {
+        const input = document.createElement('input'); 
+        input.type = 'file'; 
+        input.accept = 'image/*'; 
+        input.onchange = (e) => {
+            const file = e.target.files[0]; 
+            if(!file) return;
+            processarFicheiroImagem(id, file);
         }; 
+        input.click();
+    }
+}
+
+async function abrirCameraInterna() {
+    const modal = document.getElementById('modalCameraInterna');
+    const video = document.getElementById('videoCamera');
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    try {
+        mediaStreamCamera = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+        });
+        video.srcObject = mediaStreamCamera;
+    } catch (err) {
+        console.error('Erro ao aceder à câmara:', err);
+        mostrarToast('Não foi possível aceder à câmara. Verifique as permissões.', true);
+        fecharCameraInterna();
+    }
+}
+
+function fecharCameraInterna() {
+    if (mediaStreamCamera) {
+        mediaStreamCamera.getTracks().forEach(track => track.stop());
+        mediaStreamCamera = null;
+    }
+    document.getElementById('modalCameraInterna').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+function tirarFotoDoVideo() {
+    const video = document.getElementById('videoCamera');
+    if (!video.srcObject) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const MAX_DIM = 900;
+    let w = canvas.width;
+    let h = canvas.height;
+    if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; }
+    else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
+
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = w;
+    finalCanvas.height = h;
+    const finalCtx = finalCanvas.getContext('2d');
+    finalCtx.drawImage(canvas, 0, 0, w, h);
+
+    const compressedBase64 = finalCanvas.toDataURL('image/jpeg', 0.65);
+    renderFotoItem(osIdAtualFoto, compressedBase64, '');
+    fecharCameraInterna();
+    mostrarToast('Foto capturada com sucesso!');
+}
+
+function processarFicheiroImagem(id, file) {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image(); 
+    img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const canvas = document.createElement('canvas'); 
+        const MAX_DIM = 900; 
+        let width = img.width; 
+        let height = img.height;
         
-        img.onerror = () => {
-            URL.revokeObjectURL(objectUrl);
-            mostrarToast('Erro ao carregar a imagem da câmara.', true);
-        };
+        if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } } 
+        else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
         
-        img.src = objectUrl;
+        canvas.width = width; 
+        canvas.height = height; 
+        const ctx = canvas.getContext("2d"); 
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        const compressedBase64 = canvas.toDataURL("image/jpeg", 0.65);
+        renderFotoItem(id, compressedBase64, '');
     }; 
-    input.click();
+    img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        mostrarToast('Erro ao carregar a imagem.', true);
+    };
+    img.src = objectUrl;
 }
 
 function renderFotoItem(id, base64, desc) {
