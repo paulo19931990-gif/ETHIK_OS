@@ -29,14 +29,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
     <script>
-        // ROTINA PARA DESTRUIR O SERVICE WORKER ANTIGO NO TELEMÓVEL
+        // REGISTO DO SERVICE WORKER (MODO HÍBRIDO OFFLINE/ONLINE)
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                for(let registration of registrations) {
-                    registration.unregister(); 
-                }
-            });
-            navigator.serviceWorker.register('./sw.js?v=25');
+            navigator.serviceWorker.register('./sw.js?v=26');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -46,7 +41,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=25">
+    <link rel="stylesheet" href="style.css?v=26">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -425,6 +420,6 @@
 
     </div>
 
-    <script src="app.js?v=25"></script>
+    <script src="app.js?v=26"></script>
 </body>
 </html>
