@@ -1,58 +1,45 @@
-/* sw.js - MODO HÍBRIDO INTELIGENTE (Online + Offline) */
-const CACHE_NAME = 'multi-os-pro-v27';
-const ASSETS_TO_CACHE = [
-    './index.html',
-    './manifest.json',
-    './style.css'
+const CACHE_NAME = 'multios-pro-v29';
+const ASSETS_FIXOS = [
+  './',
+  './index.html',
+  './app.js',
+  './style.css',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
-self.addEventListener('install', (event) => {
-    self.skipWaiting();
-    event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(ASSETS_TO_CACHE).catch(err => console.log("Cache init error:", err));
-        })
-    );
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS_FIXOS)));
+  self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
-    event.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
-                cacheNames.map((cacheName) => {
-                    if (cacheName !== CACHE_NAME) {
-                        return caches.delete(cacheName);
-                    }
-                })
-            );
-        })
-    );
-    self.clients.claim();
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+    ))
+  );
+  self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-    if (event.request.method !== 'GET') return;
-
-    event.respondWith(
-        fetch(event.request)
-            .then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-                    const responseClone = networkResponse.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(event.request, responseClone);
-                    });
-                }
-                return networkResponse;
-            })
-            .catch(() => {
-                return caches.match(event.request).then((cachedResponse) => {
-                    if (cachedResponse) {
-                        return cachedResponse;
-                    }
-                    if (event.request.mode === 'navigate') {
-                        return caches.match('./index.html');
-                    }
-                });
-            })
-    );
+// Estratégia Stale-While-Revalidate Dinâmica (Guarda CDN em Cache)
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    caches.match(e.request).then(cachedResponse => {
+      const fetchPromise = fetch(e.request).then(networkResponse => {
+        // Se a resposta for válida (inclusive recursos externos como jsPDF e Tailwind), guarda no cache dinamicamente
+        if (networkResponse && (networkResponse.status === 200 || networkResponse.status === 0)) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(e.request, responseClone));
+        }
+        return networkResponse;
+      }).catch(() => {
+        // Ignora erros de fetch (quando está offline) e confia no cache
+      });
+      
+      // Retorna o cache IMEDIATAMENTE (se existir), ou espera pela rede
+      return cachedResponse || fetchPromise;
+    })
+  );
 });
