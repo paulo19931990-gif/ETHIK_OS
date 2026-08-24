@@ -299,9 +299,10 @@ async function adicionarDiaCompletoBancoHoras() {
     
     let mins = 0; let chegada = "08:00"; let saida = "17:00";
     
-    if (dayOfWeek >= 0 && dayOfWeek <= 4) { mins = 540; chegada = "08:00"; saida = "17:00"; } 
+    // CORREÇÃO: 1 a 4 é Segunda a Quinta. 5 é Sexta. Sábado (6) e Domingo (0) são rejeitados.
+    if (dayOfWeek >= 1 && dayOfWeek <= 4) { mins = 540; chegada = "08:00"; saida = "17:00"; } 
     else if (dayOfWeek === 5) { mins = 480; chegada = "08:00"; saida = "16:00"; } 
-    else { mostrarToast("Aviso: Sábado considerado 0h (fim de semana).", true); return; }
+    else { mostrarToast("Aviso: Fim de semana (Sáb/Dom) considerado 0h.", true); return; }
     
     const balancoFinal = isCredito ? mins : -mins;
     const motivoFinal = motivoInput ? `${motivoInput} (Dia Completo)` : "Dia Completo";
@@ -472,7 +473,10 @@ function recolherDadosDoFormulario() {
             cliente: getVal('cliente', id), osNum: getVal('osNum', id), equipamento: getVal('equipamento', id), modelo: getVal('modelo', id), serie: getVal('serie', id), tag: getVal('tag', id),
             cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked,
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
-            dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id), anexoBase64: document.getElementById(`anexoBase64_${id}`) ? document.getElementById(`anexoBase64_${id}`) ? document.getElementById(`anexoBase64_${id}`).value : null : null, anexoNome: document.getElementById(`anexoNome_${id}`) ? document.getElementById(`anexoNome_${id}`).textContent : null, fotos: []
+            dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id), 
+            anexoBase64: document.getElementById(`anexoBase64_${id}`) ? document.getElementById(`anexoBase64_${id}`).value : null, 
+            anexoNome: document.getElementById(`anexoNome_${id}`) ? document.getElementById(`anexoNome_${id}`).textContent : null, 
+            fotos: []
         };
         b.querySelectorAll('.peca-row-item').forEach(row => { let q = row.querySelector('.q').value, n = row.querySelector('.n').value, c = row.querySelector('.c').value; if(q || n || c) ordem.pecas.push({ q, n, c }); });
         b.querySelectorAll('.foto-item').forEach(fItem => { ordem.fotos.push({ b64: fItem.querySelector('.foto-b64').value, desc: fItem.querySelector('.foto-desc').value }); });
@@ -829,7 +833,19 @@ async function construirPDFBytes(onProgressCallback) {
         const osBuffer = docOS.output('arraybuffer'); const osPdfLib = await PDFDocument.load(osBuffer);
         const osPages = await masterPdf.copyPages(osPdfLib, osPdfLib.getPageIndices()); osPages.forEach((p) => masterPdf.addPage(p));
         const anexoB64 = getVal('anexoBase64', id);
-        if (anexoB64) { try { const binaryStr = atob(anexoB64.split(',')[1]); const bytes = new Uint8Array(binaryStr.length); for (let i = 0; i < binaryStr.length; i++) { bytes[i] = binaryStr.charCodeAt(i); } const anexoPdf = await PDFDocument.load(bytes); const anexoPages = await masterPdf.copyPages(anexoPdf, anexoPdf.getPageIndices()); anexoPages.forEach((p) => masterPdf.addPage(p)); } catch (e) {} }
+        if (anexoB64) { 
+            try { 
+                const binaryStr = atob(anexoB64.split(',')[1]); 
+                const bytes = new Uint8Array(binaryStr.length); 
+                for (let i = 0; i < binaryStr.length; i++) { bytes[i] = binaryStr.charCodeAt(i); } 
+                const anexoPdf = await PDFDocument.load(bytes); 
+                const anexoPages = await masterPdf.copyPages(anexoPdf, anexoPdf.getPageIndices()); 
+                anexoPages.forEach((p) => masterPdf.addPage(p)); 
+            } catch (e) {
+                // CORREÇÃO AQUI: Em vez de falhar em silêncio, avisa o técnico que o PDF extra falhou a compressão.
+                mostrarToast(`Aviso: O PDF Anexo da OS #${id} não pôde ser incorporado.`, true);
+            } 
+        }
     }
     await reportProgress(88, "A gerar secção de assinaturas...");
     const docSig = new jsPDF();
