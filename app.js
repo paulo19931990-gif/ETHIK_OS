@@ -295,44 +295,25 @@ async function adicionarDiaCompletoBancoHoras() {
     if(!data) { mostrarToast("Selecione a Data!", true); return; }
     
     const dateObj = new Date(data + 'T00:00:00');
-    const dayOfWeek = dateObj.getDay(); // 0: Dom, 1: Seg, 2: Ter, 3: Qua, 4: Qui, 5: Sex, 6: Sáb
+    const dayOfWeek = dateObj.getDay(); 
     
-    let mins = 0;
-    let chegada = "08:00";
-    let saida = "17:00";
+    let mins = 0; let chegada = "08:00"; let saida = "17:00";
     
-    if (dayOfWeek >= 0 && dayOfWeek <= 4) { // Domingo a Quinta (9 horas já com almoço embutido)
-        mins = 540; 
-        chegada = "08:00";
-        saida = "17:00";
-    } else if (dayOfWeek === 5) { // Sexta (8 horas já com almoço embutido)
-        mins = 480; 
-        chegada = "08:00";
-        saida = "16:00";
-    } else { // Sábado
-        mostrarToast("Aviso: Sábado considerado 0h (fim de semana).", true);
-        return;
-    }
+    if (dayOfWeek >= 0 && dayOfWeek <= 4) { mins = 540; chegada = "08:00"; saida = "17:00"; } 
+    else if (dayOfWeek === 5) { mins = 480; chegada = "08:00"; saida = "16:00"; } 
+    else { mostrarToast("Aviso: Sábado considerado 0h (fim de semana).", true); return; }
     
     const balancoFinal = isCredito ? mins : -mins;
     const motivoFinal = motivoInput ? `${motivoInput} (Dia Completo)` : "Dia Completo";
     
     const novoReg = { id: Date.now().toString(), data, cliente, motivo: motivoFinal, local, chegada, saida, isCredito, balancoFinal };
     
-    registosBancoHoras.push(novoReg); 
-    registosBancoHoras.sort((a,b) => new Date(a.data) - new Date(b.data)); 
+    registosBancoHoras.push(novoReg); registosBancoHoras.sort((a,b) => new Date(a.data) - new Date(b.data)); 
     await localforage.setItem('banco_horas_data', registosBancoHoras);
     
-    document.getElementById('bh_cliente').value = ''; 
-    document.getElementById('bh_motivo').value = ''; 
-    document.getElementById('bh_local').value = '';
-    
-    const mesDoRegisto = data.slice(0, 7); 
-    document.getElementById('bh_mes_inicio').value = mesDoRegisto; 
-    document.getElementById('bh_mes_fim').value = mesDoRegisto;
-    
-    renderTabelaBancoHoras(); 
-    mostrarToast(`Dia completo adicionado (${mins/60}h)!`);
+    document.getElementById('bh_cliente').value = ''; document.getElementById('bh_motivo').value = ''; document.getElementById('bh_local').value = '';
+    const mesDoRegisto = data.slice(0, 7); document.getElementById('bh_mes_inicio').value = mesDoRegisto; document.getElementById('bh_mes_fim').value = mesDoRegisto;
+    renderTabelaBancoHoras(); mostrarToast(`Dia completo adicionado (${mins/60}h)!`);
 }
 
 async function removerRegistoHora(id) {
@@ -695,11 +676,11 @@ function adicionarBlocoOS(dados = null) {
         if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { 
             const pContainer = document.getElementById(`pecasContainer_${id}`); 
             const row = document.createElement('div'); 
-            row.className = "flex items-center gap-2 peca-row-item mb-2"; 
+            row.className = "flex items-center gap-1 sm:gap-2 peca-row-item mb-2"; 
             row.innerHTML = `
-                <input type="number" min="0" max="99" maxlength="2" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-16 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
-                <input type="text" placeholder="Designação da Peça" value="${escapeHTML(p.n)}" class="flex-1 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
-                <input type="text" maxlength="12" placeholder="Cód/Ref" value="${escapeHTML(p.c)}" class="w-32 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono">
+                <input type="number" min="0" max="99" maxlength="2" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-12 min-w-0 border border-gray-300 px-1 py-2 rounded-lg text-xs sm:text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
+                <input type="text" placeholder="Nome da Peça" value="${escapeHTML(p.n)}" class="flex-1 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
+                <input type="text" maxlength="12" placeholder="Código" value="${escapeHTML(p.c)}" class="w-28 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center">
             `; 
             pContainer.appendChild(row); 
         }); else { addPecaRow(id); addPecaRow(id); }
@@ -710,11 +691,11 @@ function adicionarBlocoOS(dados = null) {
 
 function addPecaRow(id) {
     const container = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); 
-    row.className = "flex items-center gap-2 peca-row-item mb-2";
+    row.className = "flex items-center gap-1 sm:gap-2 peca-row-item mb-2";
     row.innerHTML = `
-        <input type="number" min="0" max="99" maxlength="2" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" class="w-16 border border-gray-300 p-2 rounded-lg text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
-        <input type="text" placeholder="Designação da Peça" class="flex-1 border border-gray-300 p-2 rounded-lg text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
-        <input type="text" maxlength="12" placeholder="Cód/Ref" class="w-32 border border-gray-300 p-2 rounded-lg text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono">
+        <input type="number" min="0" max="99" maxlength="2" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" class="w-12 min-w-0 border border-gray-300 px-1 py-2 rounded-lg text-xs sm:text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
+        <input type="text" placeholder="Nome da Peça" class="flex-1 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
+        <input type="text" maxlength="12" placeholder="Código" class="w-28 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center">
     `; 
     container.appendChild(row);
 }
@@ -909,4 +890,3 @@ async function gerarPDFConsolidado() {
         } else { const link = document.createElement('a'); link.href = urlDownloadGerado; link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast('Transferido!'); }
     } catch (err) { mostrarToast(err.message || 'Erro ao gerar.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden'); } finally { btn.disabled = false; btnTxt.innerText = "Gerar PDF & Partilhar"; }
 }
-
