@@ -1,4 +1,4 @@
-const CACHE_NAME = 'multios-pro-v29';
+const CACHE_NAME = 'multios-pro-v30'; // Incrementar versão
 const ASSETS_FIXOS = [
   './',
   './index.html',
@@ -10,7 +10,11 @@ const ASSETS_FIXOS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS_FIXOS)));
+  e.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(ASSETS_FIXOS))
+      .catch(err => console.warn('Cache init error:', err))
+  );
   self.skipWaiting();
 });
 
@@ -23,22 +27,42 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Estratégia Stale-While-Revalidate Dinâmica (Guarda CDN em Cache)
 self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+
+  const url = new URL(e.request.url);
+
+  // 1. Estratégia Network-First para HTML / Navegação (Garante que nunca serve versão com bug no reload)
+  if (e.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
+    e.respondWith(
+      fetch(e.request)
+        .then(networkResponse => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(e.request, responseClone));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(e.request) || caches.match('./index.html');
+        })
+    );
+    return;
+  }
+
+  // 2. Estratégia Stale-While-Revalidate para Assets Estáticos e CDNs (jsPDF, Tailwind, etc.)
   e.respondWith(
     caches.match(e.request).then(cachedResponse => {
       const fetchPromise = fetch(e.request).then(networkResponse => {
-        // Se a resposta for válida (inclusive recursos externos como jsPDF e Tailwind), guarda no cache dinamicamente
         if (networkResponse && (networkResponse.status === 200 || networkResponse.status === 0)) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(e.request, responseClone));
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, responseClone));
         }
         return networkResponse;
       }).catch(() => {
-        // Ignora erros de fetch (quando está offline) e confia no cache
+        // Ignora falhas de rede em assets secundários se houver cache
       });
-      
-      // Retorna o cache IMEDIATAMENTE (se existir), ou espera pela rede
+
       return cachedResponse || fetchPromise;
     })
   );
