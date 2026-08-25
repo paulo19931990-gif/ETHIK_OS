@@ -1,9 +1,15 @@
-const CACHE_NAME = 'multios-pro-v31';
-const ASSETS_FIXOS = [
+const CACHE_NAME = 'multios-pro-v34';
+
+// Falha em qualquer um destes ABORTA a instalação do Service Worker
+const ASSETS_CRITICOS = [
   './',
   './index.html',
   './app.js',
-  './style.css',
+  './style.css'
+];
+
+// Podem falhar individualmente sem impedir a instalação
+const ASSETS_OPCIONAIS = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -11,10 +17,24 @@ const ASSETS_FIXOS = [
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS_FIXOS))
-      .catch(err => console.warn('Cache init error (não bloqueia a instalação):', err))
+    caches.open(CACHE_NAME).then(cache => {
+      // 1. Críticos: tudo ou nada (falhou um, cancela a atualização do SW)
+      const cacheCriticos = cache.addAll(ASSETS_CRITICOS);
+
+      // 2. Opcionais: tolerantes a falha
+      const cacheOpcionais = Promise.all(
+        ASSETS_OPCIONAIS.map(asset =>
+          cache.add(asset).catch(err =>
+            console.warn(`Falha ao cachear asset opcional ${asset}:`, err)
+          )
+        )
+      );
+
+      // Aguarda ambas as operações concluírem para finalizar a instalação
+      return Promise.all([cacheCriticos, cacheOpcionais]);
+    })
   );
+  
   self.skipWaiting();
 });
 
@@ -28,50 +48,80 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Ignora requisições que não sejam GET
   if (e.request.method !== 'GET') return;
 
   const url = new URL(e.request.url);
 
-  // 1. Estratégia Network-First para HTML / Navegação (Resolve o bug do cache preso)
-  if (e.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
+  // 1. HTML / navegação (Network-First com fallback para cache/index)
+  if (
+    e.request.mode === 'navigate' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname === '/'
+  ) {
     e.respondWith(
       fetch(e.request)
         .then(networkResponse => {
-          // Se a rede responder com sucesso, atualiza o cache dinamicamente
           if (networkResponse && networkResponse.status === 200) {
             const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(e.request, responseClone));
+
+            e.waitUntil(
+              caches.open(CACHE_NAME)
+                .then(cache =>
+                  cache.put(e.request, responseClone)
+                )
+                .catch(err =>
+                  console.warn('Erro ao atualizar cache de navegação:', err)
+                )
+            );
           }
+
           return networkResponse;
         })
-        .catch(() => {
-          // Correção do Bug: Aguarda a Promise do caches.match resolver antes de fazer o fallback
-          return caches.match(e.request).then(cachedResponse => {
-            return cachedResponse || caches.match('./index.html');
-          });
-        })
+        .catch(() =>
+          caches.match(e.request)
+            .then(cachedResponse =>
+              cachedResponse || caches.match('./index.html')
+            )
+        )
     );
+
     return;
   }
 
-  // 2. Estratégia Stale-While-Revalidate para Assets Estáticos e CDNs (jsPDF, Tailwind, etc.)
+  // 2. Assets estáticos e CDNs: Stale-While-Revalidate
   e.respondWith(
     caches.match(e.request).then(cachedResponse => {
-      const fetchPromise = fetch(e.request).then(networkResponse => {
-        // Valida status 200 (recursos locais) e 0 (respostas opacas de CDNs externas)
-        if (networkResponse && (networkResponse.status === 200 || networkResponse.status === 0)) {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(e.request, responseClone));
-        }
-        return networkResponse;
-      }).catch(() => {
-        // Ignora falhas de rede em assets secundários se houver cache local;
-        // o SWR garante que a aplicação continua a funcionar offline.
-      });
+      const networkPromise = fetch(e.request)
+        .then(networkResponse => {
+          if (
+            networkResponse &&
+            (
+              networkResponse.status === 200 ||
+              networkResponse.type === 'opaque'
+            )
+          ) {
+            const responseClone = networkResponse.clone();
 
-      // Retorna IMEDIATAMENTE o cache (se existir), ou aguarda pela rede
-      return cachedResponse || fetchPromise;
+            e.waitUntil(
+              caches.open(CACHE_NAME)
+                .then(cache =>
+                  cache.put(e.request, responseClone)
+                )
+                .catch(err =>
+                  console.warn('Erro ao atualizar cache de asset:', err)
+                )
+            );
+          }
+
+          return networkResponse;
+        })
+        .catch(err => {
+          console.warn('Falha de rede:', e.request.url, err);
+          throw err; // Força a rejeição adequada em caso de falha absoluta
+        });
+
+      // Retorna o cache IMEDIATAMENTE se existir, enquanto atualiza no background (ou aguarda a rede)
+      return cachedResponse || networkPromise;
     })
   );
 });
