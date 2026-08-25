@@ -1,4 +1,4 @@
-const CACHE_NAME = 'multios-pro-v30'; // Incrementar versão
+const CACHE_NAME = 'multios-pro-v31';
 const ASSETS_FIXOS = [
   './',
   './index.html',
@@ -13,7 +13,7 @@ self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(ASSETS_FIXOS))
-      .catch(err => console.warn('Cache init error:', err))
+      .catch(err => console.warn('Cache init error (não bloqueia a instalação):', err))
   );
   self.skipWaiting();
 });
@@ -28,15 +28,17 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  // Ignora requisições que não sejam GET
   if (e.request.method !== 'GET') return;
 
   const url = new URL(e.request.url);
 
-  // 1. Estratégia Network-First para HTML / Navegação (Garante que nunca serve versão com bug no reload)
+  // 1. Estratégia Network-First para HTML / Navegação (Resolve o bug do cache preso)
   if (e.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
     e.respondWith(
       fetch(e.request)
         .then(networkResponse => {
+          // Se a rede responder com sucesso, atualiza o cache dinamicamente
           if (networkResponse && networkResponse.status === 200) {
             const responseClone = networkResponse.clone();
             caches.open(CACHE_NAME).then(cache => cache.put(e.request, responseClone));
@@ -44,7 +46,10 @@ self.addEventListener('fetch', e => {
           return networkResponse;
         })
         .catch(() => {
-          return caches.match(e.request) || caches.match('./index.html');
+          // Correção do Bug: Aguarda a Promise do caches.match resolver antes de fazer o fallback
+          return caches.match(e.request).then(cachedResponse => {
+            return cachedResponse || caches.match('./index.html');
+          });
         })
     );
     return;
@@ -54,15 +59,18 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     caches.match(e.request).then(cachedResponse => {
       const fetchPromise = fetch(e.request).then(networkResponse => {
+        // Valida status 200 (recursos locais) e 0 (respostas opacas de CDNs externas)
         if (networkResponse && (networkResponse.status === 200 || networkResponse.status === 0)) {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(e.request, responseClone));
         }
         return networkResponse;
       }).catch(() => {
-        // Ignora falhas de rede em assets secundários se houver cache
+        // Ignora falhas de rede em assets secundários se houver cache local;
+        // o SWR garante que a aplicação continua a funcionar offline.
       });
 
+      // Retorna IMEDIATAMENTE o cache (se existir), ou aguarda pela rede
       return cachedResponse || fetchPromise;
     })
   );
