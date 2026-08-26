@@ -1,4 +1,3 @@
-/* app.js */
 if (typeof localforage !== 'undefined') {
     localforage.config({ name: 'MultiOSProDB', storeName: 'app_data', description: 'Armazenamento offline robusto' });
 } else {
@@ -26,6 +25,21 @@ const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(15,23,42)"
 function escapeHTML(str) {
     if (str === null || str === undefined) return '';
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function mostrarToast(mensagem, isErro = false) {
+    const toast = document.getElementById('toast'); document.getElementById('toastMsg').textContent = mensagem;
+    if(isErro) { toast.classList.remove('bg-gray-900'); toast.classList.add('bg-red-600'); } else { toast.classList.remove('bg-red-600'); toast.classList.add('bg-gray-900'); }
+    toast.classList.remove('opacity-0', 'translate-y-4');
+    setTimeout(() => toast.classList.add('opacity-0', 'translate-y-4'), 4000); 
+}
+
+function bibliotecasPdfProntas() {
+    if (typeof window.jspdf === 'undefined' || typeof window.PDFLib === 'undefined') {
+        mostrarToast('As bibliotecas de PDF não carregaram. Verifique sua conexão e tente novamente.', true);
+        return false;
+    }
+    return true;
 }
 
 let promptDeInstalacao = null;
@@ -91,19 +105,16 @@ async function obterHistoricoSalvo() {
             await localforage.setItem('historico_os', novoMeta); return novoMeta;
         }
         return h; 
-    } catch(e) { return []; }
+    } catch(e) {
+        console.error("Erro na migração do histórico:", e);
+        mostrarToast('Aviso: Falha ao carregar alguns registros antigos.', true);
+        return [];
+    }
 }
 
 async function gravarHistoricoSalvo(historicoMeta) { 
     try { await localforage.setItem('historico_os', historicoMeta); return true; } 
     catch(e) { return false; } 
-}
-
-function mostrarToast(mensagem, isErro = false) {
-    const toast = document.getElementById('toast'); document.getElementById('toastMsg').textContent = mensagem;
-    if(isErro) { toast.classList.remove('bg-gray-900'); toast.classList.add('bg-red-600'); } else { toast.classList.remove('bg-red-600'); toast.classList.add('bg-gray-900'); }
-    toast.classList.remove('opacity-0', 'translate-y-4');
-    setTimeout(() => toast.classList.add('opacity-0', 'translate-y-4'), 4000); 
 }
 
 async function abrirAbaHistoricoSegura() {
@@ -252,7 +263,7 @@ async function autoSalvarRascunho() {
     const clientePreenchido = document.querySelector('[id^="cliente_"]')?.value.trim();
     if (document.getElementById('novaOs').classList.contains('hidden') || document.getElementById('lockStatus').textContent.includes('BLOQUEADO') || !clientePreenchido) return;
     await localforage.setItem('draft_os', recolherDadosDoFormulario());
-    document.getElementById('autoSaveIndicator').textContent = `Salvo: ${new Date().toLocaleTimeString('pt-PT')}`;
+    document.getElementById('autoSaveIndicator').textContent = `Salvo: ${new Date().toLocaleTimeString('pt-BR')}`;
 }
 
 async function verificarRascunhoPendente() {
@@ -270,7 +281,15 @@ function formatarMins(minsTotais) {
 
 function calcularMinsDesvio(horaEntrada, horaSaida, isCredito) {
     const [eH, eM] = horaEntrada.split(':').map(Number); const [sH, sM] = horaSaida.split(':').map(Number);
-    let mins = (sH * 60 + sM) - (eH * 60 + eM); if (mins < 0) mins += 1440; return isCredito ? mins : -mins; 
+    let mins = (sH * 60 + sM) - (eH * 60 + eM); 
+    if (mins < 0) {
+        mins += 1440;
+        if (mins > 12 * 60) {
+            const confirma = confirm("Atenção: O período calculado passa de 12 horas. Você inverteu os horários de chegada e saída?\n\nClique em OK para manter o registro de plantão longo, ou Cancelar para corrigir.");
+            if (!confirma) return 0;
+        }
+    } 
+    return isCredito ? mins : -mins; 
 }
 
 async function adicionarRegistoBancoHoras() {
@@ -299,7 +318,6 @@ async function adicionarDiaCompletoBancoHoras() {
     
     let mins = 0; let chegada = "08:00"; let saida = "17:00";
     
-    // CORREÇÃO: 1 a 4 é Segunda a Quinta. 5 é Sexta. Sábado (6) e Domingo (0) são rejeitados.
     if (dayOfWeek >= 1 && dayOfWeek <= 4) { mins = 540; chegada = "08:00"; saida = "17:00"; } 
     else if (dayOfWeek === 5) { mins = 480; chegada = "08:00"; saida = "16:00"; } 
     else { mostrarToast("Aviso: Fim de semana (Sáb/Dom) considerado 0h.", true); return; }
@@ -381,6 +399,8 @@ function renderTabelaBancoHoras() {
 }
 
 function gerarPdfBancoHoras() {
+    if (!bibliotecasPdfProntas()) return;
+    
     const inicioVal = document.getElementById('bh_mes_inicio').value; const fimVal = document.getElementById('bh_mes_fim').value;
     let regsFiltrados = registosBancoHoras; let strPeriodo = 'Todos os Registos';
     if (inicioVal && fimVal) { regsFiltrados = registosBancoHoras.filter(r => { const mesRegisto = r.data.slice(0, 7); return mesRegisto >= inicioVal && mesRegisto <= fimVal; }); strPeriodo = `${inicioVal.split('-').reverse().join('/')} a ${fimVal.split('-').reverse().join('/')}`; }
@@ -452,7 +472,7 @@ function processarAnexo(id, input) {
     const file = input.files[0]; if (!file) { removerAnexo(id); return; }
     const reader = new FileReader(); reader.onload = function(e) {
         if (document.getElementById(`anexoBase64_${id}`)) document.getElementById(`anexoBase64_${id}`).value = e.target.result;
-        if (document.getElementById(`anexoNome_${id}`)) { document.getElementById(`anexoNome_${id}`).innerHTML = `<svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Anexado: ${file.name}`; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); }
+        if (document.getElementById(`anexoNome_${id}`)) { document.getElementById(`anexoNome_${id}`).innerHTML = `<svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Anexado: ${escapeHTML(file.name)}`; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); }
         if (document.getElementById(`btnRemoverAnexo_${id}`)) document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden');
         autoSalvarRascunho();
     }; reader.readAsDataURL(file); input.value = ''; 
@@ -549,6 +569,14 @@ function iniciarNovaOS() {
 }
 
 function adicionarBlocoOS(dados = null) {
+    let prevCliente = '', prevOsNum = '';
+    
+    // Funcionalidade Mágica: Se for um bloco novo, puxa os dados do bloco anterior!
+    if (!dados && contadorOS > 0) {
+        prevCliente = getVal('cliente', contadorOS);
+        prevOsNum = getVal('osNum', contadorOS);
+    }
+    
     contadorOS++; const id = contadorOS; const dataHoje = new Date().toISOString().split('T')[0]; const osManualValue = dados && dados.osNum ? dados.osNum : '';
     const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco(); autoSalvarRascunho();" class="text-gray-400 hover:text-red-600 transition-colors p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
     const bloco = document.createElement('div'); bloco.className = "os-bloco bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden relative transition-all"; bloco.setAttribute('data-id', id);
@@ -689,7 +717,13 @@ function adicionarBlocoOS(dados = null) {
             pContainer.appendChild(row); 
         }); else { addPecaRow(id); addPecaRow(id); }
         if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
-    } else { addPecaRow(id); addPecaRow(id); }
+    } else { 
+        addPecaRow(id); addPecaRow(id); 
+        
+        // Povoamento automático dos dados da aba anterior
+        if (prevCliente) document.getElementById(`cliente_${id}`).value = prevCliente;
+        if (prevOsNum) document.getElementById(`osNum_${id}`).value = prevOsNum;
+    }
     atualizarVisibilidadeCamposPorBloco();
 }
 
@@ -751,7 +785,7 @@ async function carregarHistorico() {
                 <span class="text-gray-300">|</span>
                 <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${escapeHTML(doc.equipamentoResumo || 'Diversos')}</span>
             </div>
-            <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-PT') : ''}</p>
+            <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-BR') : ''}</p>
         </div>
         <div class="flex items-center gap-2 w-full md:w-auto shrink-0">
             <button onclick="apagarDocumento('${doc.id}')" class="p-3 bg-white text-gray-400 hover:text-red-600 border border-gray-200 rounded-lg shadow-sm transition-colors flex-shrink-0"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
@@ -772,6 +806,7 @@ function atualizarProgressoPDF(percentual, texto) {
 }
 
 async function construirPDFBytes(onProgressCallback) {
+    if (!bibliotecasPdfProntas()) throw new Error("As bibliotecas de PDF não carregaram.");
     if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios!");
     const reportProgress = async (pct, txt) => { if(onProgressCallback) { onProgressCallback(pct, txt); await new Promise(r => setTimeout(r, 15)); } };
     await reportProgress(5, "A iniciar motor PDF...");
@@ -842,7 +877,6 @@ async function construirPDFBytes(onProgressCallback) {
                 const anexoPages = await masterPdf.copyPages(anexoPdf, anexoPdf.getPageIndices()); 
                 anexoPages.forEach((p) => masterPdf.addPage(p)); 
             } catch (e) {
-                // CORREÇÃO AQUI: Em vez de falhar em silêncio, avisa o técnico que o PDF extra falhou a compressão.
                 mostrarToast(`Aviso: O PDF Anexo da OS #${id} não pôde ser incorporado.`, true);
             } 
         }
@@ -869,7 +903,7 @@ async function construirPDFBytes(onProgressCallback) {
     const sigBuffer = docSig.output('arraybuffer'); const sigPdfLib = await PDFDocument.load(sigBuffer); const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices()); sigPages.forEach((p) => masterPdf.addPage(p));
     await reportProgress(95, "A finalizar compressão e empacotamento...");
     const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica); const todasAsPaginas = masterPdf.getPages();
-    const textoAuditoria = `Documento gerado eletronicamente por ${document.getElementById('tecnico').value || "Não Identificado"} em ${new Date().toLocaleDateString('pt-PT')}.`;
+    const textoAuditoria = `Documento gerado eletronicamente por ${document.getElementById('tecnico').value || "Não Identificado"} em ${new Date().toLocaleDateString('pt-BR')}.`;
     todasAsPaginas.forEach((pagina, idx) => { const { width } = pagina.getSize(); pagina.drawText(textoAuditoria, { x: 15, y: 15, size: 6, font: fonteNormal, color: rgb(0.6, 0.6, 0.6) }); const textoPags = `Página ${idx + 1} de ${todasAsPaginas.length}`; pagina.drawText(textoPags, { x: width - fonteNormal.widthOfTextAtSize(textoPags, 8) - 15, y: 15, size: 8, font: fonteNormal, color: rgb(0.5, 0.5, 0.5) }); });
     const finalPDF = await masterPdf.save(); await reportProgress(100, "Concluído!"); return finalPDF;
 }
