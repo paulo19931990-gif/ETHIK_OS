@@ -1,6 +1,5 @@
-const CACHE_NAME = 'multios-pro-v37';
+const CACHE_NAME = 'multios-pro-v38';
 
-// Falha em qualquer um destes ABORTA a instalação do Service Worker
 const ASSETS_CRITICOS = [
   './',
   './index.html',
@@ -8,9 +7,9 @@ const ASSETS_CRITICOS = [
   './style.css'
 ];
 
-// Podem falhar individualmente sem impedir a instalação
 const ASSETS_OPCIONAIS = [
   './manifest.json',
+  './icon-192.png',
   './icon-512_3.png'
 ];
 
