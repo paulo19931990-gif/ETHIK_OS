@@ -1,4 +1,4 @@
-const CACHE_NAME = 'multios-pro-v34';
+const CACHE_NAME = 'multios-pro-v35';
 
 // Falha em qualquer um destes ABORTA a instalação do Service Worker
 const ASSETS_CRITICOS = [
@@ -11,8 +11,7 @@ const ASSETS_CRITICOS = [
 // Podem falhar individualmente sem impedir a instalação
 const ASSETS_OPCIONAIS = [
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
+  './icon-512_3.png'
 ];
 
 self.addEventListener('install', e => {
@@ -117,10 +116,9 @@ self.addEventListener('fetch', e => {
         })
         .catch(err => {
           console.warn('Falha de rede:', e.request.url, err);
-          throw err; // Força a rejeição adequada em caso de falha absoluta
+          throw err; 
         });
 
-      // Retorna o cache IMEDIATAMENTE se existir, enquanto atualiza no background (ou aguarda a rede)
       return cachedResponse || networkPromise;
     })
   );
