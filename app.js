@@ -20,7 +20,9 @@ let timeoutRascunho = null;
 
 const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
 const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
-const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(15,23,42)", backgroundColor: "rgba(255,255,255,0)" };
+
+// ESPESSURA FINA TIPO CANETA
+const signatureOptions = { minWidth: 0.5, maxWidth: 1.5, penColor: "rgb(15,23,42)", backgroundColor: "rgba(255,255,255,0)" };
 
 function escapeHTML(str) {
     if (str === null || str === undefined) return '';
@@ -255,8 +257,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
     if(cTec && cTec.parentElement) observer.observe(cTec.parentElement);
     
+    // CORREÇÃO: Atualiza o Canvas da Assinatura Expandida ao Rodar o Ecrã
     window.addEventListener('resize', () => {
-        if (!document.getElementById('novaOs').classList.contains('hidden')) { resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente); }
+        setTimeout(() => {
+            if (!document.getElementById('modalAssinaturaExpandida').classList.contains('hidden')) {
+                resizeCanvasSeguro(document.getElementById('canvasExpandido'), padExpandido);
+            }
+            if (!document.getElementById('novaOs').classList.contains('hidden')) { 
+                resizeCanvasSeguro(cTec, padTecnico); 
+                resizeCanvasSeguro(cCli, padCliente); 
+            }
+        }, 100);
     });
 
     const pdfContainer = document.getElementById('pdfRenderContainer');
