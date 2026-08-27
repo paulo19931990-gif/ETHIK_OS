@@ -235,11 +235,43 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const pdfContainer = document.getElementById('pdfRenderContainer');
     if(pdfContainer) {
-        pdfContainer.addEventListener('touchstart', function(e) { if (e.touches.length === 2) { 
-            startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); 
-            if(startDist === 0) startDist = 1; startZoom = currentZoom; 
-        } }, {passive: false});
-        pdfContainer.addEventListener('touchmove', function(e) { if (e.touches.length === 2) { e.preventDefault(); let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); currentZoom = Math.min(Math.max(0.5, startZoom * (dist / startDist)), 4); atualizarZoomPdf(); } }, {passive: false});
+        pdfContainer.addEventListener('touchstart', function(e) { 
+            if (e.touches.length === 2) { 
+                startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); 
+                if(startDist === 0) startDist = 1; 
+                startZoom = currentZoom; 
+            } 
+        }, {passive: false});
+        
+        pdfContainer.addEventListener('touchmove', function(e) { 
+            if (e.touches.length === 2) { 
+                e.preventDefault(); 
+                
+                let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); 
+                let newZoom = Math.min(Math.max(0.5, startZoom * (dist / startDist)), 4); 
+                
+                if (newZoom !== currentZoom) {
+                    const rect = pdfContainer.getBoundingClientRect();
+                    const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                    const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                    
+                    const originX = centerX - rect.left;
+                    const originY = centerY - rect.top;
+                    
+                    const contentX = originX + pdfContainer.scrollLeft;
+                    const contentY = originY + pdfContainer.scrollTop;
+                    
+                    const oldZoom = currentZoom;
+                    currentZoom = newZoom;
+                    
+                    atualizarZoomPdf();
+                    
+                    const ratio = currentZoom / oldZoom;
+                    pdfContainer.scrollLeft = (contentX * ratio) - originX;
+                    pdfContainer.scrollTop = (contentY * ratio) - originY;
+                }
+            } 
+        }, {passive: false});
     }
 
     adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco(); verificarRascunhoPendente();
@@ -571,7 +603,6 @@ function iniciarNovaOS() {
 function adicionarBlocoOS(dados = null) {
     let prevCliente = '', prevOsNum = '';
     
-    // Funcionalidade Mágica: Se for um bloco novo, puxa os dados do bloco anterior!
     if (!dados && contadorOS > 0) {
         prevCliente = getVal('cliente', contadorOS);
         prevOsNum = getVal('osNum', contadorOS);
@@ -720,7 +751,6 @@ function adicionarBlocoOS(dados = null) {
     } else { 
         addPecaRow(id); addPecaRow(id); 
         
-        // Povoamento automático dos dados da aba anterior
         if (prevCliente) document.getElementById(`cliente_${id}`).value = prevCliente;
         if (prevOsNum) document.getElementById(`osNum_${id}`).value = prevOsNum;
     }
