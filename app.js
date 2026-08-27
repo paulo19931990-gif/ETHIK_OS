@@ -183,10 +183,36 @@ async function limparTodoHistorico() {
 }
 
 function atualizarZoomPdf() {
-    const wrapper = document.getElementById('pdfPagesWrapper'); const container = document.getElementById('pdfRenderContainer'); if (!wrapper || !container) return;
-    const isDesktop = window.innerWidth > 600; const paddingLateral = isDesktop ? 48 : 16; const safeWidth = container.clientWidth - paddingLateral;
-    wrapper.querySelectorAll('canvas').forEach(c => { c.style.height = 'auto'; c.style.display = 'block'; c.style.maxWidth = 'none'; if (isDesktop) { c.style.width = (768 * currentZoom) + 'px'; } else { c.style.width = (safeWidth * currentZoom) + 'px'; } });
-    if(document.getElementById('zoomText')) document.getElementById('zoomText').innerText = Math.round(currentZoom * 100) + '%';
+    const wrapper = document.getElementById('pdfPagesWrapper'); 
+    const container = document.getElementById('pdfRenderContainer'); 
+    if (!wrapper || !container) return;
+
+    if (currentZoom > 1) {
+        wrapper.classList.remove('items-center');
+        wrapper.classList.add('items-start');
+    } else {
+        wrapper.classList.remove('items-start');
+        wrapper.classList.add('items-center');
+    }
+
+    const isDesktop = window.innerWidth > 600; 
+    const paddingLateral = isDesktop ? 48 : 32; 
+    const safeWidth = container.clientWidth - paddingLateral;
+    
+    wrapper.querySelectorAll('canvas').forEach(c => { 
+        c.style.height = 'auto'; 
+        c.style.display = 'block'; 
+        c.style.maxWidth = 'none'; 
+        if (isDesktop) { 
+            c.style.width = (768 * currentZoom) + 'px'; 
+        } else { 
+            c.style.width = (safeWidth * currentZoom) + 'px'; 
+        } 
+    });
+    
+    if(document.getElementById('zoomText')) {
+        document.getElementById('zoomText').innerText = Math.round(currentZoom * 100) + '%';
+    }
 }
 function zoomInPdf() { currentZoom = Math.min(currentZoom + 0.25, 4); atualizarZoomPdf(); }
 function zoomOutPdf() { currentZoom = Math.max(currentZoom - 0.25, 0.5); atualizarZoomPdf(); }
