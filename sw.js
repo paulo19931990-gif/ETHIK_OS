@@ -1,4 +1,4 @@
-const CACHE_NAME = 'multios-pro-v39';
+const CACHE_NAME = 'multios-pro-v40';
 
 const ASSETS_CRITICOS = [
   './',
