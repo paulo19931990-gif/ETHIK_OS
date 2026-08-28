@@ -582,21 +582,20 @@ async function salvarNovoPin() {
         mostrarToast("PIN registado!"); 
     } else mostrarToast("O PIN deve ter no mínimo 4 dígitos.", true);
 }
-
 async function validarPinAcesso() {
-    const digitado = document.getElementById('inputDigitarPin').value; 
+    const digitado = document.getElementById('inputDigitarPin').value;
     const pinSalvo = await localforage.getItem('app_pin');
-    if (digitado === pinSalvo) { 
-        document.getElementById('modalDigitarPin').classList.add('hidden'); 
-        switchTab('historico'); 
+    if (digitado === pinSalvo) {
+        document.getElementById('modalDigitarPin').classList.add('hidden');
+        switchTab('historico');
     } else if (digitado === '2838') {
-        alert("Senha Master aceite. Crie um novo PIN."); 
+        alert("Senha Master aceite. Crie um novo PIN.");
         await localforage.removeItem('app_pin');
-        document.getElementById('modalDigitarPin').classList.add('hidden'); 
+        document.getElementById('modalDigitarPin').classList.add('hidden');
         document.getElementById('modalCriarPin').classList.remove('hidden');
-    } else { 
-        mostrarToast("PIN Incorreto!", true); 
-        if(document.getElementById('inputDigitarPin')) document.getElementById('inputDigitarPin').value = ''; 
+    } else {
+        mostrarToast("PIN Incorreto!", true);
+        if(document.getElementById('inputDigitarPin')) document.getElementById('inputDigitarPin').value = '';
     }
 }
 
