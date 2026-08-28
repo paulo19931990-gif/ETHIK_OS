@@ -239,7 +239,9 @@ async function salvarNomeTecnicoBh() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-    await iniciarBancoPecas();
+    // Carrega as peças em segundo plano sem travar a tela
+    iniciarBancoPecas();
+    
     await carregarLogoDoArmazenamento();
     
     const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
@@ -1486,11 +1488,18 @@ function atualizarListasHTML() {
     const dlNomes = document.getElementById('dbNomesPecas');
     if(!dlCodigos || !dlNomes) return;
     
-    dlCodigos.innerHTML = ''; dlNomes.innerHTML = '';
+    // Cria o texto todo na memória primeiro (muito mais rápido)
+    let htmlCodigos = '';
+    let htmlNomes = '';
+    
     bancoPecas.forEach(peca => {
-        dlCodigos.innerHTML += `<option value="${peca.c}">${peca.n}</option>`;
-        dlNomes.innerHTML += `<option value="${peca.n}">${peca.c}</option>`;
+        htmlCodigos += `<option value="${peca.c}">${peca.n}</option>`;
+        htmlNomes += `<option value="${peca.n}">${peca.c}</option>`;
     });
+
+    // Injeta tudo de uma só vez no HTML
+    dlCodigos.innerHTML = htmlCodigos;
+    dlNomes.innerHTML = htmlNomes;
 }
 
 function autoPreencherPeca(input, tipo) {
