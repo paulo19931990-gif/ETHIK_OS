@@ -542,7 +542,6 @@ async function salvarDocumento(silencioso = false) {
     try {
         await aprenderPecasDaOS(); 
         
-        // true/false no recolher define se salvamos as fotos em base64 definitivo
         let dados = await recolherDadosDoFormulario(false); 
         await localforage.setItem(`os_doc_${dados.id}`, dados);
         
@@ -557,7 +556,97 @@ async function salvarDocumento(silencioso = false) {
     } catch(e) { if(!silencioso) mostrarToast('Erro ao salvar.', true); if (!silencioso && btnSalvar) btnSalvar.disabled = false; return false; }
 }
 
+// === RESTAURAÇÃO DAS FUNÇÕES DO HISTÓRICO, PIN E BACKUP ===
+
+async function abrirAbaHistoricoSegura() {
+    let pinSalvo = await localforage.getItem('app_pin');
+    if (!pinSalvo) { 
+        if(document.getElementById('inputNovoPin')) document.getElementById('inputNovoPin').value = ''; 
+        if(document.getElementById('modalCriarPin')) document.getElementById('modalCriarPin').classList.remove('hidden'); 
+        else switchTab('historico');
+    } else { 
+        if(document.getElementById('inputDigitarPin')) document.getElementById('inputDigitarPin').value = ''; 
+        if(document.getElementById('modalDigitarPin')) document.getElementById('modalDigitarPin').classList.remove('hidden'); 
+        else switchTab('historico');
+    }
+}
+
+async function salvarNovoPin() {
+    const novoPin = document.getElementById('inputNovoPin').value;
+    if(novoPin && novoPin.length >= 4) { 
+        await localforage.setItem('app_pin', novoPin); 
+        document.getElementById('modalCriarPin').classList.add('hidden'); 
+        switchTab('historico'); 
+        mostrarToast("PIN registado!"); 
+    } else mostrarToast("O PIN deve ter no mínimo 4 dígitos.", true);
+}
+
+async function validarPinAcesso() {
+    const digitado = document.getElementById('inputDigitarPin').value;
+    const pinSalvo = await localforage.getItem('app_pin');
+    if (digitado === pinSalvo) {
+        document.getElementById('modalDigitarPin').classList.add('hidden');
+        switchTab('historico');
+    } else if (digitado === '2838') {
+        alert("Senha Master aceite. Crie um novo PIN.");
+        await localforage.removeItem('app_pin');
+        document.getElementById('modalDigitarPin').classList.add('hidden');
+        document.getElementById('modalCriarPin').classList.remove('hidden');
+    } else {
+        mostrarToast("PIN Incorreto!", true);
+        if(document.getElementById('inputDigitarPin')) document.getElementById('inputDigitarPin').value = '';
+    }
+}
+
+function filtrarHistorico() { 
+    const elBusca = document.getElementById('buscaHistorico');
+    if(!elBusca) return;
+    const termo = elBusca.value.toLowerCase(); 
+    document.querySelectorAll('.historico-item').forEach(item => { 
+        item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none'; 
+    }); 
+}
+
+async function apagarDocumento(id) { 
+    if(!confirm("Apagar documento permanentemente?")) return; 
+    let historicoMeta = await obterHistoricoSalvo(); 
+    await gravarHistoricoSalvo(historicoMeta.filter(d => d.id !== id)); 
+    await localforage.removeItem(`os_doc_${id}`); 
+    if(id === documentoAtualId) iniciarNovaOS(); 
+    await carregarHistorico(); 
+}
+
 async function carregarHistorico() {
+    const list = document.getElementById('historicoList'); 
+    if(!list) return;
+    let historicoMeta = await obterHistoricoSalvo();
+    if(!historicoMeta || historicoMeta.length === 0) return list.innerHTML = '<div class="bg-white p-8 rounded-xl border border-gray-200 text-center text-gray-500 font-medium">Nenhum documento salvo.</div>';
+    
+    const maxItems = Math.min(historicoMeta.length, 50);
+    let html = '';
+    
+    for(let i = 0; i < maxItems; i++) {
+        let doc = historicoMeta[i];
+        html += `
+        <div class="historico-item bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-md transition-all">
+            <div class="flex-1">
+                <h3 class="font-black text-gray-900 text-lg mb-1">${escapeHTML(doc.clienteEmpresa || doc.nomeClienteFinal || 'Desconhecido')}</h3>
+                <div class="flex flex-wrap items-center gap-3 text-sm text-gray-500 font-medium">
+                    <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg> OS #${escapeHTML(doc.osNumResumo || 'N/A')}</span>
+                    <span class="text-gray-300">|</span>
+                    <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${escapeHTML(doc.equipamentoResumo || 'Diversos')}</span>
+                </div>
+                <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-BR') : ''}</p>
+            </div>
+            <div class="flex items-center gap-2 w-full md:w-auto shrink-0">
+                <button onclick="apagarDocumento('${doc.id}')" class="p-3 bg-white text-gray-400 hover:text-red-600 border border-gray-200 rounded-lg shadow-sm transition-colors flex-shrink-0"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                <button onclick="carregarDocumentoParaEdicao('${doc.id}')" class="flex-1 md:w-32 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md transition-colors text-sm uppercase tracking-wide text-center">Abrir</button>
+            </div>
+        </div>`;
+    }
+    list.innerHTML = html;
+    filtrarHistorico();
+}
     // === RESTAURAÇÃO DAS FUNÇÕES DO HISTÓRICO, PIN E BACKUP ===
 
 async function abrirAbaHistoricoSegura() {
