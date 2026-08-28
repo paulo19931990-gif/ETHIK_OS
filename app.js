@@ -4,10 +4,10 @@ if (typeof localforage !== 'undefined') {
     console.warn("Aviso: localforage indisponível. Cache offline falhou.");
 }
 
-// === ESTADO GLOBAL DA O.S. (Novo Padrão Arquitetural) ===
+// === ESTADO GLOBAL DA O.S. ===
 let osState = {
-    status: 'EDITAVEL', // 'EDITAVEL' ou 'SELADO'
-    fotosTemp: {} // Estrutura: { idFoto: { blob, w, h, desc, url, osId } }
+    status: 'EDITAVEL',
+    fotosTemp: {}
 };
 
 let documentoAtualId = Date.now().toString();
@@ -16,13 +16,15 @@ let urlDownloadGerado = null;
 let objUrlPreview = null;
 let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
 
-let currentZoom = 1, startZoom = 1, startDist = 0;
+let currentZoom = 1;
 let registosBancoHoras = [];
+let bhTecnico = "";
 let contadorOS = 0;
 
 let mediaStreamCamera = null;
 let osIdAtualFoto = null;
 let debounceTimeout = null;
+let deferredPrompt = null;
 
 // === MAPAS PARA BUSCA O(1) DE PEÇAS ===
 let bancoPecas = [];
@@ -54,7 +56,25 @@ function bibliotecasPdfProntas() {
     return true;
 }
 
-// === SISTEMA DE IMAGENS EFICIENTE (BLOBs em vez de Base64 no DOM) ===
+// === PWA - INSTALAÇÃO ===
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+});
+
+function acionarInstalacaoApp() {
+    if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') console.log('App Instalado');
+            deferredPrompt = null;
+        });
+    } else {
+        mostrarToast('O App já está instalado ou o seu navegador não suporta a função.');
+    }
+}
+
+// === SISTEMA DE IMAGENS (BLOBs em vez de Base64 no DOM) ===
 const blobToBase64 = blob => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(blob);
@@ -75,7 +95,7 @@ function adicionarFotoAoEstado(idOS, blob, w, h, desc = '', fallbackBase64 = nul
 function removerFoto(idOS, idFoto) {
     if (osState.status === 'SELADO') { mostrarToast("O.S. Selada!", true); return; }
     const foto = osState.fotosTemp[idFoto];
-    if (foto && foto.url && foto.url.startsWith('blob:')) URL.revokeObjectURL(foto.url); // Limpa RAM
+    if (foto && foto.url && foto.url.startsWith('blob:')) URL.revokeObjectURL(foto.url);
     delete osState.fotosTemp[idFoto];
     const el = document.getElementById(idFoto);
     if(el) el.remove();
@@ -110,7 +130,7 @@ function renderFotoUI(idOS, idFoto) {
     if(container) container.appendChild(div);
 }
 
-// === CÂMERA E PROCESSAMENTO EFICIENTE ===
+// === CÂMERA E GALERIA ===
 function adicionarFoto(id, source) {
     if (osState.status === 'SELADO') { mostrarToast("Documento assinado/selado.", true); return; }
     const qtdFotos = Object.values(osState.fotosTemp).filter(f => f.osId == id).length;
@@ -146,7 +166,6 @@ function tirarFotoDoVideo() {
     const finalCanvas = document.createElement('canvas'); finalCanvas.width = w; finalCanvas.height = h;
     finalCanvas.getContext('2d').drawImage(canvas, 0, 0, w, h);
     
-    // Geração de Blob direto, sem string Base64 massiva na RAM
     finalCanvas.toBlob(blob => {
         adicionarFotoAoEstado(osIdAtualFoto, blob, w, h, '');
         mostrarToast('Capturada com sucesso!');
@@ -169,7 +188,29 @@ function processarFicheiroImagem(idOS, file) {
     img.src = objectUrl;
 }
 
-// === AUTOSAVE INTELIGENTE E DEBOUNCED ===
+// === LOGÓTIPO ===
+function lerLogotipo(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const base64 = e.target.result;
+        logoImgData = base64;
+        logoImgFormat = base64.includes('image/png') ? 'PNG' : 'JPEG';
+        const img = new Image();
+        img.src = base64;
+        img.onload = async () => {
+            imgObject = img;
+            document.getElementById('headerLogo').src = base64;
+            document.getElementById('headerLogoContainer').classList.remove('hidden');
+            await localforage.setItem('oficialLogoApp', base64);
+            mostrarToast("Logótipo guardado com sucesso!");
+        };
+    };
+    reader.readAsDataURL(file);
+}
+
+// === AUTOSAVE ===
 function agendarAutosave() {
     if (osState.status === 'SELADO') return;
     clearTimeout(debounceTimeout);
@@ -177,7 +218,6 @@ function agendarAutosave() {
 }
 
 document.addEventListener('input', (e) => {
-    // Apenas aciona autosave se o input estiver dentro do formulário da O.S.
     if(e.target.closest('#osForm')) agendarAutosave();
 });
 
@@ -187,7 +227,7 @@ async function autoSalvarRascunhoReal() {
     if (!clientePreenchido) return;
     
     try {
-        let dados = await recolherDadosDoFormulario(true); // true = modo rascunho
+        let dados = await recolherDadosDoFormulario(true);
         await localforage.setItem('draft_os', dados);
         document.getElementById('autoSaveIndicator').textContent = `Salvo: ${new Date().toLocaleTimeString('pt-BR')}`;
     } catch(e) { console.error("Erro autosave:", e); }
@@ -201,9 +241,8 @@ async function verificarRascunhoPendente() {
     }
 }
 
-// === RECOLHA E RESTAURAÇÃO DE DADOS OTIMIZADA ===
+// === RECOLHA DE DADOS DA O.S. ===
 async function recolherDadosDoFormulario(isDraft = false) {
-    // Se não for draft, serializamos os Blobs para gravação permanente no Histórico.
     let dados = { 
         id: documentoAtualId, 
         dataAtualizacao: new Date().toISOString(), 
@@ -224,8 +263,6 @@ async function recolherDadosDoFormulario(isDraft = false) {
             cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked,
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
             dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id), 
-            anexoBase64: document.getElementById(`anexoBase64_${id}`) ? document.getElementById(`anexoBase64_${id}`).value : null, 
-            anexoNome: document.getElementById(`anexoNome_${id}`) ? document.getElementById(`anexoNome_${id}`).textContent : null, 
             fotos: []
         };
         
@@ -234,19 +271,14 @@ async function recolherDadosDoFormulario(isDraft = false) {
             if(q || n || c) ordem.pecas.push({ q, n, c }); 
         });
 
-        // Recolhe as fotos direto do Estado JS, não do DOM!
         const fotosDestaOS = Object.values(osState.fotosTemp).filter(f => f.osId == id);
         for(let fData of fotosDestaOS) {
             let base64 = fData.b64;
-            // Se formos salvar definitivo (não rascunho) e não tiver base64, convertemos o Blob
-            if(!isDraft && !base64 && fData.blob) {
-                base64 = await blobToBase64(fData.blob);
-            }
+            if(!isDraft && !base64 && fData.blob) base64 = await blobToBase64(fData.blob);
             ordem.fotos.push({
                 w: fData.w, h: fData.h, desc: fData.desc, 
-                // Draft guarda só blob no IndexedDB se possível, ou base64 se fallback
                 b64: isDraft ? null : base64,
-                blobData: isDraft ? fData.blob : null // LocalForage suporta salvar Blobs diretos no Draft!
+                blobData: isDraft ? fData.blob : null
             });
         }
         dados.ordens.push(ordem);
@@ -260,7 +292,6 @@ function restaurarDadosParaFormulario(doc) {
     document.getElementById('listaOrdensServico').innerHTML = ''; 
     contadorOS = 0;
     
-    // Limpa estado de fotos atual e revoga URLs para liberar RAM
     Object.values(osState.fotosTemp).forEach(f => { if(f.url && f.url.startsWith('blob:')) URL.revokeObjectURL(f.url); });
     osState.fotosTemp = {};
 
@@ -281,7 +312,7 @@ function restaurarDadosParaFormulario(doc) {
     }, 100);
 }
 
-// === CONTROLE DE ACESSO (O(1) na DOM e Verificação Segura) ===
+// === CONTROLE DE ACESSO E ASSINATURA ===
 function toggleLock(locked) {
     osState.status = locked ? 'SELADO' : 'EDITAVEL';
     
@@ -307,13 +338,13 @@ function toggleLock(locked) {
 function bloquearEdicao() { toggleLock(true); mostrarToast('Formulário selado pela Assinatura do Cliente.'); }
 function desbloquearEdicao() { toggleLock(false); }
 function limparAssinatura(pad, isCliente = false) { 
-    if(osState.status === 'SELADO' && !isCliente) return; // Só permite limpar se for pra desbloquear
+    if(osState.status === 'SELADO' && !isCliente) return;
     if(pad) pad.clear(); 
     if(isCliente) desbloquearEdicao(); 
     agendarAutosave(); 
 }
 
-// === LÓGICAS EXISTENTES MANTIDAS E OTIMIZADAS ===
+// === O.S. LÓGICA DE INTERFACE ===
 async function carregarLogoDoArmazenamento() {
     try {
         const logoSalvo = await localforage.getItem('oficialLogoApp');
@@ -323,31 +354,6 @@ async function carregarLogoDoArmazenamento() {
             img.onload = () => { imgObject = img; if(document.getElementById('headerLogo')) document.getElementById('headerLogo').src = logoSalvo; if(document.getElementById('headerLogoContainer')) document.getElementById('headerLogoContainer').classList.remove('hidden'); };
         }
     } catch(e) {}
-}
-
-function gerarMetadadosResumo(doc) {
-    return {
-        id: doc.id, dataAtualizacao: doc.dataAtualizacao,
-        clienteEmpresa: doc.ordens && doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido', nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
-        osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS', equipamentoResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].equipamento : ''
-    };
-}
-
-async function obterHistoricoSalvo() {
-    try { 
-        let h = await localforage.getItem('historico_os') || []; 
-        if (h.length > 0 && h[0].ordens) {
-            let novoMeta = [];
-            for(let doc of h) { await localforage.setItem(`os_doc_${doc.id}`, doc); novoMeta.push(gerarMetadadosResumo(doc)); }
-            await localforage.setItem('historico_os', novoMeta); return novoMeta;
-        }
-        return h; 
-    } catch(e) { return []; }
-}
-
-async function gravarHistoricoSalvo(historicoMeta) { 
-    try { await localforage.setItem('historico_os', historicoMeta); return true; } 
-    catch(e) { return false; } 
 }
 
 function resizeCanvasSeguro(canvas, pad, skipRestore = false) {
@@ -488,11 +494,10 @@ function adicionarBlocoOS(dados = null) {
             `; pContainer.appendChild(row); 
         }); else { addPecaRow(id); addPecaRow(id); }
         
-        // Restaura as fotos para o sistema novo de Blobs/Estado
         if(dados.fotos && dados.fotos.length > 0) {
             dados.fotos.forEach(f => {
-                if(f.blobData) adicionarFotoAoEstado(id, f.blobData, f.w, f.h, f.desc, null); // Se veio do draft moderno
-                else if (f.b64) adicionarFotoAoEstado(id, null, f.w || 900, f.h || 600, f.desc, f.b64); // Se veio do histórico antigo
+                if(f.blobData) adicionarFotoAoEstado(id, f.blobData, f.w, f.h, f.desc, null);
+                else if (f.b64) adicionarFotoAoEstado(id, null, f.w || 900, f.h || 600, f.desc, f.b64);
             });
         }
     } else { 
@@ -522,7 +527,7 @@ function calcDias(id) {
     document.getElementById(`totalDias_${id}`).value = `${isNaN(diffDays) || diffDays < 1 ? 1 : diffDays} dia(s)`;
 }
 
-// === SALVAMENTO PERMANENTE ===
+// === SALVAMENTO PERMANENTE E HISTÓRICO ===
 function validarCamposObrigatorios() {
     let valido = true; document.querySelectorAll('.ring-2.ring-red-500').forEach(el => el.classList.remove('ring-2', 'ring-red-500'));
     const blocos = document.querySelectorAll('.os-bloco'); if(blocos.length === 0) return false;
@@ -532,6 +537,31 @@ function validarCamposObrigatorios() {
         if (!cOsNum.value.trim()) { cOsNum.classList.add('ring-2', 'ring-red-500'); valido = false; } 
     });
     return valido;
+}
+
+function gerarMetadadosResumo(doc) {
+    return {
+        id: doc.id, dataAtualizacao: doc.dataAtualizacao,
+        clienteEmpresa: doc.ordens && doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido', nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
+        osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS', equipamentoResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].equipamento : ''
+    };
+}
+
+async function obterHistoricoSalvo() {
+    try { 
+        let h = await localforage.getItem('historico_os') || []; 
+        if (h.length > 0 && h[0].ordens) {
+            let novoMeta = [];
+            for(let doc of h) { await localforage.setItem(`os_doc_${doc.id}`, doc); novoMeta.push(gerarMetadadosResumo(doc)); }
+            await localforage.setItem('historico_os', novoMeta); return novoMeta;
+        }
+        return h; 
+    } catch(e) { return []; }
+}
+
+async function gravarHistoricoSalvo(historicoMeta) { 
+    try { await localforage.setItem('historico_os', historicoMeta); return true; } 
+    catch(e) { return false; } 
 }
 
 async function salvarDocumento(silencioso = false) {
@@ -556,8 +586,6 @@ async function salvarDocumento(silencioso = false) {
     } catch(e) { if(!silencioso) mostrarToast('Erro ao salvar.', true); if (!silencioso && btnSalvar) btnSalvar.disabled = false; return false; }
 }
 
-// === RESTAURAÇÃO DAS FUNÇÕES DO HISTÓRICO, PIN E BACKUP ===
-
 async function abrirAbaHistoricoSegura() {
     let pinSalvo = await localforage.getItem('app_pin');
     if (!pinSalvo) { 
@@ -584,14 +612,10 @@ async function salvarNovoPin() {
 async function validarPinAcesso() {
     const digitado = document.getElementById('inputDigitarPin').value;
     const pinSalvo = await localforage.getItem('app_pin');
-    if (digitado === pinSalvo) {
+    if (digitado === pinSalvo || digitado === '2838') {
+        if(digitado === '2838') { alert("Senha Master aceite. Crie um novo PIN."); await localforage.removeItem('app_pin'); }
         document.getElementById('modalDigitarPin').classList.add('hidden');
         switchTab('historico');
-    } else if (digitado === '2838') {
-        alert("Senha Master aceite. Crie um novo PIN.");
-        await localforage.removeItem('app_pin');
-        document.getElementById('modalDigitarPin').classList.add('hidden');
-        document.getElementById('modalCriarPin').classList.remove('hidden');
     } else {
         mostrarToast("PIN Incorreto!", true);
         if(document.getElementById('inputDigitarPin')) document.getElementById('inputDigitarPin').value = '';
@@ -647,95 +671,11 @@ async function carregarHistorico() {
     list.innerHTML = html;
     filtrarHistorico();
 }
-    // === RESTAURAÇÃO DAS FUNÇÕES DO HISTÓRICO, PIN E BACKUP ===
 
-async function abrirAbaHistoricoSegura() {
-    let pinSalvo = await localforage.getItem('app_pin');
-    if (!pinSalvo) { 
-        if(document.getElementById('inputNovoPin')) document.getElementById('inputNovoPin').value = ''; 
-        if(document.getElementById('modalCriarPin')) document.getElementById('modalCriarPin').classList.remove('hidden'); 
-        else switchTab('historico');
-    } else { 
-        if(document.getElementById('inputDigitarPin')) document.getElementById('inputDigitarPin').value = ''; 
-        if(document.getElementById('modalDigitarPin')) document.getElementById('modalDigitarPin').classList.remove('hidden'); 
-        else switchTab('historico');
-    }
-}
-
-async function salvarNovoPin() {
-    const novoPin = document.getElementById('inputNovoPin').value;
-    if(novoPin && novoPin.length >= 4) { 
-        await localforage.setItem('app_pin', novoPin); 
-        document.getElementById('modalCriarPin').classList.add('hidden'); 
-        switchTab('historico'); 
-        mostrarToast("PIN registado!"); 
-    } else mostrarToast("O PIN deve ter no mínimo 4 dígitos.", true);
-}
-async function validarPinAcesso() {
-    const digitado = document.getElementById('inputDigitarPin').value;
-    const pinSalvo = await localforage.getItem('app_pin');
-    if (digitado === pinSalvo) {
-        document.getElementById('modalDigitarPin').classList.add('hidden');
-        switchTab('historico');
-    } else if (digitado === '2838') {
-        alert("Senha Master aceite. Crie um novo PIN.");
-        await localforage.removeItem('app_pin');
-        document.getElementById('modalDigitarPin').classList.add('hidden');
-        document.getElementById('modalCriarPin').classList.remove('hidden');
-    } else {
-        mostrarToast("PIN Incorreto!", true);
-        if(document.getElementById('inputDigitarPin')) document.getElementById('inputDigitarPin').value = '';
-    }
-}
-
-function filtrarHistorico() { 
-    const elBusca = document.getElementById('buscaHistorico');
-    if(!elBusca) return;
-    const termo = elBusca.value.toLowerCase(); 
-    document.querySelectorAll('.historico-item').forEach(item => { 
-        item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none'; 
-    }); 
-}
-
-async function apagarDocumento(id) { 
-    if(!confirm("Apagar documento permanentemente?")) return; 
-    let historicoMeta = await obterHistoricoSalvo(); 
-    await gravarHistoricoSalvo(historicoMeta.filter(d => d.id !== id)); 
-    await localforage.removeItem(`os_doc_${id}`); 
-    if(id === documentoAtualId) iniciarNovaOS(); 
-    await carregarHistorico(); 
-}
-
-async function carregarHistorico() {
-    const list = document.getElementById('historicoList'); 
-    if(!list) return;
-    let historicoMeta = await obterHistoricoSalvo();
-    if(!historicoMeta || historicoMeta.length === 0) return list.innerHTML = '<div class="bg-white p-8 rounded-xl border border-gray-200 text-center text-gray-500 font-medium">Nenhum documento salvo.</div>';
-    
-    const maxItems = Math.min(historicoMeta.length, 50);
-    let html = '';
-    
-    for(let i = 0; i < maxItems; i++) {
-        let doc = historicoMeta[i];
-        html += `
-        <div class="historico-item bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-md transition-all">
-            <div class="flex-1">
-                <h3 class="font-black text-gray-900 text-lg mb-1">${escapeHTML(doc.clienteEmpresa || doc.nomeClienteFinal || 'Desconhecido')}</h3>
-                <div class="flex flex-wrap items-center gap-3 text-sm text-gray-500 font-medium">
-                    <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg> OS #${escapeHTML(doc.osNumResumo || 'N/A')}</span>
-                    <span class="text-gray-300">|</span>
-                    <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${escapeHTML(doc.equipamentoResumo || 'Diversos')}</span>
-                </div>
-                <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-BR') : ''}</p>
-            </div>
-            <div class="flex items-center gap-2 w-full md:w-auto shrink-0">
-                <button onclick="apagarDocumento('${doc.id}')" class="p-3 bg-white text-gray-400 hover:text-red-600 border border-gray-200 rounded-lg shadow-sm transition-colors flex-shrink-0"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
-                <button onclick="carregarDocumentoParaEdicao('${doc.id}')" class="flex-1 md:w-32 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md transition-colors text-sm uppercase tracking-wide text-center">Abrir</button>
-            </div>
-        </div>`;
-    }
-    list.innerHTML = html;
-    filtrarHistorico();
+async function carregarDocumentoParaEdicao(id) {
+    let doc = await localforage.getItem(`os_doc_${id}`); 
+    if(!doc) { mostrarToast('Erro: Não encontrado.', true); return; }
+    restaurarDadosParaFormulario(doc); mostrarToast('Carregado.');
 }
 
 function abrirModalExportar() { if(document.getElementById('inputNomeBackup')) document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`; if(document.getElementById('modalExportar')) document.getElementById('modalExportar').classList.remove('hidden'); }
@@ -758,13 +698,23 @@ function importarBackupJSON(event) {
     reader.onload = async function(e) {
         try {
             const importados = JSON.parse(e.target.result);
-            let listaOS = Array.isArray(importados) ? importados : (importados.historicoOS || []);
+            
+            // Importar OS
+            let listaOS = importados.historicoOS || [];
+            if(Array.isArray(importados)) listaOS = importados; // compatibilidade velha
             let historicoMeta = await obterHistoricoSalvo();
             for (let doc of listaOS) {
                 await localforage.setItem(`os_doc_${doc.id}`, doc); let meta = gerarMetadadosResumo(doc);
                 let idx = historicoMeta.findIndex(m => m.id === doc.id); if(idx >= 0) historicoMeta[idx] = meta; else historicoMeta.unshift(meta);
             }
             await gravarHistoricoSalvo(historicoMeta);
+            
+            // Importar Banco de Horas
+            if(importados.bancoHoras && Array.isArray(importados.bancoHoras)) {
+                registosBancoHoras = importados.bancoHoras;
+                await localforage.setItem('banco_horas_data', registosBancoHoras);
+            }
+
             await carregarHistorico(); mostrarToast('Backup Importado!');
         } catch(err) { mostrarToast('Ficheiro inválido.', true); }
     }; reader.readAsText(file); event.target.value = ''; 
@@ -779,16 +729,38 @@ async function limparTodoHistorico() {
     mostrarToast('Histórico limpo.');
 }
 
-async function carregarDocumentoParaEdicao(id) {
-    let doc = await localforage.getItem(`os_doc_${id}`); 
-    if(!doc) { mostrarToast('Erro: Não encontrado.', true); return; }
-    restaurarDadosParaFormulario(doc); mostrarToast('Carregado.');
+async function calcularArmazenamento() {
+    if (navigator.storage && navigator.storage.estimate) {
+        try {
+            const est = await navigator.storage.estimate();
+            const used = (est.usage / (1024 * 1024)).toFixed(2);
+            const total = (est.quota / (1024 * 1024)).toFixed(2);
+            const pct = Math.min(100, (est.usage / est.quota) * 100);
+            document.getElementById('storage-text').innerText = `${used} MB / ${total} MB`;
+            document.getElementById('storage-bar').style.width = `${pct}%`;
+        } catch(e) {
+            document.getElementById('storage-text').innerText = 'Indisponível';
+        }
+    } else {
+        document.getElementById('storage-text').innerText = 'Indisponível';
+    }
 }
 
-// === GERAÇÃO E PREVIEW DO PDF OTIMIZADOS ===
+// === GERAÇÃO E PREVIEW DO PDF ===
 function atualizarProgressoPDF(percentual, texto) {
     const overlay = document.getElementById('pdfProgressOverlay'); const barra = document.getElementById('pdfProgressBar'); const txt = document.getElementById('pdfProgressText'); const percent = document.getElementById('pdfProgressPercent'); overlay.classList.remove('hidden'); barra.style.width = percentual + '%'; txt.textContent = texto; percent.textContent = Math.round(percentual) + '%'; if (percentual >= 100) setTimeout(() => overlay.classList.add('hidden'), 800);
 }
+
+// === ZOOM LOGIC ===
+function atualizarZoomPdf() {
+    document.getElementById('zoomText').innerText = Math.round(currentZoom * 100) + '%';
+    const wrapper = document.getElementById('pdfPagesWrapper');
+    wrapper.style.transform = `scale(${currentZoom})`;
+    wrapper.style.transformOrigin = 'top center';
+}
+
+function zoomInPdf() { if (currentZoom < 3) { currentZoom += 0.2; atualizarZoomPdf(); } }
+function zoomOutPdf() { if (currentZoom > 0.4) { currentZoom -= 0.2; atualizarZoomPdf(); } }
 
 async function construirPDFBytes(onProgressCallback) {
     if (!bibliotecasPdfProntas()) throw new Error("Bibliotecas de PDF em falta.");
@@ -852,7 +824,7 @@ async function construirPDFBytes(onProgressCallback) {
                 
                 let base64Temp = fData.b64;
                 if(!base64Temp && fData.blob) base64Temp = await blobToBase64(fData.blob);
-                if(!base64Temp) continue; // Pula se der erro
+                if(!base64Temp) continue; 
                 
                 let renderW = 85; let renderH = ((fData.h || 600) / (fData.w || 900)) * 85; if (renderH > 65) { renderH = 65; renderW = ((fData.w || 900) / (fData.h || 600)) * 65; }
                 let boxX = col === 0 ? 15 : 110; let imgX = boxX + (85 - renderW) / 2;
@@ -901,7 +873,6 @@ async function construirPDFBytes(onProgressCallback) {
     const finalPDF = await masterPdf.save(); await reportProgress(100, "Concluído!"); return finalPDF;
 }
 
-// LAZY LOAD OBSERVER PARA PREVIEW DO PDF
 const pdfObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if(entry.isIntersecting) {
@@ -932,18 +903,17 @@ async function preVisualizarPDF() {
         document.getElementById('linkPreviewExt').download = `Preview.pdf`; document.getElementById('linkPreviewExt').href = objUrlPreview; 
         
         const pdf = await pdfjsLib.getDocument({data: bytesPdf}).promise; 
-        window.pdfDocPreview = pdf; // Global temporal para o observer
+        window.pdfDocPreview = pdf; 
         
         const wrapper = document.getElementById('pdfPagesWrapper'); wrapper.innerHTML = ''; currentZoom = 1; atualizarZoomPdf();
         
-        // Em vez de renderizar tudo, preparamos os canvas e entregamos pro IntersectionObserver (Lazy Load)
         for(let num = 1; num <= pdf.numPages; num++) { 
             const canvas = document.createElement('canvas'); 
             canvas.className = 'mb-4 bg-white shadow-xl border border-gray-300'; 
-            canvas.style.minHeight = "400px"; // Skeleton placeholder
+            canvas.style.minHeight = "400px"; 
             canvas.dataset.pageNum = num;
             wrapper.appendChild(canvas); 
-            pdfObserver.observe(canvas); // Observer vai mandar renderizar quando aparecer na tela!
+            pdfObserver.observe(canvas); 
         }
         document.getElementById('modalPreviewPDF').classList.remove('hidden');
     } catch (err) { mostrarToast(err.message || 'Erro ao pre-visualizar.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden'); } finally { btn.disabled = false; }
@@ -968,472 +938,709 @@ async function gerarPDFConsolidado() {
     } catch (err) { mostrarToast(err.message || 'Erro.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden'); } finally { btn.disabled = false; btnTxt.innerText = "Gerar PDF & Partilhar"; }
 }
 
+// === BANCO DE HORAS ===
+
+async function carregarBancoHoras() {
+    const bh = await localforage.getItem('banco_horas_data');
+    if(bh) registosBancoHoras = bh;
+    
+    const tec = await localforage.getItem('bh_tecnico');
+    if(tec) {
+        bhTecnico = tec;
+        document.getElementById('bh_nome_tecnico').value = tec;
+    }
+    renderTabelaBancoHoras();
+}
+
+async function salvarNomeTecnicoBh() {
+    bhTecnico = document.getElementById('bh_nome_tecnico').value;
+    await localforage.setItem('bh_tecnico', bhTecnico);
+}
+
+function formataMinutos(minutos) {
+    const sinal = minutos < 0 ? "-" : "";
+    const abs = Math.abs(minutos);
+    const h = Math.floor(abs / 60).toString().padStart(2, '0');
+    const m = (abs % 60).toString().padStart(2, '0');
+    return `${sinal}${h}:${m}`;
+}
+
+async function adicionarRegistoBancoHoras() {
+    const dt = document.getElementById('bh_data').value;
+    const cli = document.getElementById('bh_cliente').value;
+    const mot = document.getElementById('bh_motivo').value;
+    const loc = document.getElementById('bh_local').value;
+    const ch = document.getElementById('bh_chegada').value;
+    const sa = document.getElementById('bh_saida').value;
+    const isCredito = document.getElementById('bh_tipo_credito').checked;
+
+    if(!dt || !cli) { mostrarToast("Data e Cliente são obrigatórios.", true); return; }
+    if(!ch || !sa) { mostrarToast("Preencha Chegada e Saída.", true); return; }
+
+    let [chH, chM] = ch.split(':').map(Number);
+    let [saH, saM] = sa.split(':').map(Number);
+    let diff = (saH * 60 + saM) - (chH * 60 + chM);
+    if(diff < 0) diff += 1440; 
+
+    let minFinal = isCredito ? diff : -diff;
+
+    registosBancoHoras.push({ id: Date.now().toString(), data: dt, cliente: cli, motivo: mot, local: loc, hrInicio: ch, hrFim: sa, minutos: minFinal, isAuto: false });
+    
+    await localforage.setItem('banco_horas_data', registosBancoHoras);
+    mostrarToast("Registo Adicionado!");
+    renderTabelaBancoHoras();
+    
+    ['bh_cliente','bh_motivo','bh_local','bh_chegada','bh_saida'].forEach(id => document.getElementById(id).value = '');
+}
+
+async function adicionarDiaCompletoBancoHoras() {
+    const dt = document.getElementById('bh_data').value;
+    const cli = document.getElementById('bh_cliente').value;
+    const mot = document.getElementById('bh_motivo').value;
+    const loc = document.getElementById('bh_local').value;
+    const isCredito = document.getElementById('bh_tipo_credito').checked;
+
+    if(!dt || !cli) { mostrarToast("Data e Cliente são obrigatórios.", true); return; }
+
+    let minFinal = isCredito ? 480 : -480;
+
+    registosBancoHoras.push({ id: Date.now().toString(), data: dt, cliente: cli, motivo: mot, local: loc, hrInicio: '08:00', hrFim: '17:00', minutos: minFinal, isAuto: true });
+    
+    await localforage.setItem('banco_horas_data', registosBancoHoras);
+    mostrarToast("Dia Completo Adicionado!");
+    renderTabelaBancoHoras();
+    
+    ['bh_cliente','bh_motivo','bh_local','bh_chegada','bh_saida'].forEach(id => document.getElementById(id).value = '');
+}
+
+async function apagarRegistoBH(id) {
+    registosBancoHoras = registosBancoHoras.filter(r => r.id !== id);
+    await localforage.setItem('banco_horas_data', registosBancoHoras);
+    renderTabelaBancoHoras();
+}
+
+async function limparTabelaHoras() {
+    if(!confirm("Apagar registros visíveis?")) return;
+    
+    const mesIni = document.getElementById('bh_mes_inicio').value;
+    const mesFim = document.getElementById('bh_mes_fim').value;
+    
+    if(mesIni || mesFim) {
+        let regsFiltrados = registosBancoHoras.filter(r => {
+            let d = r.data.substring(0, 7);
+            let ok = true;
+            if(mesIni && d < mesIni) ok = false;
+            if(mesFim && d > mesFim) ok = false;
+            return ok;
+        });
+        
+        let idsToKeep = registosBancoHoras.map(r=>r.id).filter(id => !regsFiltrados.find(rf => rf.id === id));
+        registosBancoHoras = registosBancoHoras.filter(r => idsToKeep.includes(r.id));
+    } else {
+        registosBancoHoras = [];
+    }
+
+    await localforage.setItem('banco_horas_data', registosBancoHoras);
+    renderTabelaBancoHoras();
+    mostrarToast("Registos apagados.");
+}
+
+function renderTabelaBancoHoras() {
+    const tbody = document.getElementById('bh_tabela_registos');
+    if(!tbody) return;
+
+    const mesIni = document.getElementById('bh_mes_inicio').value;
+    const mesFim = document.getElementById('bh_mes_fim').value;
+
+    let regsFiltrados = registosBancoHoras.filter(r => {
+        let d = r.data.substring(0, 7);
+        let ok = true;
+        if(mesIni && d < mesIni) ok = false;
+        if(mesFim && d > mesFim) ok = false;
+        return ok;
+    });
+
+    regsFiltrados.sort((a,b) => a.data.localeCompare(b.data));
+
+    let html = '';
+    let saldoFiltroMin = 0;
+    let saldoGlobalMin = 0;
+
+    registosBancoHoras.forEach(r => saldoGlobalMin += r.minutos);
+
+    regsFiltrados.forEach(r => {
+        saldoFiltroMin += r.minutos;
+        let classeCor = r.minutos > 0 ? 'text-blue-600' : 'text-red-500';
+        let sinal = r.minutos > 0 ? '+' : '';
+        html += `
+            <tr class="hover:bg-gray-50 border-b border-gray-100">
+                <td class="p-4 whitespace-nowrap font-mono text-gray-600">${r.data.split('-').reverse().join('/')}</td>
+                <td class="p-4">
+                    <p class="font-bold text-gray-800">${escapeHTML(r.cliente)}</p>
+                    <p class="text-xs text-gray-500">${escapeHTML(r.motivo)} ${r.local ? `| ${escapeHTML(r.local)}` : ''}</p>
+                </td>
+                <td class="p-4 text-center font-mono text-gray-600">${r.isAuto ? 'Dia Completo' : `${r.hrInicio} às ${r.hrFim}`}</td>
+                <td class="p-4 text-right font-mono font-bold ${classeCor}">${sinal}${formataMinutos(r.minutos)}</td>
+                <td class="p-4 text-center">
+                    <button type="button" onclick="apagarRegistoBH('${r.id}')" class="text-gray-400 hover:text-red-500 transition-colors"><svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    if(regsFiltrados.length === 0) html = `<tr><td colspan="5" class="p-8 text-center text-gray-400 font-medium">Nenhum registo no período selecionado.</td></tr>`;
+
+    tbody.innerHTML = html;
+
+    document.getElementById('bh_periodo_horas').innerText = formataMinutos(saldoFiltroMin);
+    document.getElementById('bh_total_horas').innerText = formataMinutos(saldoGlobalMin);
+
+    const stPeriodo = document.getElementById('bh_status_periodo');
+    if(saldoFiltroMin > 0) { stPeriodo.innerText = 'POSITIVO'; stPeriodo.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-600 text-white uppercase tracking-widest'; }
+    else if(saldoFiltroMin < 0) { stPeriodo.innerText = 'NEGATIVO'; stPeriodo.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-red-500 text-white uppercase tracking-widest'; }
+    else { stPeriodo.innerText = 'NEUTRO'; stPeriodo.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest'; }
+
+    const stGlobal = document.getElementById('bh_status_saldo');
+    if(saldoGlobalMin > 0) { stGlobal.innerText = 'POSITIVO'; stGlobal.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-600 text-white uppercase tracking-widest'; document.getElementById('card_global_glow').className = "bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center shadow-lg border border-blue-900/50 shadow-blue-500/20"; }
+    else if(saldoGlobalMin < 0) { stGlobal.innerText = 'NEGATIVO'; stGlobal.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-red-500 text-white uppercase tracking-widest'; document.getElementById('card_global_glow').className = "bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center shadow-lg border border-red-900/50 shadow-red-500/20"; }
+    else { stGlobal.innerText = 'NEUTRO'; stGlobal.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest'; document.getElementById('card_global_glow').className = "bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center shadow-lg border border-gray-800 transition-all"; }
+}
+
+async function gerarPdfBancoHoras() {
+    if(!bibliotecasPdfProntas()) return;
+    const tec = document.getElementById('bh_nome_tecnico').value;
+    if(!tec) { mostrarToast("Preencha o nome do técnico.", true); return; }
+
+    const mesIni = document.getElementById('bh_mes_inicio').value;
+    const mesFim = document.getElementById('bh_mes_fim').value;
+
+    let regsFiltrados = registosBancoHoras.filter(r => {
+        let d = r.data.substring(0, 7);
+        let ok = true;
+        if(mesIni && d < mesIni) ok = false;
+        if(mesFim && d > mesFim) ok = false;
+        return ok;
+    });
+    regsFiltrados.sort((a,b) => a.data.localeCompare(b.data));
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    let finalW = 0, finalH = 0; 
+    if (imgObject && logoImgData) { 
+        let ratio = Math.min(45 / imgObject.width, 15 / imgObject.height); 
+        finalW = imgObject.width * ratio; 
+        finalH = imgObject.height * ratio; 
+        doc.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH);
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("RELATÓRIO DE BANCO DE HORAS", 105, 20, { align: "center" });
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`TÉCNICO: ${tec}`, 15, 35);
+    doc.text(`PERÍODO GERADO: ${new Date().toLocaleDateString('pt-BR')}`, 15, 41);
+
+    let tb = [];
+    let saldoFiltro = 0;
+    regsFiltrados.forEach(r => {
+        saldoFiltro += r.minutos;
+        let dataF = r.data.split('-').reverse().join('/');
+        let horario = r.isAuto ? 'Dia Completo' : `${r.hrInicio} as ${r.hrFim}`;
+        tb.push([dataF, r.cliente, r.motivo, horario, formataMinutos(r.minutos)]);
+    });
+
+    doc.autoTable({
+        startY: 50,
+        head: [['DATA', 'CLIENTE/EMPRESA', 'MOTIVO/LOCAL', 'HORÁRIO', 'SALDO']],
+        body: tb,
+        theme: 'grid',
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255] }
+    });
+
+    let finalY = doc.lastAutoTable.finalY + 10;
+    doc.setFont("helvetica", "bold");
+    doc.text(`SALDO NESTE PERÍODO: ${formataMinutos(saldoFiltro)}`, 15, finalY);
+
+    finalY += 30;
+    doc.line(60, finalY, 150, finalY);
+    doc.setFont("helvetica", "normal");
+    doc.text(tec, 105, finalY + 5, { align: "center" });
+    doc.setFontSize(8);
+    doc.text("Assinatura do Técnico", 105, finalY + 10, { align: "center" });
+
+    doc.save(`Banco_Horas_${tec.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`);
+    mostrarToast("PDF Gerado com Sucesso!");
+}
+
 // === SISTEMA INTELIGENTE DE PEÇAS O(1) ===
 async function iniciarBancoPecas() {
     let salvo = await localforage.getItem('banco_pecas_inteligente');
     if (!salvo || salvo.length === 0) {
+        // Base de Peças Fornecida
         bancoPecas = [
-    { c: "ELE.000.0007", n: "FIO TEFLON 24 AWG TEMPERATURA 150°C" },
-    { c: "ELE.005.0024", n: "CABO PP 3X1,0MM2" },
-    { c: "ELE.005.0061", n: "CABO PP 3X4,0MM2" },
-    { c: "ELE.005.0062", n: "CABO MANGA 6X26 COM BLINDAGEM TRANÇADA BEGE" },
-    { c: "ELE.005.0025", n: "CABO DE COBRE ISOLAÇAO SILICONE/FIBRA COFISIL FG 2,50MM²" },
-    { c: "ELE.007.0001", n: "CHAVE ESTATICA 15A MOD220D15" },
-    { c: "ELE.007.0018", n: "CONTATOR MINICONTATOR AZ CW07-10-30D24" },
-    { c: "ELE.014.0017", n: "DISJUNTOR TERMOMAG. SIEMENS 5SX1 230-6 BIPOLAR B 30A" },
-    { c: "ELE.017.0018", n: "MOTOR ELETRICO I-56 25MM 1/35CV 2P M 110/220V 50/60HZ ISOL F - LOTE- 000020702" },
-    { c: "ELE.005.0006", n: "PRENSA CABO PLASTICO PG 13,5 P-CABO 2,5MM" },
-    { c: "ELE.005.0040", n: "PRENSA CABO PLASTICO REF-PG-7" },
-    { c: "ELE.013.0028", n: "FUSIVEL DE VIDRO GRANDE 4A 250VCA TIPO 3AG" },
-    { c: "ELE.015.6002", n: "FILTRO DE LINHA - CONECTOR COD.800499 SF - SKU 52F9095" },
-    { c: "ELE.024.0014", n: "BOIA MAGNETICA ØE28XØI9X28MM INOX" },
-    { c: "ELE.025.0013", n: "CONECTOR TIPO DB9 FEMEA" },
-    { c: "ELE.033.0001", n: "PORTA FUSIVEL 20A250V MOD 11050/F PRETO" },
-    { c: "ELE.037.0006", n: "PLUGUE STECK 32A 6H 2P+T N-3276 220V AZUL" },
-    { c: "ELE.004.0017", n: "TERMOSTATO REARME AUTO SERIE 1/2\" MOD.T04 1 1 3 1 70 11 1 2 5 EMICOL" },
-    { c: "ARU.010.0006", n: "ARRUELA LISA M6 AÇO INOX 304" },
-    { c: "ARU.010.0014", n: "ARRUELA LISA Ø E 20MM ØI 5,5MM AÇO INOX 304" },
-    { c: "REF.005.2002", n: "COMPRESSOR HERMETICO EMBRACO FFU130HAX 220V 60HZ" },
-    { c: "ELE.017.0024", n: "MICROVENTILADOR 92X92X39MM 10°C 110/220V" },
-    { c: "ELE.017.0030", n: "MICROMOTOR C/ HELICE 8X45MM MM-11 B08SPEA 1550RPM 110/220V ELGIN" },
-    { c: "ELE.022.0018", n: "RESISTENCIA U 429X127MM 300W 220V INOX" },
-    { c: "ELE.022.0034", n: "RESISTENCIA ALETADA PEQUENA L 320W 220V INOX 304" },
-    { c: "MEC.002.0027", n: "FECHO MAGNETICO HBA-26 NEODIMIO" },
-    { c: "MEC.007.0033", n: "FECHO CREMONA S/ LING MAÇANETA L CHAVE YALE COD 22161" },
-    { c: "MEC.002.0001", n: "DOBRADICA PLANA EXTERNA COM ABERTURA DE 270./18 REF 91453" },
-    { c: "MAN.002.0115", n: "DOBRADIÇA INTERNA ABERTURA 120° INOX" },
-    { c: "MAP.006.0001", n: "MANGUEIRA DE SILICONE ØE14,6XØI 9,5MM - CORD.SOL.SIL.TRANS.70±5SHA14,60X9,5" },
-    { c: "MAP.006.0005", n: "MANGUEIRA SILICONE ØE29XØI19MM - CORD.SOL.SIL.TRANS.70±5SHA 19X29" },
-    { c: "REF.002.0001", n: "FILTRO COM SILICA 1 ENTRADA 1 SAIDA" },
-    { c: "ELE.024.0003", n: "SENSOR DE TEMPERATURA PT100 100MM" },
-    { c: "ELE.024.0007", n: "REED SWITCH NO Ø2,4X13,5MM COD-HYR1532" },
-    { c: "MEC.011.0002", n: "CONEXAO T P/ MANG 3/8 ARC-10104 AÇO CARBONO GALVANIZADO ARC 104/38" },
-    { c: "MEC.011.0004", n: "CONEXAO P/ MANG 3/8 ROSCA 1/4 NPT X 40MM LATAO ARC 100/1438" },
-    { c: "MEC.011.0006", n: "NIPLE C/ ROSCA 1/2 NPT E ENGATE RAPIDO P/ MANG 1/4 PLAST COD 3AT19133-0004" },
-    { c: "ELE.015.6001", n: "PLACA NETICA FILTRO V1 R0" },
-    { c: "MAP.026.0170", n: "TUBO REDONDO ØE63,5X1,5MM C/ COSTURA AÇO INOX AISI 304" },
-    { c: "MAN.001.0100", n: "CALÇO DE FIXAÇAO DAS PORTAS DE VIDRO" },
-    { c: "MAN.002.0002", n: "SUPORTE DE FIXAÇAO DO PT100 Ø5X30X6MM INOX" },
-    { c: "MAN.002.0022", n: "SUPORTE DE FIXAÇAO SERPENTINA" },
-    { c: "MAN.005.0035", n: "BANDEJA DE REFRIGERAÇAO 350X350MM AÇO CARBONO" },
-    { c: "MAN.006.0004", n: "DISSIPADOR EM Z DA CHAVE ESTATICA 20X100X50MM ALUMINIO" },
-    { c: "PVC.015.0015", n: "ETIQUETA DE VOLTAGEM 220V 25X100MM VINIL" },
-    { c: "MAP.011.0003", n: "PERFIL E VERDE CLARO E15X12,5MM SILICONE PERF.SIL.SOL.VD.50±5SHA TIPO \"E\"" },
-    { c: "MEC.020.0021", n: "ANEL DE VEDAÇAO ØE136XØI105X3MM BORRACHA" },
-    { c: "REF.004.0001", n: "TUBO DE COBRE Ø5/16" },
-    { c: "REF.004.0003", n: "TUBO DE COBRE Ø1/4" },
-    { c: "REF.004.0004", n: "TUBO DE COBRE Ø3/8" },
-    { c: "ELE.035.0002", n: "VALVULA ENTRADA AGUA 90° ENTRDA/SAIDA 220V REF 20572" },
-    { c: "MEC.013.0001", n: "VALV ESFERA MINI MACHO X FEMEA 1/4X1/4" },
-    { c: "POR.003.0008", n: "PORCA SEXTAVADA M6 AÇO INOX 304" },
-    { c: "USI.027.0023", n: "PORCA SEXTAVADA 3/4\" ROSCA 9/16\"-18 UNF LATAO" },
-    { c: "PAR.100.0004", n: "PARAFUSO PHILIPS CABEÇA CHATA M4X25MM AÇO INOX 304" },
-    { c: "PAR.104.1008", n: "PARAFUSO FENDA CABEÇA CHATA M6X12MM AÇO INOX 304" },
-    { c: "PAR.110.0003", n: "PARAFUSO CABEÇA SEXTAVADA M6X25MM AÇO INOX 304" },
-    { c: "PAR.111.1007", n: "PARAFUSO PHILIPS CABEÇA CHATA M3X15MM AÇO INOX 304" },
-    { c: "PAR.135.3057", n: "PARAFUSO PHILIPS CABEÇA CILINDRICA M4X10MM AÇO INOX 304" },
-    { c: "PAR.201.0004", n: "PARAFUSO PHILIPS CABEÇA CHATA M4X35MM AÇO INOX 304" },
-    { c: "PAR.207.0011", n: "PARAFUSO PHILIPS CABEÇA CILINDRICA M5X10MM AÇO INOX 304" },
-    { c: "PAR.232.1005", n: "PARAFUSO PHILIPS CABEÇA CILINDRICA M4X20MM ACO INOX 304" },
-    { c: "MEC.008.0104", n: "SUPORTE DE FIXAÇAO 1/2\"X1/8\"X50MM ROSCA M6 AÇO CARBONO" },
-    { c: "USI.004.0006", n: "ESPAÇADOR ØE13XØI10X5MM ALUMINIO" },
-    { c: "USI.005.0033", n: "HASTE DO FECHO CREMONA Ø5/16 X 647MM AÇO INOX" },
-    { c: "USI.007.0003", n: "GUIA DA HASTE Ø22X10MM ROSCA 9-16 UNF POLIACETAL" },
-    { c: "USI.014.0014", n: "BICO DE SAIDA D'AGUA ROSCA 1/2 BSPX38MM AÇO INOX" },
-    { c: "USI.022.0054", n: "CONJUNTO DO BICO DE REDUÇAO DA CALDEIRA" },
-    { c: "USI.022.0063", n: "CONJUNTO DA HASTE P/ SENSORES REED CALDEIRA" },
-    { c: "ELE.022.0012", n: "RESISTENCIA CARACOL PEQUENA 1200W 220V INOX" },
-    { c: "USI.002.0002", n: "TAMPA Ø156X5MM ALUMINIO" },
-    { c: "MAP.003.0008", n: "CHAPA DE ALUMINIO 2000X1000X3MM" },
-    { c: "ELE.020.0003", n: "PASSA FIO PARALAMA UNIVERSAL COD 16015" },
-    { c: "MEC.001.0003", n: "ABRAÇADEIRA ROSCA SEM FIM GALVANIZADA 22-32" },
-    { c: "MEC.012.0013", n: "REBITE ROSCA INTEIRA M6 C/ CAB. PLANA BICROMATIZADO" },
-    { c: "MEC.007.0006", n: "FECHO LINGUETA REG. MIOLO FENDA COD. 28512" },
-    { c: "MAC.010.0010", n: "FITA ALUMINIO PURO ADESIVA LARG 45MM ROLO C/30M" },
-    { c: "MAP.003.0033", n: "CHAPA #16 AÇO CARBONO 2000 X 1200 X 1,5 MM FINA FRIO" },
-    { c: "FAB.000.0001", n: "BOTIJAO DE GAS REFRIGERANTE R134A (13,6KG)" },
-    { c: "MAP.003.0014", n: "CHAPA #12 AÇO CARBONO 2000X1200X2,65MM FINA FRIO" },
-    { c: "PAR.135.3050", n: "PARAFUSO PHILLIPS CABEÇA ABAULADA M4X5MM INOX 304" },
-    { c: "PAR.100.0011", n: "PINO DE PROJEÇÃO M6 X 20 MM- AÇO INOX" },
-    { c: "MEC.012.0027", n: "REBITE TUBULAR ROSCA INTERNA M6 AÇO INOX 304" },
-    { c: "ELE.005.0044", n: "CANALETA DE PVC 30 X 50 X 2000MTROS" },
-    { c: "USI.013.0212", n: "ANEL DO PASSADOR DE FIO ØE=60XØI37X5MM SEM ROSCA - NYLON" },
-    { c: "MEC.012.0018", n: "REBITE CABEÇA ABAULADA TIPO POP Ø3,2X10MM AÇO INOX 304" },
-    { c: "MAP.013.0030", n: "TINTA PO POLIESTER TEXTURIZADA SEMI-BRILHO RAL 9003 BRANCO COD 10057832" },
-    { c: "ELE.004.0013", n: "TERMOSTATO CAPILAR TR2 0-90°C MODELO 540010" },
-    { c: "MAN.002.0001", n: "SUPORTE DE FIXAÇAO DO TERMOSTATO Ø10X30X6MM INOX TEMP. (0° A 40°)" },
-    { c: "MAN.002.0008", n: "SUPORTE DO CABO USB ATTS_EDTS" },
-    { c: "MAP.003.0041", n: "CHAPA #20 INOX AISI 304 2000X1250X1,0MM C/PVC AZUL" },
-    { c: "MAP.003.0042", n: "CHAPA #16 INOX AISI 304 2000X1250X1,6MM C/PVC AZUL" },
-    { c: "ELE.024.0075", n: "SENSOR DE NIVEL LD361-M12" },
-    { c: "ELE.025.0080", n: "CONECTOR M12 FEMEA 90° CABO 2 MTS PVC 4 VIAS ICOS" },
-    { c: "MAP.003.0088", n: "CHAPA #20 AÇO CARBONO 2000 X 1200 X 0,9 MM FINA FRIO" },
-    { c: "ELE.024.0100", n: "TRANSMISSOR DE UMIDADE S501I-0S-0" },
-    { c: "MAN.500.0007", n: "SISTEMA DE OSMOSE REVERSA ETHIK. MOD. OR-1 BIVOLT" },
-    { c: "MAP.003.0046", n: "CHAPA #24 INOX AISI 304 2000X1250X 0,6 C/ PVC AZUL" },
-    { c: "ISO.002.0004", n: "PAINEL LÃ DE VIDRO PSI-30 1200X600X50MM EMB 20,16M² TEMP -200 ATÉ 250°C" },
-    { c: "MAP.006.0104", n: "SELANTE SILICONADO DOW CORNING (-65ºC A 260ºC) REF:736" },
-    { c: "USI.014.0192", n: "LUVA DE REDUÇÃO ROSCA 1 1/16\" UNF E ROSCA 1/2\" NPT" },
-    { c: "ELE.007.0088", n: "RELÉ DE INTERFACE JNG MOD. JAR50 220VCA 1NA+1NF" },
-    { c: "MEC.011.0203", n: "CONEXÃO \"T\" COBRE 3/8\"" },
-    { c: "CAL.001.0001", n: "CAL TEMP 20°C / 30°C / 40°C / 60°C - UMI 65%/75%" },
-    { c: "MAN.005.0123", n: "BANDEJA ARAMADA 645X670MM AÇO INOX" },
-    { c: "MEC.020.0055", n: "ARRUELA DE VEDAÇÃO 5/8 ØI16XØE25X3MM BORRACHA" },
-    { c: "REF.004.0024", n: "TUBO CAPILAR DE COBRE ØI0,79MM ØI0,031IN ROLO 3M" },
-    { c: "USI.014.0086", n: "BICO DA CALDEIRA ROSCA 1/2 BSP X 7/8\" X 34MM BICO Ø 21,7MM" },
-    { c: "ACR.003.0007", n: "RECIPIENTE DOSADOR EM ACRILICO MED.147X50X50MM" },
-    { c: "ELE.027.0027", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 0" },
-    { c: "ELE.027.0028", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 1" },
-    { c: "ELE.027.0029", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 2" },
-    { c: "ELE.027.0030", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 3" },
-    { c: "ELE.027.0031", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 4" },
-    { c: "ELE.027.0032", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 5" },
-    { c: "ELE.027.0033", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 6" },
-    { c: "ELE.027.0034", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 7" },
-    { c: "ELE.027.0035", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 8" },
-    { c: "ELE.027.0036", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 9" },
-    { c: "VDR.002.0009", n: "BALAO VIDRO C/ FUNDO CHATO Ø220X210MM (DRENO ALTO)" },
-    { c: "MAN.002.0113", n: "SUPORTE PARA FIXAÇÃO DA SONDA DE UMIDADE MED. 110X110X5MM" },
-    { c: "USI.023.0103", n: "CONJUNTO DE ENTRADA DE CALIBRAÇAO Ø60X101MM POLIACETAL" },
-    { c: "MAN.002.0010", n: "BASE P/ CALDEIRA (VDR.002.0009) DA CAMARA CLIMATICA" },
-    { c: "VDR.001.0049", n: "VIDRO TEMPERADO MED 1290X715X6MM COM FUROS" },
-    { c: "USI.022.0311", n: "CONJUNTO BASE DOS RODIZIOS EM TUBO P/CLIMATICA 600L" },
-    { c: "MEC.007.0087", n: "FECHO LINGUETA EM POLIAMIDA C/ PORCA MIOLO BORBOLETA COD.25123" },
-    { c: "ELE.012.0037", n: "FONTE HARTRONIC MOD. RS-25-24 1,1A 24V" },
-    { c: "REF.001.0070", n: "CONDENSADOR 220MM 16T/2F 3/8 SAIDA ENTRADA DIR C/COIFA" },
-    { c: "COM.000.0018", n: "CARTÃO DE MEMÓRIA SANDISK SDSQUNS-016G-GN3MA ULTRA SD 16GB" },
-    { c: "USI.022.0324", n: "CONJUNTO GUIA HASTE CREMONA CLIMATICA 597L" },
-    { c: "MAN.999.0014", n: "SUPORTE DE FIXAÇAO DO MOTOR IBRAM 120X105X3MM ALUMINIO" },
-    { c: "MEC.008.0039", n: "HELICE 6\" ALUMINIO 5 PÁS ASPIRADOR GECOM MOTOR ANTI HORARIO" },
-    { c: "USI.001.0164", n: "EIXO CIRCULAÇÃO Ø1/2X65MM ALUM FURO Ø8MM FR/TM" },
-    { c: "MAP.003.0050", n: "CHAPA #22 AÇO CARBONO 2000 X 1200 X 0,75 MM FINA FRIO" },
-    { c: "MAN.002.0121", n: "SUPORTE CABO EXTENSOR MACHO FEMEA CAT6 RJ45 INOX (2 PEÇAS)" },
-    { c: "ELE.015.0149", n: "INTERFACE IHM70ER-SWPI (ETHERNET)" },
-    { c: "ELE.031.3125", n: "CONTROLADOR PROCESSO C754+RS485+1XSPST+ENT DIG" },
-    { c: "ELE.037.0040", n: "CABO DE REDE SOHOPLUS FURUKAWA RJ 45 2,5 METROS" },
-    { c: "INF.000.0071", n: "RJ45 ADAPTADOR CONECTOR EMENDA CAT7/6/5E ETHERNET" },
-    { c: "ELE.015.0151", n: "CABO EXTENSOR USB MACHO X FEMEA 90° 20CM" },
-    { c: "CAL.001.0026", n: "CAL TEMP -30°C, 0°C, 50°C, 150°C E 300°C" },
-    { c: "ELE.004.0057", n: "TERMOSTATO 16A PARA MAQUINA 60 GRAUS NORMAL FECHADO" },
-    { c: "ELE.001.0112", n: "CHAVE 2 POSICOES ILUMINADA C/CAPA SILICONE VERMELHA RS-201-1 125V-20A/220V-16A ME" },
-    { c: "PVC.015.0650", n: "PAINEL ADESIVO 550X350MM USB TOUCH 7\" CLIMATICA" },
-    { c: "MEC.010.0113", n: "RODIZIO S/ FREIO GLRX 312 UFN 119KG PLACA 80X105MM INOX" },
-    { c: "MEC.010.0112", n: "RODIZIO C/ FREIO GLRXOA 312 UFN 119KG PLACA 80X105MM INOX" },
-    { c: "ELE.005.0001", n: "CABO PP 3X1,0MM²X1,5MT PT PLUG 3CO 10A 4,0MM NBR14136" },
-    { c: "ELE.031.0030", n: "CONTROLADOR DE TEMPERATURA DIGITAL C130" },
-    { c: "CHI.402.3010", n: "CHICOTE DA ESTUFA 402/3 A /5 E 404/1 A 3.1,0MM 110/220V" },
-    { c: "ELE.001.0003", n: "INTERRUPTOR 29123 M1F-T1E-E3-G 15A M VERMELHO" },
-    { c: "ELE.020.0009", n: "PASSADOR DE FIO EM PVC CONICO COM ALETAS" },
-    { c: "ARU.130.0007", n: "ARRUELA PRESSAO M6 AÇO INOX 304" },
-    { c: "ELE.022.0030", n: "RESISTENCIA W 302X397MM 1000W 220V RAB SILIC 350MM CARB" },
-    { c: "MEC.002.0026", n: "FECHO MAGNETICO HBA-26 FERRITE" },
-    { c: "ELE.024.0035", n: "SENSOR TIPO K COM RABICHO 1500MM 24 AWG" },
-    { c: "ISO.002.0001", n: "MANTA LÃ BRANCA TECH LB 6,0 12000X1200X25" },
-    { c: "MAN.001.0002", n: "CHAPA DE ENCOSTO PARA FECHO MAGNETICO PROMAG" },
-    { c: "MAN.002.0041", n: "SUPORTE DE FIXAÇAO DO SENSOR K Ø5X121X30MM INOX" },
-    { c: "MAN.005.0012", n: "BANDEJA EM CHAPA 440X390MM INOX 430" },
-    { c: "PVC.015.0319", n: "PAINEL ADESIVO 90X400MM ESTUFA MOD 402-3N CONT CONTEMP" },
-    { c: "MEC.004.0011", n: "PUXADOR LINHA ECO COD 92999 PRETO" },
-    { c: "MEC.018.0005", n: "PE NIVELADOR Ø3/8X28MM" },
-    { c: "PAR.005.2001", n: "PARAFUSO PHILIPS CAB CILIND AUTO-ATARRAX Ø5X10MM ZINC" },
-    { c: "PAR.203.5008", n: "PARAFUSO CABEÇA SEXTAVADA M6X16MM AÇO INOX 304" },
-    { c: "PAR.207.0015", n: "PARAFUSO PHILIPS CABEÇA CHATA M4X10 AÇO INOX 304" },
-    { c: "USI.020.0009", n: "TUBO SUPERIOR DA ESTUFA 402-3G" },
-    { c: "MAP.003.0007", n: "CHAPA #20 AÇO CARBONO 2500 X 1200 X 0,9 MM FINA FRIO" },
-    { c: "MAC.002.0040", n: "CAIXA DE PAPELAO TAMPA/CINTA/FUNDO 760X750X760MM 58405 - BC" },
-    { c: "MEC.018.5555", n: "CHAPA 3/8 PARA PE NIVELADOR Ø3/8X28MM MEC.018.0005" },
-    { c: "MAP.003.0040", n: "CHAPA #24 INOX AISI 430 2000X1240X 0,6MM C/ PVC AZUL" },
-    { c: "ELE.005.0015", n: "CABO PP 3X1,0MM²X2,0MT PT PLUG 3CO 10A 4,0MM NBR14136" },
-    { c: "REF.001.0004", n: "CONDENSADOR 367MMX268MM 18T/2F 1/2 CDE2777" },
-    { c: "ELE.004.0002", n: "TERMOSTATO CAPILAR 0-120°C TS120SB-R.5X105MM" },
-    { c: "REF.005.2005", n: "COMPRESSOR HERMETICO EMBRACO EMI 60HER 220V 60HZ" },
-    { c: "ELE.017.0048", n: "MICROVENTILADOR 120X120X38MM -10°C A +60°C 110/220V Q120A3" },
-    { c: "ELE.022.0050", n: "RESISTENCIA ALETADA GRANDE L 700W 220V INOX 304" },
-    { c: "MEC.002.0004", n: "DOBRADIÇA PS COM ROLDANA DE AÇO CROMADA" },
-    { c: "MEC.003.0004", n: "COMP MOV FECHO MAGNETICO BRANCO *20 008029001" },
-    { c: "REF.007.0019", n: "GAXETA IMANTADA MED 980X556X17MM" },
-    { c: "ELE.015.2710", n: "PLACA FONTE L/D V0RV0 NORMAL VD BIVOLT" },
-    { c: "MAN.005.0041", n: "BANDEJA EM CHAPA 990X680MM INOX 430" },
-    { c: "MAN.005.0038", n: "BANDEJA P/ COLETA DE AGUA 20X170X400MM INOX 430 PINTADO" },
-    { c: "MEC.004.0001", n: "MANIPULO ROSCA FEMEA M6X1,00MM BAQUELITE COD001BB20L M610 AMP BRASIL" },
-    { c: "MEC.010.0007", n: "GLRON 312 PP 80 KG RODIZIO MARCA ROD CAR" },
-    { c: "MEC.010.0008", n: "GLR 312 PP 90 KG RODIZIO MARCA ROD CAR S/FREIO" },
-    { c: "VDR.001.0039", n: "VIDRO TEMPERADO INCOLOR ESQUERDO 930X550X6MM C/FUROS E CONF DESENHO" },
-    { c: "VDR.001.0040", n: "VIDRO TEMPERADO INCOLOR DIREITO 930X550X6MM C/FUROS E CONF DESENHO" },
-    { c: "MEC.008.0028", n: "SUPORTE DE FIXAÇAO 1/2X1/8X60MM ROSCA M5 AÇO CARBONO" },
-    { c: "MEC.008.0105", n: "SUPORTE DE FIXAÇAO 1/2X1/8X55MM ROSCA M5 AÇO CARBONO" },
-    { c: "USI.022.0006", n: "REGULADOR DE AR COMPLETO" },
-    { c: "PRS.000.0001", n: "CALIBRAÇAO DE INDICADOR/CONTROLADOR DE TEMPERATURA" },
-    { c: "MEC.031.0008", n: "CAIXA PLASTICA FRONTAL DO NOVO CONTROLADOR TOUCH" },
-    { c: "MAP.015.0476", n: "PAINEL ADESIVO 106X630MM ESTUFA 410 NDR TOUCH SCREEN" },
-    { c: "ELE.001.0012", n: "INTERRUPTOR PUSHBUTTON 24533-M3IX-A3IX W2-B BRANCO NF" },
-    { c: "REF.001.0010", n: "EVAPORADOR 520X253X70MM 3/8X5MM" },
-    { c: "ELE.022.0075", n: "RESISTENCIA RETA BLINDADA Ø9,52X590MM 300W 220V INOX" },
-    { c: "MEC.005.0014", n: "BANDEJA ARAMADA 660X650MM AÇO CARBONO NIQUELADO" },
-    { c: "MEC.011.0112", n: "CONEXAO COTOVELO P/ TUBO Ø3/8 C/ BOLSA COBRE" },
-    { c: "REF.007.1160", n: "GAXETA IMANTADA MED 1296X725X17MM" },
-    { c: "MEC.001.1313", n: "TRILHO P/ CONTADORA/DISJUNTOR" },
-    { c: "MAP.013.0005", n: "TINTA PO 26 TEXTURIZADA CINZA RAL 7035 COD-10005965" },
-    { c: "MAP.011.0001", n: "PERFIL MOLDURA V-3,31,8X5MM PVC BRANCO" },
-    { c: "REF.004.0022", n: "TUBO CAPILAR DE COBRE ØI0,91MM E ØE2,01MM TIPO 0,036\"" },
-    { c: "POR.003.0010", n: "PORCA SEXTAVADA M3 AÇO INOX 304" },
-    { c: "PAR.001.0001", n: "PARAFUSO DB9 C/ PORCA E ARRUELA" },
-    { c: "USI.022.0027", n: "CONJUNTO DE ENTRADA P/ CALIBRAÇAO Ø76X15MM ALUMINIO" },
-    { c: "MEC.012.0001", n: "REBITE CABEÇA ABAULADA TIPO POP Ø3,2X10MM ALUMINIO DIN 7337" },
-    { c: "MAP.015.0475", n: "PAINEL ADESIVO 109X506MM INCUBADORA TOUCH SCREEN" },
-    { c: "PLC.022.0008", n: "CONTROLADOR DE TEMPERATURA TOUCH COLOR CALIBRADO (FAIXAS -30, 100, 300 )" },
-    { c: "MEC.015.0004", n: "TAMPAO P/FURO Ø10 PLASTICO" },
-    { c: "ELE.013.0021", n: "FUSIVEL DE VIDRO GRANDE 10A 250VCA TIPO 3AG" },
-    { c: "MEC.001.0040", n: "REBITE ROSCA INTERNA M4 CAB. EXTRA FINA INOX 304" },
-    { c: "ELE.015.2719", n: "PLACA TRANSFORMADOR SAIDA 13VAC" },
-    { c: "ELE.015.2720", n: "PLACA FONTE L/D V0RV0 NORMAL VD BIVOLT PROVISORIA 2 TECLAS" },
-    { c: "MAN.005.0048", n: "BANDEJA PARA COLETA DE AGUA 40X170X630MM INOX 430" },
-    { c: "MAP.003.0063", n: "CHAPA #20 INOX AISI 201 2000X1250X1,0MM C/ PVC AZUL" },
-    { c: "ELE.017.0130", n: "VENTILADOR RADIAL 220V 60HZ UF190APA23H1C2A/ COM CAPACITOR COD. 3081329" },
-    { c: "ELE.017.0131", n: "CAPACITOR 1,5 UF 400 VDB P/MOTOR MOD. R2E190-AO26-05" },
-    { c: "ELE.017.0132", n: "DIFUSOR P/MOTOR MOD. R2E190-AO26-05" },
-    { c: "MAN.017.0133", n: "SUPORTE DO MOTOR R2E 190-RA26-05 240X100X80MM INOX" },
-    { c: "MAN.002.0105", n: "PROTEÇÃO DO ROTOR EM CHAPA # 20 INOX 430" },
-    { c: "CAL.003.0001", n: "CAL TEMP -50°C / 0°C / 50°C /150°C /350ºC" },
-    { c: "ELE.005.0022", n: "CABO PP 3X2,5MM2" },
-    { c: "MAN.010.0200", n: "FLAT 10 VIAS 200MM" },
-    { c: "ELE.031.0070", n: "CONTROLADOR REFRIGERAÇAO TC970E LOG+ECO VER.03 90-240VAC - CTRL" },
-    { c: "ELE.014.0038", n: "DISJUNTOR TERMOMAG. SIEMENS 5SX1 210-6 BIPOLAR B 10A" },
-    { c: "ELE.037.0004", n: "PLUG MACHO 20A 3 POLOS PADRAO BRASILEIRO MARCA WEG" },
-    { c: "REF.001.0001", n: "CONDENSADOR 367MMX268MM 30T/3F 3/4 CDE 2778" },
-    { c: "REF.005.1013", n: "COMPRESSOR HERMETICO EMBRACO T2180GK 220V 60HZ" },
-    { c: "ELE.017.0053", n: "MICROVENTILADOR 162X162X55MM -30°C A +60°C 110/220V QUALITAS Q160A3G" },
-    { c: "ELE.018.0065", n: "RESISTENCIA SILICONE TC 220V 24W/M 4660MM" },
-    { c: "ISO.004.0001", n: "PRODUTO POLIURETANO ISOTERMICO (ESCURO)" },
-    { c: "ISO.004.0002", n: "PRODUTO POLIURETANO POLITERMICO (CLARO)" },
-    { c: "ELE.015.3001", n: "PLACA FONTE L/D V1 RV2 RL1 VM 220V" },
-    { c: "ELE.015.3401", n: "PLACA NE L/D1 FUNÇAO S1" },
-    { c: "ELE.015.7901", n: "PLACA FONTE ALARME PIC V0 RV1 VD/VM 220V" },
-    { c: "MAN.002.0047", n: "SUPORTE CONTROLADOR DEGELO" },
-    { c: "REF.004.0002", n: "TUBO CAPILAR DE COBRE ØI1,07MM E Ø 2,17MM 0,042" },
-    { c: "USI.022.0046", n: "CONJUNTO DE ENTRADA DE CALIBRAÇAO Ø60X86MM POLIACETAL" },
-    { c: "MAP.015.0483", n: "PAINEL ADESIVO FREEZER 415 -TD 255 TOUCH SCREEN" },
-    { c: "FAB.000.0011", n: "BOTIJAO GAS DE REFRIGERANTE 404A (10,90KG)" },
-    { c: "ELE.004.0014", n: "TERMOSTATO CAPILAR TR2 0° A 40° AJUSTAVEL MOD: 540030 BRASITERM" },
-    { c: "ELE.005.0021", n: "CABO PP 3X1,0MM²X1,5MT PT PLUGS 3CO+OA5 4MM NBR14136" },
-    { c: "ELE.017.0100", n: "MOTOR DE PASSO SM1.8-D12-MN BIPOLAR SE" },
-    { c: "ELE.001.0004", n: "MICROINTERRUPTOR - 40108 A5 E3 Q 15A - MARGIRIUS" },
-    { c: "ELE.005.0048", n: "FIXADOR AUTO ADESIVO PLASTICO MOD LKCS/A NAT" },
-    { c: "ELE.039.0006", n: "CONECTOR P/ FUSIVEL E INTERRUPTOR CODIGO EX-2153" },
-    { c: "ARU.110.0001", n: "ARRUELA PRESSAO M5 AÇO INOX 304" },
-    { c: "ARU.110.0006", n: "ARRUELA PRESSAO M4 AÇO INOX 304" },
-    { c: "MEC.021.0005", n: "CORREIA SINCRONIZADA 130 XL 3/8X" },
-    { c: "MEC.018.0004", n: "PE NIVELADOR ROSCA 1/4X30MM PN3031" },
-    { c: "POR.003.0003", n: "PORCA SEXTAVADA M5 AÇO INOX 304" },
-    { c: "PAR.101.1011", n: "PARAFUSO CABEÇA CILINDRICA M6X15 AÇO INOX 304" },
-    { c: "PAR.105.1009", n: "PARAFUSO ALLEN M5X35MM AÇO INOX 304" },
-    { c: "PAR.113.3001", n: "PARAFUSO PHILIPS CABEÇA CHATA M3X6MM AÇO INOX 304" },
-    { c: "PAR.113.6001", n: "PARAFUSO PHILIPS CABEÇA CHATA M3X20MM BICROMATIZADO AMARELO" },
-    { c: "PAR.135.3001", n: "PARAFUSO ALLEN M4X12MM AÇO INOX 304" },
-    { c: "PAR.135.3002", n: "PARAFUSO ALLEN M6X45MM AÇO INOX 304" },
-    { c: "PAR.135.3033", n: "PARAFUSO ALLEN CABEÇA SEM CABEÇA M6X8MM AÇO INOX 304" },
-    { c: "PAR.135.3039", n: "PARAFUSO ALLEN M4X20MM AÇO INOX 304" },
-    { c: "PAR.135.3042", n: "PARAFUSO ALLEN M6X25MM AÇO INOX 304" },
-    { c: "PAR.235.3051", n: "PARAFUSO ALLEN SEM CABEÇA M4X5 AÇO INOX 304" },
-    { c: "USI.012.0020", n: "POLIA SINCRONIZADA 12XL 3/8 C/ FURO Ø6,35MM ALUMINIO" },
-    { c: "MEC.020.0036", n: "PINCEL C/ CERDA BRANCA OU PRETA DE 1/2\" CABO CURTO" },
-    { c: "PAR.100.0007", n: "PINO DE PROJEÇÃO M6 X 15 MM - AÇO INOX" },
-    { c: "ELE.060.0002", n: "ESPAÇADOR PLASTICOS ECI 3,0 NAT" },
-    { c: "PAR.100.0010", n: "PINO DE PROJEÇAO M4X15 MM AÇO INOX" },
-    { c: "PLM.022.0011", n: "PLACA CONTROLADORA DUROMETRO EDTS E ATTS MONTADA" },
-    { c: "CHI.298.0002", n: "CHICOTE DUROMETRO 0,30MM² 110/220V 298 ATTS/EDTS V.II" },
-    { c: "DRY.022.0241", n: "CONJUNTO MEDIDOR DE DUREZA 298 ATTS/EDTS V.II" },
-    { c: "USI.022.0236", n: "CONJUNTO ESTICADOR EXCENTRICO Ø35X17MM AÇO INOX C/ ROLAMENTO 6202" },
-    { c: "ELE.024.0135", n: "CELULA DE CARGA 130X50X25MM 50KG MOD.G50" },
-    { c: "MAP.999.0183", n: "ESCOVA ADESIVA 7X15MM PRETA 3M" },
-    { c: "ELE.012.0040", n: "FONTE HARTRONIC MOD LRS-150F-24" },
-    { c: "ELE.015.0153", n: "INTERFACE IHM DELTA DOP-107EG" },
-    { c: "ELE.017.0169", n: "DRIVE MOTOR DE PASSO KTC-STR-3 KALATEC COD 4648" },
-    { c: "MEC.500.0008", n: "IMPRESSORA TÉRMICA INCORPORADA AIEBCY DO RECIBO 58MM MINI IM" },
-    { c: "PVC.015.0625", n: "PAINEL ADESIVO 348X189MM TOUCH 7\" USB DUROMETRO" },
-    { c: "PVC.015.0626", n: "PAINEL ADESIVO 130X80MM RJ45 FUSIVEL DUROMETRO" },
-    { c: "USI.017.0038", n: "BASE 215X349MMX1/2\" C/ FUROS ROSCAS ALUM" },
-    { c: "USI.008.0216", n: "MÃO FRANCESA 168X76MMX1/2\" C/ FUROS ROSCAS INOX" },
-    { c: "USI.008.0217", n: "SUPORTE CELULA CARGA G50 90X38X16MM AÇO INOX C/ FUROS ROSCAS INOX" },
-    { c: "USI.008.0218", n: "SUPORTE ESMAGADOR 90X38X38MM INOX ELETROPOLIDO" },
-    { c: "USI.017.0039", n: "BASE COMPRIMIDO 117X24X20MM INOX ELETROPOLIDO" },
-    { c: "PRS.000.0113", n: "TRATAMENTO ELETROPOLIMENTO P/ USI.008.0218 E USI.017.0039" },
-    { c: "USI.008.0219", n: "SUPORTE P/ BASE DO COMPRIMIDO 44X25X8MM INOX" },
-    { c: "ELE.024.0025", n: "CELULA DE CARGA MRS-30 ALIMENTAÇAO 10VCC" },
-    { c: "ELE.025.0001", n: "CONECTOR TIPO DB9 MACHO" },
-    { c: "ELE.025.0078", n: "CONECTOR PHONEX HOUSING AKZ 950 04 5,0 5.8-V GREEN" },
-    { c: "ELE.029.0012", n: "TRANSFORMADOR ENT.110/220V SAIDA 20V/2,5A-7,5V/700MA-12V/700MA 60HZ" },
-    { c: "ELE.015.0126", n: "PLACA FONTE DO DUROMETRO 220V" },
-    { c: "ELE.015.0002", n: "CABO EXTENSOR USB MACHO X FEMEA 0,5MT - WI026" },
-    { c: "MEC.031.0040", n: "SUPORTE FRONTAL DA IHM 234X127MM POLIETILENO" },
-    { c: "PLM.022.0012", n: "PLACA DATA LOGGER MONTADA" },
-    { c: "DRY.022.0242", n: "CONJUNTO MEDIDOR DE ALTURA 298 EDTS V.II" },
-    { c: "USI.008.0188", n: "MÃO FRANCESA 85X50X13MM ALUMINIO" },
-    { c: "USI.025.0008", n: "APOIO DO MEDIDOR DE ALTURA 80X38X13MM 298 EDTS V.II" },
-    { c: "USI.025.0009", n: "APOIO DO MEDIDOR DE ALTURA 50X38X13MM 298 EDTS V.II" },
-    { c: "MEC.999.0024", n: "ALAVANCA TRAVA FEMEA POLIAMIDA ATF 5018-M6" },
-    { c: "MEC.002.0091", n: "DOBRADIÇA PLANA EXTERNA COM ABERTURA DE 180° REF 91411" },
-    { c: "MAP.015.0497", n: "PAINEL ADESIVO 150X280MM TOUCH 298 ATTS/EDTS" },
-    { c: "USI.017.0032", n: "BASE 415X215X13MM ALUMINIO 298 ATTS/EDTS" },
-    { c: "ACR.008.0021", n: "CAIXA DE COLETA 155X102X65MM ACRILICO 298 ATTS/EDTS" },
-    { c: "ACR.008.0022", n: "TAMPA ACRILICO 102X100X65MM 298 ATTS/EDTS" },
-    { c: "USI.008.0192", n: "SUPORTE DA CELULA CARGA MOD.G50 50X38X25MM AÇO INOX" },
-    { c: "USI.008.0193", n: "SUPORTE DA CELULA CARGA MOD.MRS-30 65X51X13MM ALUM" },
-    { c: "USI.008.0194", n: "SUPORTE ESMAGADOR 90X38X38MM AÇO INOX ELETROPOLIDO" },
-    { c: "USI.008.0195", n: "FLANGE FIXAÇÃO Ø35X15MM 03 ROSCAS M4 ALUM" },
-    { c: "USI.013.0036", n: "ARRUELA Ø32X4MM C/ FURO Ø22MM NYLON" },
-    { c: "USI.022.0303", n: "SUPORTE DO PAINEL 340X50MM TUBO Ø22MM" },
-    { c: "USI.008.0197", n: "SUPORTE MEDIDOR DE ALTURA 45X34X20MM ALUM" },
-    { c: "USI.017.0033", n: "BASE P/ COMPRIMIDO 117X24X16MM INOX ELETROPOLIDO" },
-    { c: "USI.008.0198", n: "SUPORTE P/ BASE DO COMPRIMIDO 40X25X8MM INOX" },
-    { c: "PRS.000.0058", n: "TRATAMENTO ELETROPOLIMENTO P/ USI.017.0033 E USI.008.0194" },
-    { c: "PLC.022.1005", n: "CONJUNTO IHM P/ DUROMETRO EDTS" },
-    { c: "MAP.015.0544", n: "PAINEL ADESIVO 345X140MM 298 ATTS/EDTS DATA LOGGER" },
-    { c: "ELE.005.0002", n: "CABO PP 3X1,5MM²X2,0MT PT PLUG 3CO 15A 4,8MM NBR14136" },
-    { c: "ELE.014.0013", n: "DISJUNTOR TERMOMAG. SIEMENS 5SX1 106-7 MONOPOLAR C 6A" },
-    { c: "ELE.039.0002", n: "TOMADA DE PAINEL 2P+T10A 250V TPA-23E3-F PADRAO BRASILEIRO" },
-    { c: "ELE.004.0001", n: "TERMOSTATO CAPILAR TU 50-320°C BULBO INOX - CAEM" },
-    { c: "ARU.010.0012", n: "ARRUELA LISA M4 AÇO INOX 304" },
-    { c: "MEC.011.0012", n: "UNIAO COM ROSCA 1/4 NPT P/ TUBO Ø1/4 LATAO ARC 1004/1414" },
-    { c: "MEC.025.0001", n: "NIPLE CLAMP-POLEGADA OD-SOLDA -LONG 1 1/2" },
-    { c: "MEC.025.0002", n: "NIPLE CLAMP CEGO Ø1 1/2" },
-    { c: "MEC.025.0004", n: "ANEL DE VEDAÇAO CLAMP-POLEGADA OD Ø1 1/2" },
-    { c: "MEC.013.0005", n: "VALVULA ESFERA 3 VIAS 1/4 TUBO/TUBO" },
-    { c: "POR.003.0005", n: "PORCA SEXTAVADA M8 AÇO INOX 304" },
-    { c: "POR.003.0006", n: "PORCA SEXTAVADA M10 AÇO INOX 304" },
-    { c: "POR.014.3002", n: "PORCA EM LATAO 1/4 SAE CURTA C/ ROSCA UNF" },
-    { c: "POR.101.0003", n: "PORCA SEXTAVADA M4 AÇO INOX 304" },
-    { c: "POR.102.0002", n: "PORCA SEXTAVADA 5/8\" C/ ROSCA PARALEL 7/16\" UNF X 5 MM LATAO" },
-    { c: "USI.022.0238", n: "CONJ POÇO TERMOMETRICO RETO FLANGEADO ØE3/8 XØI7MM ROSCA M10 INOX" },
-    { c: "USI.011.0070", n: "BUCHA Ø20X7MM NYLON" },
-    { c: "USI.014.0012", n: "CONEXAO P/ MANGUEIRA Ø3/8 ROSCA 7/16 UNFX49MM CROMADO" },
-    { c: "USI.020.0036", n: "TUBO PROLONGADOR DA ENTRADA DE CALIBRAÇAO Ø38X120MM AÇO INOX" },
-    { c: "MAP.026.0104", n: "BARRA CHATA 5/8X1/8 AÇO INOX AISI 304" },
-    { c: "MAP.003.0012", n: "CHAPA #12 INOX AISI 304 2000 X 1250 X 2,50 - COM PVC" },
-    { c: "MEC.025.0003", n: "ABRAÇADEIRA CLAMP-MACIÇA Ø1 1/2" },
-    { c: "MEC.014.0003", n: "MOLA Ø15X21MM FIO 2MM PASSO 5MM AÇO CARBONO" },
-    { c: "ELE.013.0020", n: "FUSIVEL DE VIDRO GDE 5A 250 VCA TIPO 3AG" },
-    { c: "PRS.000.0005", n: "TRATAMENTO DE SUPERFICIE ELETROPOLIMENTO DE CUBA A VACUO 47 LTS" },
-    { c: "VDR.001.0230", n: "VIDRO TEMPERADO 430X380X10MM INCOLOR C/ FUROS" },
-    { c: "ELE.024.0136", n: "TRANSMISSOR PRESSÃO -760 A 760 MMHG SAÍDA 4-20MA ROSCA 7/16\" UNF CABO 1M" },
-    { c: "MEC.011.0025", n: "PERFIL TIPO \"E\" VAZADO COM EMENDA A FRIO MED 1270MM (SHORE A65 +-5) PRETO" },
-    { c: "MAC.002.0102", n: "CHAPA DE PAPELAO 2000X2000 - TABULEIRO QUALID RP-64BC" },
-    { c: "ELE.024.0015", n: "SENSOR DE TEMPERATURA TIPO PT 100 150MM ESPECIAL COM FLANGE SEXTAVADO" },
-    { c: "ELE.005.0119", n: "CANALETA DE PVC 20 X 30 X 2000MTROS" },
-    { c: "USI.008.0155", n: "LUVA Ø5/8X65MM ROSCA 1/4 NPT AÇO INOX TREFILADO" },
-    { c: "USI.999.1158", n: "PORCA 2\" COM ROSCA 1.1/4\" BSP" },
-    { c: "USI.999.1159", n: "BASE DA TRAVA DA LINGUETA MED.1\"X2\"X1/2\"X5MM" },
-    { c: "USI.999.1160", n: "TRAVA DA LINGUETA MED.1/2\"X1\"1/2\"X35MM" },
-    { c: "MEC.020.0018", n: "ARRUELA DE SILICONE PARA 300ºC ØEXT 57 X ØINT40 X 2MM" },
-    { c: "ELE.022.0151", n: "RESISTENCIA ESPECIAL TIPO CHAPEIRA MED.278.5X250.5MM 1.500W 220V INOX" },
-    { c: "VDR.001.0284", n: "VIDRO COMUM MEDIDA 332 X 332 X 4MM" },
-    { c: "PVC.015.0537", n: "PAINEL TRASEIRO ADESIVO ESTUFA VACUO 27 LITROS" },
-    { c: "PAR.202.6000", n: "PARAFUSO ALLEN CABECA ABAULADA M8X50MM AÇO INOX 304" },
-    { c: "MAN.020.0061", n: "ARRUELA DE SILICONE PARA 300ºC ØEXT 20 X ØINT 9 X 2MM" },
-    { c: "USI.003.0017", n: "BASE ALUMINIO 290MMX280MMX1/2 ESTUFA VACUO 440-1 C/ 5 FACES ESCOVADAS" },
-    { c: "MEC.007.0066", n: "FECHO LINGUETA PRESSÃO COM TRAVA CÓD. TASCO 29000" },
-    { c: "PAR.135.3069", n: "PARAFUSO ALLEN M4X16MM AÇO INOX 304" },
-    { c: "PVC.015.0637", n: "PAINEL ADESIVO LED CONTROLADOR 48X48MM 524X146MM ESTUFA VACUO" },
-    { c: "USI.999.1679", n: "GUIA BASE DE FECHO ESPECIAL Ø50X22MM NYLON" },
-    { c: "ELE.025.0002", n: "SUPORTE P/ 4 PILHAS TAMANHO AA MOD SP5 (CANOA)" },
-    { c: "ELE.025.0053", n: "CONECTOR MOLEX HOUSING 2,5MM 5051-N 2 VIAS CN23 251202HP05" },
-    { c: "ELE.025.0055", n: "CONECTOR MOLEX HOUSING 2,5MM 5051-N 4 VIAS CN21 251204HP05" },
-    { c: "ELE.008.0011", n: "PILHA ALCALINA 1,2V TAMANHO AA DURACELL" },
-    { c: "MEC.018.0009", n: "ANTI IMPACTO 3M 08MMX08MMX2,5MM (BATENTE DE SILICONE 8MM)" },
-    { c: "ELE.015.4702", n: "PLACA DUROMETRO NE DGP V4RV1" },
-    { c: "PVC.015.0384", n: "PAINEL ADESIVO 81MMX52MM DUROMETRO 298 DGP VERSAO II" },
-    { c: "PAR.135.3046", n: "PARAFUSO ALLEN M5X10MM AÇO INOX 304" },
-    { c: "USI.022.0216", n: "KIT DE PEÇAS DUROMETRO DGP" },
-    { c: "MAC.002.0064", n: "CAIXA DE PAPELAO TAMPA/CINTA/FUNDO 500X295X450MM" },
-    { c: "MEC.031.0060", n: "CAIXA PLASTICA DUROMETRO DGP VERSAO III" },
-    { c: "ACR.008.0010", n: "TAMPA P/DUROMETRO DGP 37X62X25MM ACRILICO I" },
-    { c: "PRS.017.0008", n: "SERVIÇO DE USINAGEM BASE 12,4X52X63MM ALUMINIO" },
-    { c: "PRS.001.0167", n: "SERVIÇO DE USINAGEM EIXO PARA ROLAMENTO Ø4,75X17MM INOX" },
-    { c: "PRS.008.0101", n: "SERVIÇO DE USINAGEM SUPORTE DE FIXAÇAO 12,7X135X63MM ALUMINIO" },
-    { c: "PRS.008.0032", n: "SERVIÇO DE USINAGEM SUPORTE DO MANCAL 60,2X38X63MM ALUMINIO" },
-    { c: "PRS.010.0007", n: "SERVIÇO DE USINAGEM MANCAL DO DUROMETRO DGP Ø31,8X17MM LATAO" },
-    { c: "PRS.029.0014", n: "SERVIÇO DE USINAGEM FUSO ROSCA ESQUERDA M12X65MM AÇO INOX 304" },
-    { c: "PRS.021.0001", n: "SERVIÇO DE USINAGEM MANIPULO RECARTILHADO Ø38X42MM ALUMINIO" },
-    { c: "PRS.011.0025", n: "SERVIÇO DE USINAGEM BUCHA ESPAÇADORA Ø1/2X7MM LATAO" },
-    { c: "PRS.008.0109", n: "SERVIÇO DE USINAGEM SUPORTE ESMAGADOR ROSCA ESQ M12 Ø19X45MM INOX" },
-    { c: "PRS.004.0004", n: "SERVIÇO DE USINAGEM PROLONGADOR DA CELULA DE CARGA 1/2X28X14MM AÇO INOX" },
-    { c: "PRS.008.0111", n: "SERVIÇO DE USINAGEM SUPORTE 27X9,5X18MM AÇO INOX" },
-    { c: "PRS.021.0001A", n: "TRATAMENTO SUPERFICIAL POLIDO ANODIZADO PRETO BRILHANTE (MANIPULO RECARTILHADO)" },
-    { c: "PRS.008.0032A", n: "TRATAMENTO SUPERFICIAL POLIDO ANODIZADO PRETO BRILHANTE (SUPORTE DO MANCAL)" },
-    { c: "PRS.008.0101A", n: "TRATAMENTO SUPERFICIAL POLIDO ANODIZADO PRETO BRILHANTE (SUPORTE DE FIXAÇAO)" },
-    { c: "PRS.000.0021", n: "PRESTAÇÃO DE SERVIÇO" },
-    { c: "PRS.000.0022", n: "MANUTENÇAO PREVENTIVA" },
-    { c: "ELE.017.0004", n: "MICROREDUTOR 31RPM BIVOLT 60HZ" },
-    { c: "ELE.017.0013", n: "MOTOR M130 BIVOLT 35W 2P 3420RPM CLASSE B 60HZ C/ ROLAMENTO PARAFUSO INOX M4" },
-    { c: "ELE.025.0014", n: "CAPA P/ CONECTOR DB9 KIT LONGO" },
-    { c: "FAB.004.0065", n: "CHAVE ALLEN 2,5MM" },
-    { c: "ELE.024.0013", n: "SENSOR DE TEMPERATURA TIPO PT 100 150MM" },
-    { c: "ACR.003.0006", n: "CONJUNTO CUBA ACRILICO 170X327X200MM COMPLETA" },
-    { c: "MAN.301.0122", n: "CESTO P/ DESINTEGRADOR C/ 6 TUBOS NOVA ETICA" },
-    { c: "MEC.301.0123", n: "PASTILHA DE ACRILICO P/ DESINTEGRADOR" },
-    { c: "PVC.015.0079", n: "ETIQUETA NIVEL TRANSPARENTE 20X50MM" },
-    { c: "MAP.002.0013", n: "GUARNIÇAO QUADRADO 5/8 BORRACHA PRETA" },
-    { c: "MEC.018.0003", n: "PE DE BORRACHA PEQUENO Ø15X10MM NR 36" },
-    { c: "USI.022.0022", n: "CONJUNTO DA HASTE DE AGITAÇAO ØE12X120MM INOX" },
-    { c: "USI.005.0018", n: "HASTE GUIA DO CESTO Ø5/16X355MM AÇO INOX" },
-    { c: "USI.005.0066", n: "HASTE C/ ROSCA W 1/4 QUAD 3/8X177MM INOX" },
-    { c: "USI.008.0019", n: "SUPORTE INF DE FIXAÇAO DA HASTE 3/8X75X19MM ALUMINIO" },
-    { c: "USI.008.0075", n: "SUPORTE SUPERIOR DE FIX DA HASTE 3/8X70X19MM ALUMINIO" },
-    { c: "USI.013.0011", n: "ANEL ESPAÇADOR ØE7,5X4,2X4MM LATAO" },
-    { c: "USI.022.0029", n: "CONJUNTO DO EXCENTRICO Ø70X45MM AÇO CARBONO" },
-    { c: "USI.022.0099", n: "CONJUNTO DA ROLDANA ØE25,4 X ØI 9,9 X 11MM POLIACETAL COM ROLAMENTO" },
-    { c: "ELE.022.0008", n: "RESISTENCIA CARACOL PEQUENA 600W 220V INOX" },
-    { c: "MAP.003.0009", n: "CHAPA DE ALUMINIO 2000X1000X5MM" },
-    { c: "VDR.002.0044", n: "COPO BECKER ØE105X145MM VIDRO 1 LITRO FORMA BAIXA" },
-    { c: "MAP.013.0041", n: "TINTA PO POLIESTER TEXTURIZADA BRILHANTE RAL 9003 10057832" },
-    { c: "PVC.015.0628", n: "PAINEL ADESIVO 300X106MM CONTROLADOR CONTEMP C754" },
-    { c: "USI.022.0100", n: "CONJUNTO DO POÇO TERMOMETRICO RETO FLANGEADO Ø3/8 X 135MM" },
-    { c: "ELE.031.0022", n: "CONTROL DE TEMP MICRO ETC45 ETICA-LED -30°C, 0°C, 50°C, 150°C E 300°C" },
-    { c: "CHI.411.2010", n: "CHICOTE DA BOD 411-D 86 A 335 1,5MM² 110/220V" },
-    { c: "REF.001.0002", n: "CONDENSADOR 210MM 8T/2F 1/6 CDE 2580" },
-    { c: "REF.001.0008", n: "EVAPORADOR 223X223MM 24T 3/8X5MM" },
-    { c: "REF.005.2008", n: "COMPRESSOR HERMETICO EMBRACO EMIS20HHR 220V 60HZ" },
-    { c: "ELE.022.0052", n: "RESISTENCIA RETA BLINDADA Ø9,52X300MM 150W 110V INOX" },
-    { c: "MEC.005.0018", n: "BANDEJA ARAMADA 440X340MM AÇO CARBONO NIQUELADO" },
-    { c: "REF.007.1186", n: "GAXETA IMANTADA MED 586X490X17MM" },
-    { c: "MAP.015.0034", n: "PAINEL ADESIVO 97X494MM INCUBADORA BOD 86L DISPLAY LED" },
-    { c: "MAC.002.0010", n: "CAIXA DE PAPELAO ENVELOPE 790X670,5X1730" },
-    { c: "MAN.005.0003", n: "BANDEJA PARA COLETA DE AGUA 40X170X475MM INOX 430" },
-    { c: "MAN.026.0400", n: "FLAT 26 VIAS 400MM" },
-    { c: "ELE.031.0035", n: "CONTROL DE TEMP MICRO ETC45 ETICA-LCD -30°C, 0°C, 50°C, 150°C E 300°C." },
-    { c: "ELE.017.0019", n: "MOTOREDUTOR MR110-VE-240 240RPM 24VCC" },
-    { c: "ELE.029.0043", n: "TRANSFORMADOR ENT.127/220V SAIDA 25V-0V-25V 60HZ 100VA MT61" },
-    { c: "MEC.005.0001", n: "CORREIA POLICORTE POLIURETANO VERDE ASPERO Ø5MM" },
-    { c: "ELE.022.0004", n: "RESISTENCIA U 287X50MM 600W 220V AÇO INOX" },
-    { c: "ELE.024.0045", n: "DISCO PARA SENSOR OPTICO 64 PULSOS" },
-    { c: "ELE.015.5901", n: "PLACA FONTE NE CPU FT24V V1R3 240 AZ 220V" },
-    { c: "ELE.015.6601", n: "PLACA NE F FT24V LCD V1R3" },
-    { c: "ELE.015.8701", n: "PLACA NETICA ROTAÇAO V1R0" },
-    { c: "MAN.002.0037", n: "SUPORTE DE FIXAÇAO DO SENSOR OPT PH203 44X33X15MM INOX" },
-    { c: "MEC.004.0002", n: "PUXADOR PLANO (POLIAMIDA) COD.91355 TASCO" },
-    { c: "MEC.018.0018", n: "VENTOSA Nº2 DE APOIO P/ EQUIPAMENTO COM ROSCA MACHO 5/16" },
-    { c: "USI.022.0071", n: "CONJUNTO DO MANCAL P/ ROL 6001 E EXCENTRICO LOUCO Ø12MM" },
-    { c: "POR.015.3003", n: "PORCA SEXTAVADA Ø9/16X5MM ROSCA W3/8 LATAO" },
-    { c: "USI.008.0051", n: "SUPORTE PARA SENSOR OPTICO ØE33XØI26,5X5MM ALUMINIO" },
-    { c: "USI.012.0005", n: "POLIA Ø40X17MM P/ SISTEMA MECANICO ALUMINIO" },
-    { c: "USI.014.0013", n: "ADAPTADOR SEXTAVADO 7/8 C/ ROSCA 1/4 NPTX49MM LATAO" },
-    { c: "USI.022.0093", n: "CONJUNTO DO POÇO TERMOMETRICO RETO FLANGEADO Ø3/8" },
-    { c: "USI.022.0094", n: "CONJUNTO DO EIXO C/ MANCAL Ø48X34,5MM" },
-    { c: "USI.022.0095", n: "CONJUNTO DO EXCENTRICO C/ MANCAL Ø44X37MM" },
-    { c: "USI.026.0004", n: "PARAFUSO COM ROSCA 1/4BSPT ØE25,4XØI8,5X15MM LATÃO" },
-    { c: "MAP.003.0001", n: "CHAPA #20 INOX AISI 304 3000X1250X1,0MM C/PVC AZUL" },
-    { c: "MAN.003.0005", n: "GARRA P/ FRASCOS DE 250ML AÇO INOX" },
-    { c: "MAC.002.0015", n: "PLASTICO BOLHA ROLO 100MX1300MM ESP 10MM" },
-    { c: "MEC.999.1078", n: "MANIPULO MARGARIDA ROSCA MACHO M6X25MM INOX COD.00980" },
-    { c: "MAC.002.0058", n: "PLACA DE ISOPOR P-1 1000X500X35MM" },
-    { c: "MAP.015.0019", n: "PAINEL ADESIVO 414X100MM BANHO 501 REV.01" }
-        ]; 
-        // Nota: Substitua esta array vazia [] pela lista completa de "pecasIniciais" que estava no seu app.js anterior para não perder as peças de fábrica!
+            { c: "ELE.000.0007", n: "FIO TEFLON 24 AWG TEMPERATURA 150°C" },
+            { c: "ELE.005.0024", n: "CABO PP 3X1,0MM2" },
+            { c: "ELE.005.0061", n: "CABO PP 3X4,0MM2" },
+            { c: "ELE.005.0062", n: "CABO MANGA 6X26 COM BLINDAGEM TRANÇADA BEGE" },
+            { c: "ELE.005.0025", n: "CABO DE COBRE ISOLAÇAO SILICONE/FIBRA COFISIL FG 2,50MM²" },
+            { c: "ELE.007.0001", n: "CHAVE ESTATICA 15A MOD220D15" },
+            { c: "ELE.007.0018", n: "CONTATOR MINICONTATOR AZ CW07-10-30D24" },
+            { c: "ELE.014.0017", n: "DISJUNTOR TERMOMAG. SIEMENS 5SX1 230-6 BIPOLAR B 30A" },
+            { c: "ELE.017.0018", n: "MOTOR ELETRICO I-56 25MM 1/35CV 2P M 110/220V 50/60HZ ISOL F" },
+            { c: "ELE.005.0006", n: "PRENSA CABO PLASTICO PG 13,5 P-CABO 2,5MM" },
+            { c: "ELE.005.0040", n: "PRENSA CABO PLASTICO REF-PG-7" },
+            { c: "ELE.013.0028", n: "FUSIVEL DE VIDRO GRANDE 4A 250VCA TIPO 3AG" },
+            { c: "ELE.015.6002", n: "FILTRO DE LINHA - CONECTOR COD.800499 SF - SKU 52F9095" },
+            { c: "ELE.024.0014", n: "BOIA MAGNETICA ØE28XØI9X28MM INOX" },
+            { c: "ELE.025.0013", n: "CONECTOR TIPO DB9 FEMEA" },
+            { c: "ELE.033.0001", n: "PORTA FUSIVEL 20A250V MOD 11050/F PRETO" },
+            { c: "ELE.037.0006", n: "PLUGUE STECK 32A 6H 2P+T N-3276 220V AZUL" },
+            { c: "ELE.004.0017", n: "TERMOSTATO REARME AUTO SERIE 1/2\" MOD.T04 1 1 3 1 70 11 1 2 5 EMICOL" },
+            { c: "ARU.010.0006", n: "ARRUELA LISA M6 AÇO INOX 304" },
+            { c: "ARU.010.0014", n: "ARRUELA LISA Ø E 20MM ØI 5,5MM AÇO INOX 304" },
+            { c: "REF.005.2002", n: "COMPRESSOR HERMETICO EMBRACO FFU130HAX 220V 60HZ" },
+            { c: "ELE.017.0024", n: "MICROVENTILADOR 92X92X39MM 10°C 110/220V" },
+            { c: "ELE.017.0030", n: "MICROMOTOR C/ HELICE 8X45MM MM-11 B08SPEA 1550RPM 110/220V ELGIN" },
+            { c: "ELE.022.0018", n: "RESISTENCIA U 429X127MM 300W 220V INOX" },
+            { c: "ELE.022.0034", n: "RESISTENCIA ALETADA PEQUENA L 320W 220V INOX 304" },
+            { c: "MEC.002.0027", n: "FECHO MAGNETICO HBA-26 NEODIMIO" },
+            { c: "MEC.007.0033", n: "FECHO CREMONA S/ LING MAÇANETA L CHAVE YALE COD 22161" },
+            { c: "MEC.002.0001", n: "DOBRADICA PLANA EXTERNA COM ABERTURA DE 270./18 REF 91453" },
+            { c: "MAN.002.0115", n: "DOBRADIÇA INTERNA ABERTURA 120° INOX" },
+            { c: "MAP.006.0001", n: "MANGUEIRA DE SILICONE ØE14,6XØI 9,5MM - CORD.SOL.SIL.TRANS.70±5SHA14,60X9,5" },
+            { c: "MAP.006.0005", n: "MANGUEIRA SILICONE ØE29XØI19MM - CORD.SOL.SIL.TRANS.70±5SHA 19X29" },
+            { c: "REF.002.0001", n: "FILTRO COM SILICA 1 ENTRADA 1 SAIDA" },
+            { c: "ELE.024.0003", n: "SENSOR DE TEMPERATURA PT100 100MM" },
+            { c: "ELE.024.0007", n: "REED SWITCH NO Ø2,4X13,5MM COD-HYR1532" },
+            { c: "MEC.011.0002", n: "CONEXAO T P/ MANG 3/8 ARC-10104 AÇO CARBONO GALVANIZADO ARC 104/38" },
+            { c: "MEC.011.0004", n: "CONEXAO P/ MANG 3/8 ROSCA 1/4 NPT X 40MM LATAO ARC 100/1438" },
+            { c: "MEC.011.0006", n: "NIPLE C/ ROSCA 1/2 NPT E ENGATE RAPIDO P/ MANG 1/4 PLAST COD 3AT19133-0004" },
+            { c: "ELE.015.6001", n: "PLACA NETICA FILTRO V1 R0" },
+            { c: "MAP.026.0170", n: "TUBO REDONDO ØE63,5X1,5MM C/ COSTURA AÇO INOX AISI 304" },
+            { c: "MAN.001.0100", n: "CALÇO DE FIXAÇAO DAS PORTAS DE VIDRO" },
+            { c: "MAN.002.0002", n: "SUPORTE DE FIXAÇAO DO PT100 Ø5X30X6MM INOX" },
+            { c: "MAN.002.0022", n: "SUPORTE DE FIXAÇAO SERPENTINA" },
+            { c: "MAN.005.0035", n: "BANDEJA DE REFRIGERAÇAO 350X350MM AÇO CARBONO" },
+            { c: "MAN.006.0004", n: "DISSIPADOR EM Z DA CHAVE ESTATICA 20X100X50MM ALUMINIO" },
+            { c: "PVC.015.0015", n: "ETIQUETA DE VOLTAGEM 220V 25X100MM VINIL" },
+            { c: "MAP.011.0003", n: "PERFIL E VERDE CLARO E15X12,5MM SILICONE PERF.SIL.SOL.VD.50±5SHA TIPO \"E\"" },
+            { c: "MEC.020.0021", n: "ANEL DE VEDAÇAO ØE136XØI105X3MM BORRACHA" },
+            { c: "REF.004.0001", n: "TUBO DE COBRE Ø5/16" },
+            { c: "REF.004.0003", n: "TUBO DE COBRE Ø1/4" },
+            { c: "REF.004.0004", n: "TUBO DE COBRE Ø3/8" },
+            { c: "ELE.035.0002", n: "VALVULA ENTRADA AGUA 90° ENTRDA/SAIDA 220V REF 20572" },
+            { c: "MEC.013.0001", n: "VALV ESFERA MINI MACHO X FEMEA 1/4X1/4" },
+            { c: "POR.003.0008", n: "PORCA SEXTAVADA M6 AÇO INOX 304" },
+            { c: "USI.027.0023", n: "PORCA SEXTAVADA 3/4\" ROSCA 9/16\"-18 UNF LATAO" },
+            { c: "PAR.100.0004", n: "PARAFUSO PHILIPS CABEÇA CHATA M4X25MM AÇO INOX 304" },
+            { c: "PAR.104.1008", n: "PARAFUSO FENDA CABEÇA CHATA M6X12MM AÇO INOX 304" },
+            { c: "PAR.110.0003", n: "PARAFUSO CABEÇA SEXTAVADA M6X25MM AÇO INOX 304" },
+            { c: "PAR.111.1007", n: "PARAFUSO PHILIPS CABEÇA CHATA M3X15MM AÇO INOX 304" },
+            { c: "PAR.135.3057", n: "PARAFUSO PHILIPS CABEÇA CILINDRICA M4X10MM AÇO INOX 304" },
+            { c: "PAR.201.0004", n: "PARAFUSO PHILIPS CABEÇA CHATA M4X35MM AÇO INOX 304" },
+            { c: "PAR.207.0011", n: "PARAFUSO PHILIPS CABEÇA CILINDRICA M5X10MM AÇO INOX 304" },
+            { c: "PAR.232.1005", n: "PARAFUSO PHILIPS CABEÇA CILINDRICA M4X20MM ACO INOX 304" },
+            { c: "MEC.008.0104", n: "SUPORTE DE FIXAÇAO 1/2\"X1/8\"X50MM ROSCA M6 AÇO CARBONO" },
+            { c: "USI.004.0006", n: "ESPAÇADOR ØE13XØI10X5MM ALUMINIO" },
+            { c: "USI.005.0033", n: "HASTE DO FECHO CREMONA Ø5/16 X 647MM AÇO INOX" },
+            { c: "USI.007.0003", n: "GUIA DA HASTE Ø22X10MM ROSCA 9-16 UNF POLIACETAL" },
+            { c: "USI.014.0014", n: "BICO DE SAIDA D'AGUA ROSCA 1/2 BSPX38MM AÇO INOX" },
+            { c: "USI.022.0054", n: "CONJUNTO DO BICO DE REDUÇAO DA CALDEIRA" },
+            { c: "USI.022.0063", n: "CONJUNTO DA HASTE P/ SENSORES REED CALDEIRA" },
+            { c: "ELE.022.0012", n: "RESISTENCIA CARACOL PEQUENA 1200W 220V INOX" },
+            { c: "USI.002.0002", n: "TAMPA Ø156X5MM ALUMINIO" },
+            { c: "MAP.003.0008", n: "CHAPA DE ALUMINIO 2000X1000X3MM" },
+            { c: "ELE.020.0003", n: "PASSA FIO PARALAMA UNIVERSAL COD 16015" },
+            { c: "MEC.001.0003", n: "ABRAÇADEIRA ROSCA SEM FIM GALVANIZADA 22-32" },
+            { c: "MEC.012.0013", n: "REBITE ROSCA INTEIRA M6 C/ CAB. PLANA BICROMATIZADO" },
+            { c: "MEC.007.0006", n: "FECHO LINGUETA REG. MIOLO FENDA COD. 28512" },
+            { c: "MAC.010.0010", n: "FITA ALUMINIO PURO ADESIVA LARG 45MM ROLO C/30M" },
+            { c: "MAP.003.0033", n: "CHAPA #16 AÇO CARBONO 2000 X 1200 X 1,5 MM FINA FRIO" },
+            { c: "FAB.000.0001", n: "BOTIJAO DE GAS REFRIGERANTE R134A (13,6KG)" },
+            { c: "MAP.003.0014", n: "CHAPA #12 AÇO CARBONO 2000X1200X2,65MM FINA FRIO" },
+            { c: "PAR.135.3050", n: "PARAFUSO PHILLIPS CABEÇA ABAULADA M4X5MM INOX 304" },
+            { c: "PAR.100.0011", n: "PINO DE PROJEÇÃO M6 X 20 MM- AÇO INOX" },
+            { c: "MEC.012.0027", n: "REBITE TUBULAR ROSCA INTERNA M6 AÇO INOX 304" },
+            { c: "ELE.005.0044", n: "CANALETA DE PVC 30 X 50 X 2000MTROS" },
+            { c: "USI.013.0212", n: "ANEL DO PASSADOR DE FIO ØE=60XØI37X5MM SEM ROSCA - NYLON" },
+            { c: "MEC.012.0018", n: "REBITE CABEÇA ABAULADA TIPO POP Ø3,2X10MM AÇO INOX 304" },
+            { c: "MAP.013.0030", n: "TINTA PO POLIESTER TEXTURIZADA SEMI-BRILHO RAL 9003 BRANCO COD 10057832" },
+            { c: "ELE.004.0013", n: "TERMOSTATO CAPILAR TR2 0-90°C MODELO 540010" },
+            { c: "MAN.002.0001", n: "SUPORTE DE FIXAÇAO DO TERMOSTATO Ø10X30X6MM INOX TEMP. (0° A 40°)" },
+            { c: "MAN.002.0008", n: "SUPORTE DO CABO USB ATTS_EDTS" },
+            { c: "MAP.003.0041", n: "CHAPA #20 INOX AISI 304 2000X1250X1,0MM C/PVC AZUL" },
+            { c: "MAP.003.0042", n: "CHAPA #16 INOX AISI 304 2000X1250X1,6MM C/PVC AZUL" },
+            { c: "ELE.024.0075", n: "SENSOR DE NIVEL LD361-M12" },
+            { c: "ELE.025.0080", n: "CONECTOR M12 FEMEA 90° CABO 2 MTS PVC 4 VIAS ICOS" },
+            { c: "MAP.003.0088", n: "CHAPA #20 AÇO CARBONO 2000 X 1200 X 0,9 MM FINA FRIO" },
+            { c: "ELE.024.0100", n: "TRANSMISSOR DE UMIDADE S501I-0S-0" },
+            { c: "MAN.500.0007", n: "SISTEMA DE OSMOSE REVERSA ETHIK. MOD. OR-1 BIVOLT" },
+            { c: "MAP.003.0046", n: "CHAPA #24 INOX AISI 304 2000X1250X 0,6 C/ PVC AZUL" },
+            { c: "ISO.002.0004", n: "PAINEL LÃ DE VIDRO PSI-30 1200X600X50MM EMB 20,16M² TEMP -200 ATÉ 250°C" },
+            { c: "MAP.006.0104", n: "SELANTE SILICONADO DOW CORNING (-65ºC A 260ºC) REF:736" },
+            { c: "USI.014.0192", n: "LUVA DE REDUÇÃO ROSCA 1 1/16\" UNF E ROSCA 1/2\" NPT" },
+            { c: "ELE.007.0088", n: "RELÉ DE INTERFACE JNG MOD. JAR50 220VCA 1NA+1NF" },
+            { c: "MEC.011.0203", n: "CONEXÃO \"T\" COBRE 3/8\"" },
+            { c: "CAL.001.0001", n: "CAL TEMP 20°C / 30°C / 40°C / 60°C - UMI 65%/75%" },
+            { c: "MAN.005.0123", n: "BANDEJA ARAMADA 645X670MM AÇO INOX" },
+            { c: "MEC.020.0055", n: "ARRUELA DE VEDAÇÃO 5/8 ØI16XØE25X3MM BORRACHA" },
+            { c: "REF.004.0024", n: "TUBO CAPILAR DE COBRE ØI0,79MM ØI0,031IN ROLO 3M" },
+            { c: "USI.014.0086", n: "BICO DA CALDEIRA ROSCA 1/2 BSP X 7/8\" X 34MM BICO Ø 21,7MM" },
+            { c: "ACR.003.0007", n: "RECIPIENTE DOSADOR EM ACRILICO MED.147X50X50MM" },
+            { c: "ELE.027.0027", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 0" },
+            { c: "ELE.027.0028", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 1" },
+            { c: "ELE.027.0029", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 2" },
+            { c: "ELE.027.0030", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 3" },
+            { c: "ELE.027.0031", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 4" },
+            { c: "ELE.027.0032", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 5" },
+            { c: "ELE.027.0033", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 6" },
+            { c: "ELE.027.0034", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 7" },
+            { c: "ELE.027.0035", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 8" },
+            { c: "ELE.027.0036", n: "MARCADOR MILLENIUM MHG2/5 NUMERO 9" },
+            { c: "VDR.002.0009", n: "BALAO VIDRO C/ FUNDO CHATO Ø220X210MM (DRENO ALTO)" },
+            { c: "MAN.002.0113", n: "SUPORTE PARA FIXAÇÃO DA SONDA DE UMIDADE MED. 110X110X5MM" },
+            { c: "USI.023.0103", n: "CONJUNTO DE ENTRADA DE CALIBRAÇAO Ø60X101MM POLIACETAL" },
+            { c: "MAN.002.0010", n: "BASE P/ CALDEIRA (VDR.002.0009) DA CAMARA CLIMATICA" },
+            { c: "VDR.001.0049", n: "VIDRO TEMPERADO MED 1290X715X6MM COM FUROS" },
+            { c: "USI.022.0311", n: "CONJUNTO BASE DOS RODIZIOS EM TUBO P/CLIMATICA 600L" },
+            { c: "MEC.007.0087", n: "FECHO LINGUETA EM POLIAMIDA C/ PORCA MIOLO BORBOLETA COD.25123" },
+            { c: "ELE.012.0037", n: "FONTE HARTRONIC MOD. RS-25-24 1,1A 24V" },
+            { c: "REF.001.0070", n: "CONDENSADOR 220MM 16T/2F 3/8 SAIDA ENTRADA DIR C/COIFA" },
+            { c: "COM.000.0018", n: "CARTÃO DE MEMÓRIA SANDISK SDSQUNS-016G-GN3MA ULTRA SD 16GB" },
+            { c: "USI.022.0324", n: "CONJUNTO GUIA HASTE CREMONA CLIMATICA 597L" },
+            { c: "MAN.999.0014", n: "SUPORTE DE FIXAÇAO DO MOTOR IBRAM 120X105X3MM ALUMINIO" },
+            { c: "MEC.008.0039", n: "HELICE 6\" ALUMINIO 5 PÁS ASPIRADOR GECOM MOTOR ANTI HORARIO" },
+            { c: "USI.001.0164", n: "EIXO CIRCULAÇÃO Ø1/2X65MM ALUM FURO Ø8MM FR/TM" },
+            { c: "MAP.003.0050", n: "CHAPA #22 AÇO CARBONO 2000 X 1200 X 0,75 MM FINA FRIO" },
+            { c: "MAN.002.0121", n: "SUPORTE CABO EXTENSOR MACHO FEMEA CAT6 RJ45 INOX (2 PEÇAS)" },
+            { c: "ELE.015.0149", n: "INTERFACE IHM70ER-SWPI (ETHERNET)" },
+            { c: "ELE.031.3125", n: "CONTROLADOR PROCESSO C754+RS485+1XSPST+ENT DIG" },
+            { c: "ELE.037.0040", n: "CABO DE REDE SOHOPLUS FURUKAWA RJ 45 2,5 METROS" },
+            { c: "INF.000.0071", n: "RJ45 ADAPTADOR CONECTOR EMENDA CAT7/6/5E ETHERNET" },
+            { c: "ELE.015.0151", n: "CABO EXTENSOR USB MACHO X FEMEA 90° 20CM" },
+            { c: "CAL.001.0026", n: "CAL TEMP -30°C, 0°C, 50°C, 150°C E 300°C" },
+            { c: "ELE.004.0057", n: "TERMOSTATO 16A PARA MAQUINA 60 GRAUS NORMAL FECHADO" },
+            { c: "ELE.001.0112", n: "CHAVE 2 POSICOES ILUMINADA C/CAPA SILICONE VERMELHA RS-201-1 125V-20A/220V-16A ME" },
+            { c: "PVC.015.0650", n: "PAINEL ADESIVO 550X350MM USB TOUCH 7\" CLIMATICA" },
+            { c: "MEC.010.0113", n: "RODIZIO S/ FREIO GLRX 312 UFN 119KG PLACA 80X105MM INOX" },
+            { c: "MEC.010.0112", n: "RODIZIO C/ FREIO GLRXOA 312 UFN 119KG PLACA 80X105MM INOX" },
+            { c: "ELE.005.0001", n: "CABO PP 3X1,0MM²X1,5MT PT PLUG 3CO 10A 4,0MM NBR14136" },
+            { c: "ELE.031.0030", n: "CONTROLADOR DE TEMPERATURA DIGITAL C130" },
+            { c: "CHI.402.3010", n: "CHICOTE DA ESTUFA 402/3 A /5 E 404/1 A 3.1,0MM 110/220V" },
+            { c: "ELE.001.0003", n: "INTERRUPTOR 29123 M1F-T1E-E3-G 15A M VERMELHO" },
+            { c: "ELE.020.0009", n: "PASSADOR DE FIO EM PVC CONICO COM ALETAS" },
+            { c: "ARU.130.0007", n: "ARRUELA PRESSAO M6 AÇO INOX 304" },
+            { c: "ELE.022.0030", n: "RESISTENCIA W 302X397MM 1000W 220V RAB SILIC 350MM CARB" },
+            { c: "MEC.002.0026", n: "FECHO MAGNETICO HBA-26 FERRITE" },
+            { c: "ELE.024.0035", n: "SENSOR TIPO K COM RABICHO 1500MM 24 AWG" },
+            { c: "ISO.002.0001", n: "MANTA LÃ BRANCA TECH LB 6,0 12000X1200X25" },
+            { c: "MAN.001.0002", n: "CHAPA DE ENCOSTO PARA FECHO MAGNETICO PROMAG" },
+            { c: "MAN.002.0041", n: "SUPORTE DE FIXAÇAO DO SENSOR K Ø5X121X30MM INOX" },
+            { c: "MAN.005.0012", n: "BANDEJA EM CHAPA 440X390MM INOX 430" },
+            { c: "PVC.015.0319", n: "PAINEL ADESIVO 90X400MM ESTUFA MOD 402-3N CONT CONTEMP" },
+            { c: "MEC.004.0011", n: "PUXADOR LINHA ECO COD 92999 PRETO" },
+            { c: "MEC.018.0005", n: "PE NIVELADOR Ø3/8X28MM" },
+            { c: "PAR.005.2001", n: "PARAFUSO PHILIPS CAB CILIND AUTO-ATARRAX Ø5X10MM ZINC" },
+            { c: "PAR.203.5008", n: "PARAFUSO CABEÇA SEXTAVADA M6X16MM AÇO INOX 304" },
+            { c: "PAR.207.0015", n: "PARAFUSO PHILIPS CABEÇA CHATA M4X10 AÇO INOX 304" },
+            { c: "USI.020.0009", n: "TUBO SUPERIOR DA ESTUFA 402-3G" },
+            { c: "MAP.003.0007", n: "CHAPA #20 AÇO CARBONO 2500 X 1200 X 0,9 MM FINA FRIO" },
+            { c: "MAC.002.0040", n: "CAIXA DE PAPELAO TAMPA/CINTA/FUNDO 760X750X760MM 58405 - BC" },
+            { c: "MEC.018.5555", n: "CHAPA 3/8 PARA PE NIVELADOR Ø3/8X28MM MEC.018.0005" },
+            { c: "MAP.003.0040", n: "CHAPA #24 INOX AISI 430 2000X1240X 0,6MM C/ PVC AZUL" },
+            { c: "ELE.005.0015", n: "CABO PP 3X1,0MM²X2,0MT PT PLUG 3CO 10A 4,0MM NBR14136" },
+            { c: "REF.001.0004", n: "CONDENSADOR 367MMX268MM 18T/2F 1/2 CDE2777" },
+            { c: "ELE.004.0002", n: "TERMOSTATO CAPILAR 0-120°C TS120SB-R.5X105MM" },
+            { c: "REF.005.2005", n: "COMPRESSOR HERMETICO EMBRACO EMI 60HER 220V 60HZ" },
+            { c: "ELE.017.0048", n: "MICROVENTILADOR 120X120X38MM -10°C A +60°C 110/220V Q120A3" },
+            { c: "ELE.022.0050", n: "RESISTENCIA ALETADA GRANDE L 700W 220V INOX 304" },
+            { c: "MEC.002.0004", n: "DOBRADIÇA PS COM ROLDANA DE AÇO CROMADA" },
+            { c: "MEC.003.0004", n: "COMP MOV FECHO MAGNETICO BRANCO *20 008029001" },
+            { c: "REF.007.0019", n: "GAXETA IMANTADA MED 980X556X17MM" },
+            { c: "ELE.015.2710", n: "PLACA FONTE L/D V0RV0 NORMAL VD BIVOLT" },
+            { c: "MAN.005.0041", n: "BANDEJA EM CHAPA 990X680MM INOX 430" },
+            { c: "MAN.005.0038", n: "BANDEJA P/ COLETA DE AGUA 20X170X400MM INOX 430 PINTADO" },
+            { c: "MEC.004.0001", n: "MANIPULO ROSCA FEMEA M6X1,00MM BAQUELITE COD001BB20L M610 AMP BRASIL" },
+            { c: "MEC.010.0007", n: "GLRON 312 PP 80 KG RODIZIO MARCA ROD CAR" },
+            { c: "MEC.010.0008", n: "GLR 312 PP 90 KG RODIZIO MARCA ROD CAR S/FREIO" },
+            { c: "VDR.001.0039", n: "VIDRO TEMPERADO INCOLOR ESQUERDO 930X550X6MM C/FUROS E CONF DESENHO" },
+            { c: "VDR.001.0040", n: "VIDRO TEMPERADO INCOLOR DIREITO 930X550X6MM C/FUROS E CONF DESENHO" },
+            { c: "MEC.008.0028", n: "SUPORTE DE FIXAÇAO 1/2X1/8X60MM ROSCA M5 AÇO CARBONO" },
+            { c: "MEC.008.0105", n: "SUPORTE DE FIXAÇAO 1/2X1/8X55MM ROSCA M5 AÇO CARBONO" },
+            { c: "USI.022.0006", n: "REGULADOR DE AR COMPLETO" },
+            { c: "PRS.000.0001", n: "CALIBRAÇAO DE INDICADOR/CONTROLADOR DE TEMPERATURA" },
+            { c: "MEC.031.0008", n: "CAIXA PLASTICA FRONTAL DO NOVO CONTROLADOR TOUCH" },
+            { c: "MAP.015.0476", n: "PAINEL ADESIVO 106X630MM ESTUFA 410 NDR TOUCH SCREEN" },
+            { c: "ELE.001.0012", n: "INTERRUPTOR PUSHBUTTON 24533-M3IX-A3IX W2-B BRANCO NF" },
+            { c: "REF.001.0010", n: "EVAPORADOR 520X253X70MM 3/8X5MM" },
+            { c: "ELE.022.0075", n: "RESISTENCIA RETA BLINDADA Ø9,52X590MM 300W 220V INOX" },
+            { c: "MEC.005.0014", n: "BANDEJA ARAMADA 660X650MM AÇO CARBONO NIQUELADO" },
+            { c: "MEC.011.0112", n: "CONEXAO COTOVELO P/ TUBO Ø3/8 C/ BOLSA COBRE" },
+            { c: "REF.007.1160", n: "GAXETA IMANTADA MED 1296X725X17MM" },
+            { c: "MEC.001.1313", n: "TRILHO P/ CONTADORA/DISJUNTOR" },
+            { c: "MAP.013.0005", n: "TINTA PO 26 TEXTURIZADA CINZA RAL 7035 COD-10005965" },
+            { c: "MAP.011.0001", n: "PERFIL MOLDURA V-3,31,8X5MM PVC BRANCO" },
+            { c: "REF.004.0022", n: "TUBO CAPILAR DE COBRE ØI0,91MM E ØE2,01MM TIPO 0,036\"" },
+            { c: "POR.003.0010", n: "PORCA SEXTAVADA M3 AÇO INOX 304" },
+            { c: "PAR.001.0001", n: "PARAFUSO DB9 C/ PORCA E ARRUELA" },
+            { c: "USI.022.0027", n: "CONJUNTO DE ENTRADA P/ CALIBRAÇAO Ø76X15MM ALUMINIO" },
+            { c: "MEC.012.0001", n: "REBITE CABEÇA ABAULADA TIPO POP Ø3,2X10MM ALUMINIO DIN 7337" },
+            { c: "MAP.015.0475", n: "PAINEL ADESIVO 109X506MM INCUBADORA TOUCH SCREEN" },
+            { c: "PLC.022.0008", n: "CONTROLADOR DE TEMPERATURA TOUCH COLOR CALIBRADO (FAIXAS -30, 100, 300 )" },
+            { c: "MEC.015.0004", n: "TAMPAO P/FURO Ø10 PLASTICO" },
+            { c: "ELE.013.0021", n: "FUSIVEL DE VIDRO GRANDE 10A 250VCA TIPO 3AG" },
+            { c: "MEC.001.0040", n: "REBITE ROSCA INTERNA M4 CAB. EXTRA FINA INOX 304" },
+            { c: "ELE.015.2719", n: "PLACA TRANSFORMADOR SAIDA 13VAC" },
+            { c: "ELE.015.2720", n: "PLACA FONTE L/D V0RV0 NORMAL VD BIVOLT PROVISORIA 2 TECLAS" },
+            { c: "MAN.005.0048", n: "BANDEJA PARA COLETA DE AGUA 40X170X630MM INOX 430" },
+            { c: "MAP.003.0063", n: "CHAPA #20 INOX AISI 201 2000X1250X1,0MM C/ PVC AZUL" },
+            { c: "ELE.017.0130", n: "VENTILADOR RADIAL 220V 60HZ UF190APA23H1C2A/ COM CAPACITOR COD. 3081329" },
+            { c: "ELE.017.0131", n: "CAPACITOR 1,5 UF 400 VDB P/MOTOR MOD. R2E190-AO26-05" },
+            { c: "ELE.017.0132", n: "DIFUSOR P/MOTOR MOD. R2E190-AO26-05" },
+            { c: "MAN.017.0133", n: "SUPORTE DO MOTOR R2E 190-RA26-05 240X100X80MM INOX" },
+            { c: "MAN.002.0105", n: "PROTEÇÃO DO ROTOR EM CHAPA # 20 INOX 430" },
+            { c: "CAL.003.0001", n: "CAL TEMP -50°C / 0°C / 50°C /150°C /350ºC" },
+            { c: "ELE.005.0022", n: "CABO PP 3X2,5MM2" },
+            { c: "MAN.010.0200", n: "FLAT 10 VIAS 200MM" },
+            { c: "ELE.031.0070", n: "CONTROLADOR REFRIGERAÇAO TC970E LOG+ECO VER.03 90-240VAC - CTRL" },
+            { c: "ELE.014.0038", n: "DISJUNTOR TERMOMAG. SIEMENS 5SX1 210-6 BIPOLAR B 10A" },
+            { c: "ELE.037.0004", n: "PLUG MACHO 20A 3 POLOS PADRAO BRASILEIRO MARCA WEG" },
+            { c: "REF.001.0001", n: "CONDENSADOR 367MMX268MM 30T/3F 3/4 CDE 2778" },
+            { c: "REF.005.1013", n: "COMPRESSOR HERMETICO EMBRACO T2180GK 220V 60HZ" },
+            { c: "ELE.017.0053", n: "MICROVENTILADOR 162X162X55MM -30°C A +60°C 110/220V QUALITAS Q160A3G" },
+            { c: "ELE.018.0065", n: "RESISTENCIA SILICONE TC 220V 24W/M 4660MM" },
+            { c: "ISO.004.0001", n: "PRODUTO POLIURETANO ISOTERMICO (ESCURO)" },
+            { c: "ISO.004.0002", n: "PRODUTO POLIURETANO POLITERMICO (CLARO)" },
+            { c: "ELE.015.3001", n: "PLACA FONTE L/D V1 RV2 RL1 VM 220V" },
+            { c: "ELE.015.3401", n: "PLACA NE L/D1 FUNÇAO S1" },
+            { c: "ELE.015.7901", n: "PLACA FONTE ALARME PIC V0 RV1 VD/VM 220V" },
+            { c: "MAN.002.0047", n: "SUPORTE CONTROLADOR DEGELO" },
+            { c: "REF.004.0002", n: "TUBO CAPILAR DE COBRE ØI1,07MM E Ø 2,17MM 0,042" },
+            { c: "USI.022.0046", n: "CONJUNTO DE ENTRADA DE CALIBRAÇAO Ø60X86MM POLIACETAL" },
+            { c: "MAP.015.0483", n: "PAINEL ADESIVO FREEZER 415 -TD 255 TOUCH SCREEN" },
+            { c: "FAB.000.0011", n: "BOTIJAO GAS DE REFRIGERANTE 404A (10,90KG)" },
+            { c: "ELE.004.0014", n: "TERMOSTATO CAPILAR TR2 0° A 40° AJUSTAVEL MOD: 540030 BRASITERM" },
+            { c: "ELE.005.0021", n: "CABO PP 3X1,0MM²X1,5MT PT PLUGS 3CO+OA5 4MM NBR14136" },
+            { c: "ELE.017.0100", n: "MOTOR DE PASSO SM1.8-D12-MN BIPOLAR SE" },
+            { c: "ELE.001.0004", n: "MICROINTERRUPTOR - 40108 A5 E3 Q 15A - MARGIRIUS" },
+            { c: "ELE.005.0048", n: "FIXADOR AUTO ADESIVO PLASTICO MOD LKCS/A NAT" },
+            { c: "ELE.039.0006", n: "CONECTOR P/ FUSIVEL E INTERRUPTOR CODIGO EX-2153" },
+            { c: "ARU.110.0001", n: "ARRUELA PRESSAO M5 AÇO INOX 304" },
+            { c: "ARU.110.0006", n: "ARRUELA PRESSAO M4 AÇO INOX 304" },
+            { c: "MEC.021.0005", n: "CORREIA SINCRONIZADA 130 XL 3/8X" },
+            { c: "MEC.018.0004", n: "PE NIVELADOR ROSCA 1/4X30MM PN3031" },
+            { c: "POR.003.0003", n: "PORCA SEXTAVADA M5 AÇO INOX 304" },
+            { c: "PAR.101.1011", n: "PARAFUSO CABEÇA CILINDRICA M6X15 AÇO INOX 304" },
+            { c: "PAR.105.1009", n: "PARAFUSO ALLEN M5X35MM AÇO INOX 304" },
+            { c: "PAR.113.3001", n: "PARAFUSO PHILIPS CABEÇA CHATA M3X6MM AÇO INOX 304" },
+            { c: "PAR.113.6001", n: "PARAFUSO PHILIPS CABEÇA CHATA M3X20MM BICROMATIZADO AMARELO" },
+            { c: "PAR.135.3001", n: "PARAFUSO ALLEN M4X12MM AÇO INOX 304" },
+            { c: "PAR.135.3002", n: "PARAFUSO ALLEN M6X45MM AÇO INOX 304" },
+            { c: "PAR.135.3033", n: "PARAFUSO ALLEN CABEÇA SEM CABEÇA M6X8MM AÇO INOX 304" },
+            { c: "PAR.135.3039", n: "PARAFUSO ALLEN M4X20MM AÇO INOX 304" },
+            { c: "PAR.135.3042", n: "PARAFUSO ALLEN M6X25MM AÇO INOX 304" },
+            { c: "PAR.235.3051", n: "PARAFUSO ALLEN SEM CABEÇA M4X5 AÇO INOX 304" },
+            { c: "USI.012.0020", n: "POLIA SINCRONIZADA 12XL 3/8 C/ FURO Ø6,35MM ALUMINIO" },
+            { c: "MEC.020.0036", n: "PINCEL C/ CERDA BRANCA OU PRETA DE 1/2\" CABO CURTO" },
+            { c: "PAR.100.0007", n: "PINO DE PROJEÇÃO M6 X 15 MM - AÇO INOX" },
+            { c: "ELE.060.0002", n: "ESPAÇADOR PLASTICOS ECI 3,0 NAT" },
+            { c: "PAR.100.0010", n: "PINO DE PROJEÇAO M4X15 MM AÇO INOX" },
+            { c: "PLM.022.0011", n: "PLACA CONTROLADORA DUROMETRO EDTS E ATTS MONTADA" },
+            { c: "CHI.298.0002", n: "CHICOTE DUROMETRO 0,30MM² 110/220V 298 ATTS/EDTS V.II" },
+            { c: "DRY.022.0241", n: "CONJUNTO MEDIDOR DE DUREZA 298 ATTS/EDTS V.II" },
+            { c: "USI.022.0236", n: "CONJUNTO ESTICADOR EXCENTRICO Ø35X17MM AÇO INOX C/ ROLAMENTO 6202" },
+            { c: "ELE.024.0135", n: "CELULA DE CARGA 130X50X25MM 50KG MOD.G50" },
+            { c: "MAP.999.0183", n: "ESCOVA ADESIVA 7X15MM PRETA 3M" },
+            { c: "ELE.012.0040", n: "FONTE HARTRONIC MOD LRS-150F-24" },
+            { c: "ELE.015.0153", n: "INTERFACE IHM DELTA DOP-107EG" },
+            { c: "ELE.017.0169", n: "DRIVE MOTOR DE PASSO KTC-STR-3 KALATEC COD 4648" },
+            { c: "MEC.500.0008", n: "IMPRESSORA TÉRMICA INCORPORADA AIEBCY DO RECIBO 58MM MINI IM" },
+            { c: "PVC.015.0625", n: "PAINEL ADESIVO 348X189MM TOUCH 7\" USB DUROMETRO" },
+            { c: "PVC.015.0626", n: "PAINEL ADESIVO 130X80MM RJ45 FUSIVEL DUROMETRO" },
+            { c: "USI.017.0038", n: "BASE 215X349MMX1/2\" C/ FUROS ROSCAS ALUM" },
+            { c: "USI.008.0216", n: "MÃO FRANCESA 168X76MMX1/2\" C/ FUROS ROSCAS INOX" },
+            { c: "USI.008.0217", n: "SUPORTE CELULA CARGA G50 90X38X16MM AÇO INOX C/ FUROS ROSCAS INOX" },
+            { c: "USI.008.0218", n: "SUPORTE ESMAGADOR 90X38X38MM INOX ELETROPOLIDO" },
+            { c: "USI.017.0039", n: "BASE COMPRIMIDO 117X24X20MM INOX ELETROPOLIDO" },
+            { c: "PRS.000.0113", n: "TRATAMENTO ELETROPOLIMENTO P/ USI.008.0218 E USI.017.0039" },
+            { c: "USI.008.0219", n: "SUPORTE P/ BASE DO COMPRIMIDO 44X25X8MM INOX" },
+            { c: "ELE.024.0025", n: "CELULA DE CARGA MRS-30 ALIMENTAÇAO 10VCC" },
+            { c: "ELE.025.0001", n: "CONECTOR TIPO DB9 MACHO" },
+            { c: "ELE.025.0078", n: "CONECTOR PHONEX HOUSING AKZ 950 04 5,0 5.8-V GREEN" },
+            { c: "ELE.029.0012", n: "TRANSFORMADOR ENT.110/220V SAIDA 20V/2,5A-7,5V/700MA-12V/700MA 60HZ" },
+            { c: "ELE.015.0126", n: "PLACA FONTE DO DUROMETRO 220V" },
+            { c: "ELE.015.0002", n: "CABO EXTENSOR USB MACHO X FEMEA 0,5MT - WI026" },
+            { c: "MEC.031.0040", n: "SUPORTE FRONTAL DA IHM 234X127MM POLIETILENO" },
+            { c: "PLM.022.0012", n: "PLACA DATA LOGGER MONTADA" },
+            { c: "DRY.022.0242", n: "CONJUNTO MEDIDOR DE ALTURA 298 EDTS V.II" },
+            { c: "USI.008.0188", n: "MÃO FRANCESA 85X50X13MM ALUMINIO" },
+            { c: "USI.025.0008", n: "APOIO DO MEDIDOR DE ALTURA 80X38X13MM 298 EDTS V.II" },
+            { c: "USI.025.0009", n: "APOIO DO MEDIDOR DE ALTURA 50X38X13MM 298 EDTS V.II" },
+            { c: "MEC.999.0024", n: "ALAVANCA TRAVA FEMEA POLIAMIDA ATF 5018-M6" },
+            { c: "MEC.002.0091", n: "DOBRADIÇA PLANA EXTERNA COM ABERTURA DE 180° REF 91411" },
+            { c: "MAP.015.0497", n: "PAINEL ADESIVO 150X280MM TOUCH 298 ATTS/EDTS" },
+            { c: "USI.017.0032", n: "BASE 415X215X13MM ALUMINIO 298 ATTS/EDTS" },
+            { c: "ACR.008.0021", n: "CAIXA DE COLETA 155X102X65MM ACRILICO 298 ATTS/EDTS" },
+            { c: "ACR.008.0022", n: "TAMPA ACRILICO 102X100X65MM 298 ATTS/EDTS" },
+            { c: "USI.008.0192", n: "SUPORTE DA CELULA CARGA MOD.G50 50X38X25MM AÇO INOX" },
+            { c: "USI.008.0193", n: "SUPORTE DA CELULA CARGA MOD.MRS-30 65X51X13MM ALUM" },
+            { c: "USI.008.0194", n: "SUPORTE ESMAGADOR 90X38X38MM AÇO INOX ELETROPOLIDO" },
+            { c: "USI.008.0195", n: "FLANGE FIXAÇÃO Ø35X15MM 03 ROSCAS M4 ALUM" },
+            { c: "USI.013.0036", n: "ARRUELA Ø32X4MM C/ FURO Ø22MM NYLON" },
+            { c: "USI.022.0303", n: "SUPORTE DO PAINEL 340X50MM TUBO Ø22MM" },
+            { c: "USI.008.0197", n: "SUPORTE MEDIDOR DE ALTURA 45X34X20MM ALUM" },
+            { c: "USI.017.0033", n: "BASE P/ COMPRIMIDO 117X24X16MM INOX ELETROPOLIDO" },
+            { c: "USI.008.0198", n: "SUPORTE P/ BASE DO COMPRIMIDO 40X25X8MM INOX" },
+            { c: "PRS.000.0058", n: "TRATAMENTO ELETROPOLIMENTO P/ USI.017.0033 E USI.008.0194" },
+            { c: "PLC.022.1005", n: "CONJUNTO IHM P/ DUROMETRO EDTS" },
+            { c: "MAP.015.0544", n: "PAINEL ADESIVO 345X140MM 298 ATTS/EDTS DATA LOGGER" },
+            { c: "ELE.005.0002", n: "CABO PP 3X1,5MM²X2,0MT PT PLUG 3CO 15A 4,8MM NBR14136" },
+            { c: "ELE.014.0013", n: "DISJUNTOR TERMOMAG. SIEMENS 5SX1 106-7 MONOPOLAR C 6A" },
+            { c: "ELE.039.0002", n: "TOMADA DE PAINEL 2P+T10A 250V TPA-23E3-F PADRAO BRASILEIRO" },
+            { c: "ELE.004.0001", n: "TERMOSTATO CAPILAR TU 50-320°C BULBO INOX - CAEM" },
+            { c: "ARU.010.0012", n: "ARRUELA LISA M4 AÇO INOX 304" },
+            { c: "MEC.011.0012", n: "UNIAO COM ROSCA 1/4 NPT P/ TUBO Ø1/4 LATAO ARC 1004/1414" },
+            { c: "MEC.025.0001", n: "NIPLE CLAMP-POLEGADA OD-SOLDA -LONG 1 1/2" },
+            { c: "MEC.025.0002", n: "NIPLE CLAMP CEGO Ø1 1/2" },
+            { c: "MEC.025.0004", n: "ANEL DE VEDAÇAO CLAMP-POLEGADA OD Ø1 1/2" },
+            { c: "MEC.013.0005", n: "VALVULA ESFERA 3 VIAS 1/4 TUBO/TUBO" },
+            { c: "POR.003.0005", n: "PORCA SEXTAVADA M8 AÇO INOX 304" },
+            { c: "POR.003.0006", n: "PORCA SEXTAVADA M10 AÇO INOX 304" },
+            { c: "POR.014.3002", n: "PORCA EM LATAO 1/4 SAE CURTA C/ ROSCA UNF" },
+            { c: "POR.101.0003", n: "PORCA SEXTAVADA M4 AÇO INOX 304" },
+            { c: "POR.102.0002", n: "PORCA SEXTAVADA 5/8\" C/ ROSCA PARALEL 7/16\" UNF X 5 MM LATAO" },
+            { c: "USI.022.0238", n: "CONJ POÇO TERMOMETRICO RETO FLANGEADO ØE3/8 XØI7MM ROSCA M10 INOX" },
+            { c: "USI.011.0070", n: "BUCHA Ø20X7MM NYLON" },
+            { c: "USI.014.0012", n: "CONEXAO P/ MANGUEIRA Ø3/8 ROSCA 7/16 UNFX49MM CROMADO" },
+            { c: "USI.020.0036", n: "TUBO PROLONGADOR DA ENTRADA DE CALIBRAÇAO Ø38X120MM AÇO INOX" },
+            { c: "MAP.026.0104", n: "BARRA CHATA 5/8X1/8 AÇO INOX AISI 304" },
+            { c: "MAP.003.0012", n: "CHAPA #12 INOX AISI 304 2000 X 1250 X 2,50 - COM PVC" },
+            { c: "MEC.025.0003", n: "ABRAÇADEIRA CLAMP-MACIÇA Ø1 1/2" },
+            { c: "MEC.014.0003", n: "MOLA Ø15X21MM FIO 2MM PASSO 5MM AÇO CARBONO" },
+            { c: "ELE.013.0020", n: "FUSIVEL DE VIDRO GDE 5A 250 VCA TIPO 3AG" },
+            { c: "PRS.000.0005", n: "TRATAMENTO DE SUPERFICIE ELETROPOLIMENTO DE CUBA A VACUO 47 LTS" },
+            { c: "VDR.001.0230", n: "VIDRO TEMPERADO 430X380X10MM INCOLOR C/ FUROS" },
+            { c: "ELE.024.0136", n: "TRANSMISSOR PRESSÃO -760 A 760 MMHG SAÍDA 4-20MA ROSCA 7/16\" UNF CABO 1M" },
+            { c: "MEC.011.0025", n: "PERFIL TIPO \"E\" VAZADO COM EMENDA A FRIO MED 1270MM (SHORE A65 +-5) PRETO" },
+            { c: "MAC.002.0102", n: "CHAPA DE PAPELAO 2000X2000 - TABULEIRO QUALID RP-64BC" },
+            { c: "ELE.024.0015", n: "SENSOR DE TEMPERATURA TIPO PT 100 150MM ESPECIAL COM FLANGE SEXTAVADO" },
+            { c: "ELE.005.0119", n: "CANALETA DE PVC 20 X 30 X 2000MTROS" },
+            { c: "USI.008.0155", n: "LUVA Ø5/8X65MM ROSCA 1/4 NPT AÇO INOX TREFILADO" },
+            { c: "USI.999.1158", n: "PORCA 2\" COM ROSCA 1.1/4\" BSP" },
+            { c: "USI.999.1159", n: "BASE DA TRAVA DA LINGUETA MED.1\"X2\"X1/2\"X5MM" },
+            { c: "USI.999.1160", n: "TRAVA DA LINGUETA MED.1/2\"X1\"1/2\"X35MM" },
+            { c: "MEC.020.0018", n: "ARRUELA DE SILICONE PARA 300ºC ØEXT 57 X ØINT40 X 2MM" },
+            { c: "ELE.022.0151", n: "RESISTENCIA ESPECIAL TIPO CHAPEIRA MED.278.5X250.5MM 1.500W 220V INOX" },
+            { c: "VDR.001.0284", n: "VIDRO COMUM MEDIDA 332 X 332 X 4MM" },
+            { c: "PVC.015.0537", n: "PAINEL TRASEIRO ADESIVO ESTUFA VACUO 27 LITROS" },
+            { c: "PAR.202.6000", n: "PARAFUSO ALLEN CABECA ABAULADA M8X50MM AÇO INOX 304" },
+            { c: "MAN.020.0061", n: "ARRUELA DE SILICONE PARA 300ºC ØEXT 20 X ØINT 9 X 2MM" },
+            { c: "USI.003.0017", n: "BASE ALUMINIO 290MMX280MMX1/2 ESTUFA VACUO 440-1 C/ 5 FACES ESCOVADAS" },
+            { c: "MEC.007.0066", n: "FECHO LINGUETA PRESSÃO COM TRAVA CÓD. TASCO 29000" },
+            { c: "PAR.135.3069", n: "PARAFUSO ALLEN M4X16MM AÇO INOX 304" },
+            { c: "PVC.015.0637", n: "PAINEL ADESIVO LED CONTROLADOR 48X48MM 524X146MM ESTUFA VACUO" },
+            { c: "USI.999.1679", n: "GUIA BASE DE FECHO ESPECIAL Ø50X22MM NYLON" },
+            { c: "ELE.025.0002", n: "SUPORTE P/ 4 PILHAS TAMANHO AA MOD SP5 (CANOA)" },
+            { c: "ELE.025.0053", n: "CONECTOR MOLEX HOUSING 2,5MM 5051-N 2 VIAS CN23 251202HP05" },
+            { c: "ELE.025.0055", n: "CONECTOR MOLEX HOUSING 2,5MM 5051-N 4 VIAS CN21 251204HP05" },
+            { c: "ELE.008.0011", n: "PILHA ALCALINA 1,2V TAMANHO AA DURACELL" },
+            { c: "MEC.018.0009", n: "ANTI IMPACTO 3M 08MMX08MMX2,5MM (BATENTE DE SILICONE 8MM)" },
+            { c: "ELE.015.4702", n: "PLACA DUROMETRO NE DGP V4RV1" },
+            { c: "PVC.015.0384", n: "PAINEL ADESIVO 81MMX52MM DUROMETRO 298 DGP VERSAO II" },
+            { c: "PAR.135.3046", n: "PARAFUSO ALLEN M5X10MM AÇO INOX 304" },
+            { c: "USI.022.0216", n: "KIT DE PEÇAS DUROMETRO DGP" },
+            { c: "MAC.002.0064", n: "CAIXA DE PAPELAO TAMPA/CINTA/FUNDO 500X295X450MM" },
+            { c: "MEC.031.0060", n: "CAIXA PLASTICA DUROMETRO DGP VERSAO III" },
+            { c: "ACR.008.0010", n: "TAMPA P/DUROMETRO DGP 37X62X25MM ACRILICO I" },
+            { c: "PRS.017.0008", n: "SERVIÇO DE USINAGEM BASE 12,4X52X63MM ALUMINIO" },
+            { c: "PRS.001.0167", n: "SERVIÇO DE USINAGEM EIXO PARA ROLAMENTO Ø4,75X17MM INOX" },
+            { c: "PRS.008.0101", n: "SERVIÇO DE USINAGEM SUPORTE DE FIXAÇAO 12,7X135X63MM ALUMINIO" },
+            { c: "PRS.008.0032", n: "SERVIÇO DE USINAGEM SUPORTE DO MANCAL 60,2X38X63MM ALUMINIO" },
+            { c: "PRS.010.0007", n: "SERVIÇO DE USINAGEM MANCAL DO DUROMETRO DGP Ø31,8X17MM LATAO" },
+            { c: "PRS.029.0014", n: "SERVIÇO DE USINAGEM FUSO ROSCA ESQUERDA M12X65MM AÇO INOX 304" },
+            { c: "PRS.021.0001", n: "SERVIÇO DE USINAGEM MANIPULO RECARTILHADO Ø38X42MM ALUMINIO" },
+            { c: "PRS.011.0025", n: "SERVIÇO DE USINAGEM BUCHA ESPAÇADORA Ø1/2X7MM LATAO" },
+            { c: "PRS.008.0109", n: "SERVIÇO DE USINAGEM SUPORTE ESMAGADOR ROSCA ESQ M12 Ø19X45MM INOX" },
+            { c: "PRS.004.0004", n: "SERVIÇO DE USINAGEM PROLONGADOR DA CELULA DE CARGA 1/2X28X14MM AÇO INOX" },
+            { c: "PRS.008.0111", n: "SERVIÇO DE USINAGEM SUPORTE 27X9,5X18MM AÇO INOX" },
+            { c: "PRS.021.0001A", n: "TRATAMENTO SUPERFICIAL POLIDO ANODIZADO PRETO BRILHANTE (MANIPULO RECARTILHADO)" },
+            { c: "PRS.008.0032A", n: "TRATAMENTO SUPERFICIAL POLIDO ANODIZADO PRETO BRILHANTE (SUPORTE DO MANCAL)" },
+            { c: "PRS.008.0101A", n: "TRATAMENTO SUPERFICIAL POLIDO ANODIZADO PRETO BRILHANTE (SUPORTE DE FIXAÇAO)" },
+            { c: "PRS.000.0021", n: "PRESTAÇÃO DE SERVIÇO" },
+            { c: "PRS.000.0022", n: "MANUTENÇAO PREVENTIVA" },
+            { c: "ELE.017.0004", n: "MICROREDUTOR 31RPM BIVOLT 60HZ" },
+            { c: "ELE.017.0013", n: "MOTOR M130 BIVOLT 35W 2P 3420RPM CLASSE B 60HZ C/ ROLAMENTO PARAFUSO INOX M4" },
+            { c: "ELE.025.0014", n: "CAPA P/ CONECTOR DB9 KIT LONGO" },
+            { c: "FAB.004.0065", n: "CHAVE ALLEN 2,5MM" },
+            { c: "ELE.024.0013", n: "SENSOR DE TEMPERATURA TIPO PT 100 150MM" },
+            { c: "ACR.003.0006", n: "CONJUNTO CUBA ACRILICO 170X327X200MM COMPLETA" },
+            { c: "MAN.301.0122", n: "CESTO P/ DESINTEGRADOR C/ 6 TUBOS NOVA ETICA" },
+            { c: "MEC.301.0123", n: "PASTILHA DE ACRILICO P/ DESINTEGRADOR" },
+            { c: "PVC.015.0079", n: "ETIQUETA NIVEL TRANSPARENTE 20X50MM" },
+            { c: "MAP.002.0013", n: "GUARNIÇAO QUADRADO 5/8 BORRACHA PRETA" },
+            { c: "MEC.018.0003", n: "PE DE BORRACHA PEQUENO Ø15X10MM NR 36" },
+            { c: "USI.022.0022", n: "CONJUNTO DA HASTE DE AGITAÇAO ØE12X120MM INOX" },
+            { c: "USI.005.0018", n: "HASTE GUIA DO CESTO Ø5/16X355MM AÇO INOX" },
+            { c: "USI.005.0066", n: "HASTE C/ ROSCA W 1/4 QUAD 3/8X177MM INOX" },
+            { c: "USI.008.0019", n: "SUPORTE INF DE FIXAÇAO DA HASTE 3/8X75X19MM ALUMINIO" },
+            { c: "USI.008.0075", n: "SUPORTE SUPERIOR DE FIX DA HASTE 3/8X70X19MM ALUMINIO" },
+            { c: "USI.013.0011", n: "ANEL ESPAÇADOR ØE7,5X4,2X4MM LATAO" },
+            { c: "USI.022.0029", n: "CONJUNTO DO EXCENTRICO Ø70X45MM AÇO CARBONO" },
+            { c: "USI.022.0099", n: "CONJUNTO DA ROLDANA ØE25,4 X ØI 9,9 X 11MM POLIACETAL COM ROLAMENTO" },
+            { c: "ELE.022.0008", n: "RESISTENCIA CARACOL PEQUENA 600W 220V INOX" },
+            { c: "MAP.003.0009", n: "CHAPA DE ALUMINIO 2000X1000X5MM" },
+            { c: "VDR.002.0044", n: "COPO BECKER ØE105X145MM VIDRO 1 LITRO FORMA BAIXA" },
+            { c: "MAP.013.0041", n: "TINTA PO POLIESTER TEXTURIZADA BRILHANTE RAL 9003 10057832" },
+            { c: "PVC.015.0628", n: "PAINEL ADESIVO 300X106MM CONTROLADOR CONTEMP C754" },
+            { c: "USI.022.0100", n: "CONJUNTO DO POÇO TERMOMETRICO RETO FLANGEADO Ø3/8 X 135MM" },
+            { c: "ELE.031.0022", n: "CONTROL DE TEMP MICRO ETC45 ETICA-LED -30°C, 0°C, 50°C, 150°C E 300°C" },
+            { c: "CHI.411.2010", n: "CHICOTE DA BOD 411-D 86 A 335 1,5MM² 110/220V" },
+            { c: "REF.001.0002", n: "CONDENSADOR 210MM 8T/2F 1/6 CDE 2580" },
+            { c: "REF.001.0008", n: "EVAPORADOR 223X223MM 24T 3/8X5MM" },
+            { c: "REF.005.2008", n: "COMPRESSOR HERMETICO EMBRACO EMIS20HHR 220V 60HZ" },
+            { c: "ELE.022.0052", n: "RESISTENCIA RETA BLINDADA Ø9,52X300MM 150W 110V INOX" },
+            { c: "MEC.005.0018", n: "BANDEJA ARAMADA 440X340MM AÇO CARBONO NIQUELADO" },
+            { c: "REF.007.1186", n: "GAXETA IMANTADA MED 586X490X17MM" },
+            { c: "MAP.015.0034", n: "PAINEL ADESIVO 97X494MM INCUBADORA BOD 86L DISPLAY LED" },
+            { c: "MAC.002.0010", n: "CAIXA DE PAPELAO ENVELOPE 790X670,5X1730" },
+            { c: "MAN.005.0003", n: "BANDEJA PARA COLETA DE AGUA 40X170X475MM INOX 430" },
+            { c: "MAN.026.0400", n: "FLAT 26 VIAS 400MM" },
+            { c: "ELE.031.0035", n: "CONTROL DE TEMP MICRO ETC45 ETICA-LCD -30°C, 0°C, 50°C, 150°C E 300°C." },
+            { c: "ELE.017.0019", n: "MOTOREDUTOR MR110-VE-240 240RPM 24VCC" },
+            { c: "ELE.029.0043", n: "TRANSFORMADOR ENT.127/220V SAIDA 25V-0V-25V 60HZ 100VA MT61" },
+            { c: "MEC.005.0001", n: "CORREIA POLICORTE POLIURETANO VERDE ASPERO Ø5MM" },
+            { c: "ELE.022.0004", n: "RESISTENCIA U 287X50MM 600W 220V AÇO INOX" },
+            { c: "ELE.024.0045", n: "DISCO PARA SENSOR OPTICO 64 PULSOS" },
+            { c: "ELE.015.5901", n: "PLACA FONTE NE CPU FT24V V1R3 240 AZ 220V" },
+            { c: "ELE.015.6601", n: "PLACA NE F FT24V LCD V1R3" },
+            { c: "ELE.015.8701", n: "PLACA NETICA ROTAÇAO V1R0" },
+            { c: "MAN.002.0037", n: "SUPORTE DE FIXAÇAO DO SENSOR OPT PH203 44X33X15MM INOX" },
+            { c: "MEC.004.0002", n: "PUXADOR PLANO (POLIAMIDA) COD.91355 TASCO" },
+            { c: "MEC.018.0018", n: "VENTOSA Nº2 DE APOIO P/ EQUIPAMENTO COM ROSCA MACHO 5/16" },
+            { c: "USI.022.0071", n: "CONJUNTO DO MANCAL P/ ROL 6001 E EXCENTRICO LOUCO Ø12MM" },
+            { c: "POR.015.3003", n: "PORCA SEXTAVADA Ø9/16X5MM ROSCA W3/8 LATAO" },
+            { c: "USI.008.0051", n: "SUPORTE PARA SENSOR OPTICO ØE33XØI26,5X5MM ALUMINIO" },
+            { c: "USI.012.0005", n: "POLIA Ø40X17MM P/ SISTEMA MECANICO ALUMINIO" },
+            { c: "USI.014.0013", n: "ADAPTADOR SEXTAVADO 7/8 C/ ROSCA 1/4 NPTX49MM LATAO" },
+            { c: "USI.022.0093", n: "CONJUNTO DO POÇO TERMOMETRICO RETO FLANGEADO Ø3/8" },
+            { c: "USI.022.0094", n: "CONJUNTO DO EIXO C/ MANCAL Ø48X34,5MM" },
+            { c: "USI.022.0095", n: "CONJUNTO DO EXCENTRICO C/ MANCAL Ø44X37MM" },
+            { c: "USI.026.0004", n: "PARAFUSO COM ROSCA 1/4BSPT ØE25,4XØI8,5X15MM LATÃO" },
+            { c: "MAP.003.0001", n: "CHAPA #20 INOX AISI 304 3000X1250X1,0MM C/PVC AZUL" },
+            { c: "MAN.003.0005", n: "GARRA P/ FRASCOS DE 250ML AÇO INOX" },
+            { c: "MAC.002.0015", n: "PLASTICO BOLHA ROLO 100MX1300MM ESP 10MM" },
+            { c: "MEC.999.1078", n: "MANIPULO MARGARIDA ROSCA MACHO M6X25MM INOX COD.00980" },
+            { c: "MAC.002.0058", n: "PLACA DE ISOPOR P-1 1000X500X35MM" },
+            { c: "MAP.015.0019", n: "PAINEL ADESIVO 414X100MM BANHO 501 REV.01" }
+        ];
     } else {
         bancoPecas = salvo;
     }
     
-    // Constrói os mapas rápidos
     pecasPorCodigo.clear(); pecasPorNome.clear();
     bancoPecas.forEach(p => { pecasPorCodigo.set(p.c, p); pecasPorNome.set(p.n, p); });
     
@@ -1452,10 +1659,10 @@ function autoPreencherPeca(input, tipo) {
     const row = input.closest('.peca-row-item'); const inputNome = row.querySelector('.n'); const inputCod = row.querySelector('.c');
     
     if (tipo === 'codigo' && input.value) {
-        const p = pecasPorCodigo.get(input.value); // O(1)
+        const p = pecasPorCodigo.get(input.value);
         if (p && !inputNome.value) inputNome.value = p.n;
     } else if (tipo === 'nome' && input.value) {
-        const p = pecasPorNome.get(input.value); // O(1)
+        const p = pecasPorNome.get(input.value);
         if (p && !inputCod.value) inputCod.value = p.c;
     }
 }
@@ -1488,10 +1695,11 @@ function confirmarAssinaturaExpandida() {
     agendarAutosave();
 }
 
-// === INICIALIZAÇÃO ===
+// === INICIALIZAÇÃO E NAVEGAÇÃO ===
 document.addEventListener("DOMContentLoaded", async () => {
     iniciarBancoPecas();
     await carregarLogoDoArmazenamento();
+    await carregarBancoHoras();
     
     const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
     if (typeof SignaturePad !== 'undefined') {
@@ -1502,17 +1710,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     
     adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco(); verificarRascunhoPendente();
     
-    // Listeners Resize
     window.addEventListener('resize', () => { setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasExpandido'), padExpandido); resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente); }, 100); });
 });
 
 async function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden')); 
     document.getElementById(tabId).classList.remove('hidden');
-    document.querySelectorAll('.nav-btn').forEach(btn => { btn.classList.remove('border-blue-500', 'text-white', 'bg-gray-800/50'); btn.classList.add('border-transparent', 'text-gray-400'); });
+    
+    document.querySelectorAll('.nav-btn').forEach(btn => { 
+        btn.classList.remove('border-blue-500', 'text-white', 'bg-gray-800/50'); 
+        btn.classList.add('border-transparent', 'text-gray-400'); 
+    });
+    
     const activeBtn = document.getElementById(`btnNav${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`);
-    if(activeBtn) { activeBtn.classList.remove('border-transparent', 'text-gray-400'); activeBtn.classList.add('border-blue-500', 'text-white', 'bg-gray-800/50'); }
-    if(tabId === 'historico') { await carregarHistorico(); } 
-    else if(tabId === 'novaOs') setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
+    if(activeBtn) { 
+        activeBtn.classList.remove('border-transparent', 'text-gray-400'); 
+        activeBtn.classList.add('border-blue-500', 'text-white', 'bg-gray-800/50'); 
+    }
+    
+    if(tabId === 'historico') { 
+        await carregarHistorico(); 
+        await calcularArmazenamento();
+    } else if(tabId === 'novaOs') {
+        setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
+    } else if(tabId === 'bancoHoras') {
+        renderTabelaBancoHoras();
+    }
     window.scrollTo(0, 0);
 }
