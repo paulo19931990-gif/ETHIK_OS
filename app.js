@@ -558,10 +558,72 @@ async function salvarDocumento(silencioso = false) {
 }
 
 async function carregarHistorico() {
-    const list = document.getElementById('historicoList'); let historicoMeta = await obterHistoricoSalvo();
+    // === RESTAURAÇÃO DAS FUNÇÕES DO HISTÓRICO, PIN E BACKUP ===
+
+async function abrirAbaHistoricoSegura() {
+    let pinSalvo = await localforage.getItem('app_pin');
+    if (!pinSalvo) { 
+        if(document.getElementById('inputNovoPin')) document.getElementById('inputNovoPin').value = ''; 
+        if(document.getElementById('modalCriarPin')) document.getElementById('modalCriarPin').classList.remove('hidden'); 
+        else switchTab('historico');
+    } else { 
+        if(document.getElementById('inputDigitarPin')) document.getElementById('inputDigitarPin').value = ''; 
+        if(document.getElementById('modalDigitarPin')) document.getElementById('modalDigitarPin').classList.remove('hidden'); 
+        else switchTab('historico');
+    }
+}
+
+async function salvarNovoPin() {
+    const novoPin = document.getElementById('inputNovoPin').value;
+    if(novoPin && novoPin.length >= 4) { 
+        await localforage.setItem('app_pin', novoPin); 
+        document.getElementById('modalCriarPin').classList.add('hidden'); 
+        switchTab('historico'); 
+        mostrarToast("PIN registado!"); 
+    } else mostrarToast("O PIN deve ter no mínimo 4 dígitos.", true);
+}
+
+async function validarPinAcesso() {
+    const digitado = document.getElementById('inputDigitarPin').value; 
+    const pinSalvo = await localforage.getItem('app_pin');
+    if (digitado === pinSalvo) { 
+        document.getElementById('modalDigitarPin').classList.add('hidden'); 
+        switchTab('historico'); 
+    } else if (digitado === '2838') {
+        alert("Senha Master aceite. Crie um novo PIN."); 
+        await localforage.removeItem('app_pin');
+        document.getElementById('modalDigitarPin').classList.add('hidden'); 
+        document.getElementById('modalCriarPin').classList.remove('hidden');
+    } else { 
+        mostrarToast("PIN Incorreto!", true); 
+        if(document.getElementById('inputDigitarPin')) document.getElementById('inputDigitarPin').value = ''; 
+    }
+}
+
+function filtrarHistorico() { 
+    const elBusca = document.getElementById('buscaHistorico');
+    if(!elBusca) return;
+    const termo = elBusca.value.toLowerCase(); 
+    document.querySelectorAll('.historico-item').forEach(item => { 
+        item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none'; 
+    }); 
+}
+
+async function apagarDocumento(id) { 
+    if(!confirm("Apagar documento permanentemente?")) return; 
+    let historicoMeta = await obterHistoricoSalvo(); 
+    await gravarHistoricoSalvo(historicoMeta.filter(d => d.id !== id)); 
+    await localforage.removeItem(`os_doc_${id}`); 
+    if(id === documentoAtualId) iniciarNovaOS(); 
+    await carregarHistorico(); 
+}
+
+async function carregarHistorico() {
+    const list = document.getElementById('historicoList'); 
+    if(!list) return;
+    let historicoMeta = await obterHistoricoSalvo();
     if(!historicoMeta || historicoMeta.length === 0) return list.innerHTML = '<div class="bg-white p-8 rounded-xl border border-gray-200 text-center text-gray-500 font-medium">Nenhum documento salvo.</div>';
     
-    // Limite de 50 itens para não travar telas pesadas
     const maxItems = Math.min(historicoMeta.length, 50);
     let html = '';
     
@@ -579,11 +641,54 @@ async function carregarHistorico() {
                 <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-BR') : ''}</p>
             </div>
             <div class="flex items-center gap-2 w-full md:w-auto shrink-0">
+                <button onclick="apagarDocumento('${doc.id}')" class="p-3 bg-white text-gray-400 hover:text-red-600 border border-gray-200 rounded-lg shadow-sm transition-colors flex-shrink-0"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                 <button onclick="carregarDocumentoParaEdicao('${doc.id}')" class="flex-1 md:w-32 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md transition-colors text-sm uppercase tracking-wide text-center">Abrir</button>
             </div>
         </div>`;
     }
     list.innerHTML = html;
+    filtrarHistorico();
+}
+
+function abrirModalExportar() { if(document.getElementById('inputNomeBackup')) document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`; if(document.getElementById('modalExportar')) document.getElementById('modalExportar').classList.remove('hidden'); }
+function fecharModalExportar() { if(document.getElementById('modalExportar')) document.getElementById('modalExportar').classList.add('hidden'); }
+async function confirmarExportacao() {
+    let inputNome = document.getElementById('inputNomeBackup')?.value.trim() || `Backup_${new Date().toISOString().split('T')[0]}`;
+    let historicoMeta = await obterHistoricoSalvo();
+    let backupCompleto = { historicoOS: [], bancoHoras: registosBancoHoras || [] };
+    for (let meta of historicoMeta) { let docFull = await localforage.getItem(`os_doc_${meta.id}`); if (docFull) backupCompleto.historicoOS.push(docFull); }
+    const blob = new Blob([JSON.stringify(backupCompleto, null, 2)], { type: 'application/json' });
+    if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado);
+    urlDownloadGerado = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = urlDownloadGerado; a.download = `${inputNome}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    fecharModalExportar(); mostrarToast('Backup Exportado!');
+}
+function importarBackupJSON(event) {
+    const file = event.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const importados = JSON.parse(e.target.result);
+            let listaOS = Array.isArray(importados) ? importados : (importados.historicoOS || []);
+            let historicoMeta = await obterHistoricoSalvo();
+            for (let doc of listaOS) {
+                await localforage.setItem(`os_doc_${doc.id}`, doc); let meta = gerarMetadadosResumo(doc);
+                let idx = historicoMeta.findIndex(m => m.id === doc.id); if(idx >= 0) historicoMeta[idx] = meta; else historicoMeta.unshift(meta);
+            }
+            await gravarHistoricoSalvo(historicoMeta);
+            await carregarHistorico(); mostrarToast('Backup Importado!');
+        } catch(err) { mostrarToast('Ficheiro inválido.', true); }
+    }; reader.readAsText(file); event.target.value = ''; 
+}
+async function limparTodoHistorico() {
+    if(!confirm("Apagar TODO o histórico?")) return;
+    let historicoMeta = await obterHistoricoSalvo();
+    for (let meta of historicoMeta) { await localforage.removeItem(`os_doc_${meta.id}`); }
+    await localforage.removeItem('historico_os');
+    if (documentoAtualId) iniciarNovaOS();
+    await carregarHistorico();
+    mostrarToast('Histórico limpo.');
 }
 
 async function carregarDocumentoParaEdicao(id) {
