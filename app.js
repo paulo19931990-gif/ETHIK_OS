@@ -63,6 +63,164 @@ async function aprenderPecasDaOS() {
     if (bancoAtualizado && typeof localforage !== 'undefined') { await localforage.setItem('banco_pecas_inteligente', bancoPecas); atualizarListasHTML(); }
 }
 
+
+// === COMPARTILHAMENTO DO BANCO DE PEÇAS (v52) ===
+// Exporta/mescla apenas peças. Não altera histórico, O.S., banco de horas ou demais dados.
+function chaveComparacaoPeca(valor) {
+    return String(valor || '').trim().toLocaleUpperCase('pt-BR');
+}
+
+function sanitizarPecaCompartilhada(peca) {
+    if (!peca || typeof peca !== 'object') return null;
+    const c = String(peca.c ?? peca.codigo ?? '').trim();
+    const n = String(peca.n ?? peca.nome ?? '').trim();
+    if (!c || !n || c.length > 25 || n.length > 200) return null;
+    return { c, n };
+}
+
+function normalizarArquivoBancoPecas(dados) {
+    let lista = null;
+    if (Array.isArray(dados)) lista = dados;
+    else if (dados && typeof dados === 'object' && Array.isArray(dados.pecas)) lista = dados.pecas;
+    if (!lista) return null;
+
+    const normalizadas = [];
+    const codigosNoArquivo = new Set();
+    const nomesNoArquivo = new Set();
+
+    for (const item of lista) {
+        const peca = sanitizarPecaCompartilhada(item);
+        if (!peca) continue;
+        const kc = chaveComparacaoPeca(peca.c);
+        const kn = chaveComparacaoPeca(peca.n);
+        if (codigosNoArquivo.has(kc) || nomesNoArquivo.has(kn)) continue;
+        codigosNoArquivo.add(kc);
+        nomesNoArquivo.add(kn);
+        normalizadas.push(peca);
+    }
+    return normalizadas;
+}
+
+function reconstruirMapasBancoPecas() {
+    pecasPorCodigo.clear();
+    pecasPorNome.clear();
+    bancoPecas.forEach(p => {
+        if (p && typeof p.c === 'string' && typeof p.n === 'string') {
+            pecasPorCodigo.set(p.c, p);
+            pecasPorNome.set(p.n, p);
+        }
+    });
+}
+
+async function exportarBancoPecas() {
+    try {
+        if (!Array.isArray(bancoPecas) || bancoPecas.length === 0) await iniciarBancoPecas();
+        const pecasValidas = bancoPecas.map(sanitizarPecaCompartilhada).filter(Boolean);
+        const payload = {
+            tipo: 'multi-os-banco-pecas',
+            versaoFormato: 1,
+            versaoApp: 52,
+            exportadoEm: new Date().toISOString(),
+            total: pecasValidas.length,
+            pecas: pecasValidas
+        };
+
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Banco_Pecas_MultiOS_${dataLocalISO()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        mostrarToast(`${pecasValidas.length} peças exportadas. O ficheiro já pode ser enviado a outro técnico.`);
+    } catch (err) {
+        console.error('Erro ao exportar banco de peças:', err);
+        mostrarToast('Não foi possível exportar o banco de peças.', true);
+    }
+}
+
+function importarBancoPecasJSON(event) {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    // Um banco de peças normal é muito menor que isto. O limite protege contra ficheiros acidentais enormes.
+    if (file.size > 5 * 1024 * 1024) {
+        mostrarToast('O ficheiro do banco de peças é demasiado grande.', true);
+        input.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const importadas = normalizarArquivoBancoPecas(JSON.parse(e.target.result));
+            if (!importadas || importadas.length === 0) throw new Error('Nenhuma peça válida');
+            if (!Array.isArray(bancoPecas) || bancoPecas.length === 0) await iniciarBancoPecas();
+
+            // Compara sem diferenciar maiúsculas/minúsculas e sem remover nenhuma peça local.
+            const codigosLocais = new Map();
+            const nomesLocais = new Map();
+            bancoPecas.forEach(p => {
+                const atual = sanitizarPecaCompartilhada(p);
+                if (!atual) return;
+                codigosLocais.set(chaveComparacaoPeca(atual.c), atual);
+                nomesLocais.set(chaveComparacaoPeca(atual.n), atual);
+            });
+
+            const novoBanco = bancoPecas.map(p => ({ ...p }));
+            let adicionadas = 0;
+            let duplicadas = 0;
+            let conflitos = 0;
+
+            for (const peca of importadas) {
+                const kc = chaveComparacaoPeca(peca.c);
+                const kn = chaveComparacaoPeca(peca.n);
+                const porCodigo = codigosLocais.get(kc);
+                const porNome = nomesLocais.get(kn);
+
+                if (porCodigo || porNome) {
+                    const codigoBateComNome = porCodigo && chaveComparacaoPeca(porCodigo.n) === kn;
+                    const nomeBateComCodigo = porNome && chaveComparacaoPeca(porNome.c) === kc;
+                    if (codigoBateComNome && nomeBateComCodigo) duplicadas++;
+                    else conflitos++; // Segurança: cadastro local prevalece; nada é sobrescrito.
+                    continue;
+                }
+
+                const nova = { c: peca.c, n: peca.n };
+                novoBanco.push(nova);
+                codigosLocais.set(kc, nova);
+                nomesLocais.set(kn, nova);
+                adicionadas++;
+            }
+
+            if (adicionadas > 0) {
+                await localforage.setItem('banco_pecas_inteligente', novoBanco);
+                bancoPecas = novoBanco;
+                reconstruirMapasBancoPecas();
+                atualizarListasHTML();
+            }
+
+            const partes = [`${adicionadas} nova${adicionadas === 1 ? '' : 's'}`];
+            if (duplicadas) partes.push(`${duplicadas} já existente${duplicadas === 1 ? '' : 's'}`);
+            if (conflitos) partes.push(`${conflitos} conflito${conflitos === 1 ? '' : 's'} mantido${conflitos === 1 ? '' : 's'} como estava`);
+            mostrarToast(`Banco de peças mesclado: ${partes.join(', ')}.`);
+        } catch (err) {
+            console.error('Erro ao importar banco de peças:', err);
+            mostrarToast('Ficheiro de peças inválido. O banco atual não foi alterado.', true);
+        } finally {
+            input.value = '';
+        }
+    };
+    reader.onerror = () => {
+        mostrarToast('Não foi possível ler o ficheiro de peças.', true);
+        input.value = '';
+    };
+    reader.readAsText(file);
+}
+
 let documentoAtualId = Date.now().toString();
 let logoImgData = null, logoImgFormat = 'PNG', imgObject = null;
 let urlDownloadGerado = null; 
