@@ -30,7 +30,7 @@
     
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js?v=29');
+            navigator.serviceWorker.register('./sw.js?v=30').catch(err => console.error('Falha ao registar Service Worker:', err));
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -40,7 +40,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=29">
+    <link rel="stylesheet" href="style.css?v=30">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -126,8 +126,8 @@
                 <span id="zoomText" class="text-xs font-bold w-12 text-center tracking-wider">100%</span>
                 <button onclick="zoomInPdf()" class="w-10 h-10 flex items-center justify-center hover:bg-gray-700 rounded-full text-xl font-bold transition-all">+</button>
             </div>
-            <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-200 overflow-auto touch-pan-x touch-pan-y relative p-4">
-                <div id="pdfPagesWrapper" class="w-full pb-24 mx-auto flex flex-col items-center gap-4"></div>
+            <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-200 overflow-auto relative p-4 overscroll-contain">
+                <div id="pdfPagesWrapper" class="pdf-pages-wrapper pb-24 flex flex-col gap-4"></div>
             </div>
         </div>
     </div>
@@ -137,7 +137,7 @@
         <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
             <h3 class="text-2xl font-black mb-2 text-gray-900">Segurança</h3>
             <p class="mb-6 text-sm text-gray-500 font-medium">Crie um PIN numérico (mín. 4 dígitos) para proteger o acesso aos dados dos clientes.</p>
-            <input type="password" id="inputNovoPin" inputmode="numeric" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" placeholder="••••">
+            <input type="password" id="inputNovoPin" inputmode="numeric" maxlength="12" autocomplete="new-password" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" placeholder="••••">
             <button onclick="salvarNovoPin()" class="w-full py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 uppercase tracking-wider text-sm shadow-lg">Guardar PIN</button>
             <button onclick="document.getElementById('modalCriarPin').classList.add('hidden')" class="w-full mt-3 py-3 text-gray-500 font-bold text-sm uppercase tracking-wider">Cancelar</button>
         </div>
@@ -148,7 +148,7 @@
         <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
             <h3 class="text-2xl font-black mb-2 text-gray-900 flex items-center gap-2"><svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg> Acesso Restrito</h3>
             <p class="mb-6 text-sm text-gray-500 font-medium">Digite o seu PIN para aceder ao Histórico.</p>
-            <input type="password" id="inputDigitarPin" inputmode="numeric" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" placeholder="••••">
+            <input type="password" id="inputDigitarPin" inputmode="numeric" maxlength="12" autocomplete="current-password" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" placeholder="••••">
             <button onclick="validarPinAcesso()" class="w-full py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 uppercase tracking-wider text-sm shadow-lg">Desbloquear</button>
             <button onclick="document.getElementById('modalDigitarPin').classList.add('hidden')" class="w-full mt-3 py-3 text-gray-500 font-bold text-sm uppercase tracking-wider">Cancelar</button>
         </div>
@@ -430,7 +430,7 @@
     </div>
 
     <!-- CERTIFIQUE-SE DE CARREGAR O BANCO DE PEÇAS AQUI -->
-    <script src="bancoPecas.js"></script>
-    <script src="app.js?v=29"></script>
+    <script src="bancoPecas.js?v=30"></script>
+    <script src="app.js?v=30"></script>
 </body>
 </html>
