@@ -113,358 +113,6 @@ function dataUrlPdfSegura(valor) {
     try { return atob(match[1].replace(/\s/g, '').slice(0, 16)).startsWith('%PDF-'); } catch (e) { return false; }
 }
 
-
-// === PERFIL DO TÉCNICO, ACESSO INICIAL E TEMA (v51) ===
-const PERFIL_TECNICO_KEY = 'tecnico_perfil_v1';
-const SESSAO_TECNICO_KEY = 'multi_os_auth_session_v1';
-let perfilTecnicoAtual = null;
-let tecnicoAutenticado = false;
-let authModo = 'login';
-let fotoPerfilTemporaria = null;
-let fotoPerfilEdicaoTemporaria = null;
-
-function obterIniciais(nome = '') {
-    const partes = String(nome).trim().split(/\s+/).filter(Boolean);
-    return ((partes[0]?.[0] || 'T') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
-}
-
-function criarSalt() {
-    if (window.crypto?.getRandomValues) {
-        const bytes = new Uint8Array(16); crypto.getRandomValues(bytes); return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-    }
-    return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
-async function hashSenhaTecnico(senha, salt) {
-    const texto = `${salt}|${senha}|MultiOSPro`;
-    if (window.crypto?.subtle && window.TextEncoder) {
-        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
-        return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-    }
-    let h = 2166136261; for (let i = 0; i < texto.length; i++) { h ^= texto.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return `fallback_${(h >>> 0).toString(16)}`;
-}
-
-function alternarVisibilidadeSenha(id, btn) {
-    const input = document.getElementById(id); if (!input) return;
-    input.type = input.type === 'password' ? 'text' : 'password';
-    if (btn) btn.setAttribute('aria-label', input.type === 'password' ? 'Mostrar senha' : 'Ocultar senha');
-}
-
-function aplicarTema(tema, salvar = true) {
-    const final = tema === 'dark' ? 'dark' : 'light';
-    document.documentElement.dataset.theme = final;
-    if (salvar) { try { localStorage.setItem('multi_os_theme', final); } catch(e) {} }
-    const meta = document.getElementById('themeColorMeta'); if (meta) meta.content = final === 'dark' ? '#0b1220' : '#f5f7fb';
-    const btn = document.getElementById('btnTema'); if (btn) btn.title = final === 'dark' ? 'Usar modo claro' : 'Usar modo escuro';
-}
-function alternarTema() { aplicarTema(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); }
-
-function renderAvatar(foto, imgId, iniciaisId, nome = '') {
-    const img = document.getElementById(imgId); const ini = document.getElementById(iniciaisId);
-    if (ini) ini.textContent = obterIniciais(nome);
-    if (img) { if (dataUrlImagemSegura(foto)) { img.src = foto; img.style.display = 'block'; if (ini) ini.style.display = 'none'; } else { img.removeAttribute('src'); img.style.display = 'none'; if (ini) ini.style.display = ''; } }
-}
-
-function atualizarInterfacePerfil() {
-    const nome = perfilTecnicoAtual?.nome || 'Técnico';
-    const elNome = document.getElementById('perfilTopoNome'); if (elNome) elNome.textContent = nome;
-    const saudacao = document.getElementById('saudacaoTopo'); if (saudacao) saudacao.textContent = 'Olá, técnico';
-    renderAvatar(perfilTecnicoAtual?.foto, 'perfilTopoFoto', 'perfilTopoIniciais', nome);
-    renderAvatar(perfilTecnicoAtual?.foto, 'perfilModalImg', 'perfilModalIniciais', nome);
-}
-
-async function comprimirFotoPerfil(file) {
-    if (!file || !file.type.startsWith('image/')) throw new Error('Escolha uma imagem válida.');
-    if (file.size > 8 * 1024 * 1024) throw new Error('A foto deve ter no máximo 8 MB.');
-    const dataUrl = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(file); });
-    const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = dataUrl; });
-    const size = 320; const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
-    const ctx = canvas.getContext('2d'); const scale = Math.max(size / img.width, size / img.height); const w = img.width * scale, h = img.height * scale;
-    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-    return canvas.toDataURL('image/jpeg', 0.82);
-}
-
-function mostrarTelaAcesso(modo = 'login') {
-    authModo = modo; const screen = document.getElementById('authScreen'); if (!screen) return;
-    const setup = modo === 'setup'; screen.classList.remove('auth-hidden'); document.body.classList.add('auth-open');
-    document.getElementById('authTitulo').textContent = setup ? 'Crie seu acesso' : 'Bem-vindo de volta';
-    document.getElementById('authDescricao').textContent = setup ? 'Cadastre o técnico que utilizará este dispositivo. Seus dados antigos serão mantidos.' : 'Digite sua senha para acessar o Multi-OS Pro.';
-    document.getElementById('authConfirmarWrap').classList.toggle('hidden', !setup);
-    document.getElementById('authFotoLabel').classList.toggle('hidden', !setup);
-    const nome = document.getElementById('authNome'); nome.readOnly = false; nome.value = setup ? '' : ''; nome.placeholder = setup ? 'Seu nome' : 'Digite seu nome';
-    document.getElementById('authSenha').value = ''; document.getElementById('authConfirmarSenha').value = '';
-    document.getElementById('authSubmitBtn').querySelector('span').textContent = setup ? 'Criar acesso' : 'Entrar';
-    fotoPerfilTemporaria = setup ? null : perfilTecnicoAtual?.foto || null;
-    renderAvatar(fotoPerfilTemporaria || perfilTecnicoAtual?.foto, 'authAvatarImg', 'authAvatarInitials', nome.value || perfilTecnicoAtual?.nome || 'Técnico');
-    setTimeout(() => (setup ? nome : document.getElementById('authSenha')).focus(), 80);
-}
-function ocultarTelaAcesso() { document.getElementById('authScreen')?.classList.add('auth-hidden'); document.body.classList.remove('auth-open'); }
-
-async function sincronizarNomeTecnicoPerfil() {
-    if (!perfilTecnicoAtual?.nome) return;
-    const tecnicoEl = document.getElementById('tecnico'); if (tecnicoEl && !tecnicoEl.value.trim()) tecnicoEl.value = perfilTecnicoAtual.nome;
-    const bh = document.getElementById('bh_nome_tecnico'); if (bh) { bh.value = perfilTecnicoAtual.nome; try { await localforage.setItem('bh_nome_tecnico_salvo', perfilTecnicoAtual.nome); } catch(e) {} }
-}
-
-async function inicializarAcessoTecnico() {
-    aplicarTema(document.documentElement.dataset.theme || 'light', false);
-    if (typeof localforage === 'undefined') { tecnicoAutenticado = true; ocultarTelaAcesso(); return; }
-    try { perfilTecnicoAtual = await localforage.getItem(PERFIL_TECNICO_KEY); } catch(e) { perfilTecnicoAtual = null; }
-    atualizarInterfacePerfil();
-    if (!perfilTecnicoAtual?.nome || !perfilTecnicoAtual?.senhaHash || !perfilTecnicoAtual?.salt) { mostrarTelaAcesso('setup'); return; }
-    if (sessionStorage.getItem(SESSAO_TECNICO_KEY) === 'ok') { tecnicoAutenticado = true; ocultarTelaAcesso(); await sincronizarNomeTecnicoPerfil(); return; }
-    mostrarTelaAcesso('login');
-}
-
-async function submeterAcessoTecnico() {
-    if (typeof localforage === 'undefined') return mostrarToast('Armazenamento local indisponível.', true);
-    const nome = document.getElementById('authNome').value.trim(); const senha = document.getElementById('authSenha').value;
-    const btn = document.getElementById('authSubmitBtn'); if (btn) btn.disabled = true;
-    try {
-        if (authModo === 'setup') {
-            const confirmar = document.getElementById('authConfirmarSenha').value;
-            if (nome.length < 2) throw new Error('Informe o nome do técnico.');
-            if (senha.length < 4) throw new Error('A senha deve ter pelo menos 4 caracteres.');
-            if (senha !== confirmar) throw new Error('As senhas não conferem.');
-            const salt = criarSalt(); const senhaHash = await hashSenhaTecnico(senha, salt);
-            perfilTecnicoAtual = { nome, senhaHash, salt, foto: fotoPerfilTemporaria || null, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() };
-            await localforage.setItem(PERFIL_TECNICO_KEY, perfilTecnicoAtual);
-        } else {
-            const nomeCorreto = nome.localeCompare(perfilTecnicoAtual.nome, 'pt-BR', { sensitivity: 'base' }) === 0;
-            const hash = await hashSenhaTecnico(senha, perfilTecnicoAtual.salt);
-            if (!nomeCorreto || hash !== perfilTecnicoAtual.senhaHash) throw new Error('Nome ou senha incorretos.');
-        }
-        tecnicoAutenticado = true; sessionStorage.setItem(SESSAO_TECNICO_KEY, 'ok'); atualizarInterfacePerfil(); ocultarTelaAcesso(); await sincronizarNomeTecnicoPerfil(); mostrarToast(`Bem-vindo, ${perfilTecnicoAtual.nome.split(' ')[0]}!`);
-    } catch(e) { mostrarToast(e.message || 'Não foi possível entrar.', true); }
-    finally { if (btn) btn.disabled = false; }
-}
-
-function toggleMenuPerfil(e) { if (e) e.stopPropagation(); document.getElementById('menuPerfil')?.classList.toggle('hidden'); }
-function fecharMenuPerfil() { document.getElementById('menuPerfil')?.classList.add('hidden'); }
-function abrirPerfilTecnico() {
-    fecharMenuPerfil(); if (!perfilTecnicoAtual) return;
-    document.getElementById('perfilNomeInput').value = perfilTecnicoAtual.nome || '';
-    document.getElementById('perfilSenhaAtual').value = ''; document.getElementById('perfilNovaSenha').value = '';
-    fotoPerfilEdicaoTemporaria = perfilTecnicoAtual.foto || null; renderAvatar(fotoPerfilEdicaoTemporaria, 'perfilModalImg', 'perfilModalIniciais', perfilTecnicoAtual.nome);
-    document.getElementById('modalPerfilTecnico').classList.remove('hidden');
-}
-function fecharPerfilTecnico() { document.getElementById('modalPerfilTecnico')?.classList.add('hidden'); }
-
-async function salvarPerfilTecnico() {
-    if (!perfilTecnicoAtual) return;
-    const nome = document.getElementById('perfilNomeInput').value.trim(); const atual = document.getElementById('perfilSenhaAtual').value; const nova = document.getElementById('perfilNovaSenha').value;
-    try {
-        if (nome.length < 2) throw new Error('Informe um nome válido.');
-        let senhaHash = perfilTecnicoAtual.senhaHash, salt = perfilTecnicoAtual.salt;
-        if (nova) {
-            if (nova.length < 4) throw new Error('A nova senha deve ter pelo menos 4 caracteres.');
-            const hashAtual = await hashSenhaTecnico(atual, perfilTecnicoAtual.salt); if (hashAtual !== perfilTecnicoAtual.senhaHash) throw new Error('Senha atual incorreta.');
-            salt = criarSalt(); senhaHash = await hashSenhaTecnico(nova, salt);
-        }
-        perfilTecnicoAtual = { ...perfilTecnicoAtual, nome, senhaHash, salt, foto: fotoPerfilEdicaoTemporaria || null, atualizadoEm: new Date().toISOString() };
-        await localforage.setItem(PERFIL_TECNICO_KEY, perfilTecnicoAtual); atualizarInterfacePerfil(); await sincronizarNomeTecnicoPerfil(); fecharPerfilTecnico(); mostrarToast('Perfil atualizado.');
-    } catch(e) { mostrarToast(e.message || 'Não foi possível salvar o perfil.', true); }
-}
-
-function sairDoAppTecnico() { fecharMenuPerfil(); tecnicoAutenticado = false; sessionStorage.removeItem(SESSAO_TECNICO_KEY); mostrarTelaAcesso('login'); }
-
-function atualizarResumoDocumento() {
-    const blocos = [...document.querySelectorAll('.os-bloco')];
-    const n = blocos.length;
-    const plural = n === 1 ? 'O.S.' : 'O.S.';
-    const textoDocumento = `Documento com ${n} ${plural}`;
-    const badge = document.getElementById('osCountBadge');
-    if (badge) badge.textContent = `${n} O.S. no arquivo`;
-    const title = document.getElementById('documentTitle');
-    if (title) title.textContent = textoDocumento;
-    const finalCount = document.getElementById('finalDocCount');
-    if (finalCount) finalCount.textContent = textoDocumento;
-    const header = document.getElementById('headerContextText');
-    const novaOs = document.getElementById('novaOs');
-    if (header && novaOs && !novaOs.classList.contains('hidden')) {
-        const finalStage = document.getElementById('finalStage');
-        header.textContent = finalStage && !finalStage.classList.contains('hidden') ? 'Finalização do arquivo' : textoDocumento;
-    }
-    const info = document.getElementById('consolidatedInfoText');
-    if (info) info.textContent = `Este será um único arquivo PDF consolidado, com ${n === 1 ? 'a O.S.' : `as ${n} O.S.`} neste documento.`;
-    blocos.forEach((b, index) => {
-        const badgeNum = b.querySelector('.os-number-badge');
-        if (badgeNum) badgeNum.textContent = String(index + 1);
-        atualizarResumoOS(Number(b.dataset.id));
-    });
-    renderFinalOsSummary();
-}
-
-function transformarBlocoEmCardMockup(bloco, id) {
-    if (!bloco || bloco.dataset.mockupReady === '1') return;
-    bloco.dataset.mockupReady = '1';
-    bloco.classList.add('os-card-mockup');
-    const legacyHeader = bloco.children[0];
-    const editor = bloco.children[1];
-    if (!legacyHeader || !editor) return;
-    legacyHeader.classList.add('legacy-os-header');
-    editor.classList.add('os-editor-content');
-
-    const summary = document.createElement('div');
-    summary.className = 'os-card-summary';
-    summary.innerHTML = `
-      <div class="os-card-topline">
-        <div class="os-number-badge">${id}</div>
-        <div class="os-card-title-wrap"><strong id="osResumoTitulo_${id}">O.S. ${id}</strong></div>
-        <span class="os-state-badge editing" id="osResumoStatus_${id}">Em edição</span>
-        <button class="os-chevron" type="button" aria-label="Expandir ou recolher O.S." onclick="toggleOsEditor(${id})"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"></path></svg></button>
-      </div>
-      <div class="os-summary-rows">
-        <div><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg><span>Cliente</span><b id="osResumoCliente_${id}">Não informado</b></div>
-        <div><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"></rect><path d="M9 8h6M9 12h6M9 16h4"></path></svg><span>Equipamento</span><b id="osResumoEquip_${id}">Não informado</b></div>
-        <div><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5-5L7.5 3.5l3 3-6.8 6.8a2 2 0 0 0 0 2.8l4.2 4.2a2 2 0 0 0 2.8 0l6.8-6.8 3 3 2.2-2.2a4 4 0 0 0-5-5"></path></svg><span>Serviço Executado</span><b id="osResumoServico_${id}">Não informado</b></div>
-      </div>
-      <div class="os-summary-actions">
-        <button class="edit-os-button" type="button" onclick="toggleOsEditor(${id}, true)"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13 7 4 4"></path></svg> Editar</button>
-        ${id > 1 ? `<button class="remove-os-button" type="button" onclick="removerBlocoOSUI(${id})">Remover</button>` : ''}
-      </div>`;
-    bloco.insertBefore(summary, legacyHeader);
-
-    bloco.addEventListener('input', () => atualizarResumoOS(id));
-    bloco.addEventListener('change', () => atualizarResumoOS(id));
-
-    document.querySelectorAll('.os-bloco').forEach(outro => {
-        if (outro !== bloco) toggleOsEditor(Number(outro.dataset.id), false);
-    });
-    toggleOsEditor(id, true);
-    atualizarResumoOS(id);
-}
-
-function toggleOsEditor(id, forceOpen = null) {
-    const bloco = document.querySelector(`.os-bloco[data-id="${id}"]`);
-    if (!bloco) return;
-    const editor = bloco.querySelector('.os-editor-content');
-    if (!editor) return;
-    const isOpen = bloco.classList.contains('is-open');
-    const abrir = forceOpen === null ? !isOpen : !!forceOpen;
-    if (abrir) {
-        document.querySelectorAll('.os-bloco.is-open').forEach(outro => {
-            if (outro !== bloco) {
-                outro.classList.remove('is-open');
-                const outroEditor = outro.querySelector('.os-editor-content');
-                if (outroEditor) outroEditor.style.display = 'none';
-                atualizarEstadoResumoOS(Number(outro.dataset.id));
-            }
-        });
-        bloco.classList.add('is-open');
-        editor.style.display = 'grid';
-    } else {
-        bloco.classList.remove('is-open');
-        editor.style.display = 'none';
-    }
-    atualizarEstadoResumoOS(id);
-}
-
-function atualizarEstadoResumoOS(id) {
-    const bloco = document.querySelector(`.os-bloco[data-id="${id}"]`);
-    const status = document.getElementById(`osResumoStatus_${id}`);
-    if (!bloco || !status) return;
-    const aberto = bloco.classList.contains('is-open');
-    const cliente = document.getElementById(`cliente_${id}`)?.value.trim();
-    const numero = document.getElementById(`osNum_${id}`)?.value.trim();
-    status.className = 'os-state-badge';
-    if (aberto) { status.textContent = 'Em edição'; status.classList.add('editing'); }
-    else if (cliente && numero) { status.textContent = 'Concluída'; status.classList.add('complete'); }
-    else { status.textContent = 'Rascunho'; status.classList.add('draft'); }
-}
-
-function atualizarResumoOS(id) {
-    if (!id) return;
-    const bloco = document.querySelector(`.os-bloco[data-id="${id}"]`);
-    const indice = bloco ? [...document.querySelectorAll('.os-bloco')].indexOf(bloco) + 1 : id;
-    const cliente = document.getElementById(`cliente_${id}`)?.value.trim() || 'Não informado';
-    const equipamento = document.getElementById(`equipamento_${id}`)?.value.trim() || 'Não informado';
-    const descricao = document.getElementById(`descricao_${id}`)?.value.trim() || 'Não informado';
-    const numero = document.getElementById(`osNum_${id}`)?.value.trim();
-    const title = document.getElementById(`osResumoTitulo_${id}`);
-    const c = document.getElementById(`osResumoCliente_${id}`);
-    const e = document.getElementById(`osResumoEquip_${id}`);
-    const d = document.getElementById(`osResumoServico_${id}`);
-    if (title) title.textContent = `O.S. ${indice} — ${cliente === 'Não informado' ? (numero ? `Nº ${numero}` : 'Nova O.S.') : cliente}`;
-    if (c) c.textContent = cliente;
-    if (e) e.textContent = equipamento;
-    if (d) d.textContent = descricao.length > 62 ? `${descricao.slice(0, 59)}...` : descricao;
-    atualizarEstadoResumoOS(id);
-    renderFinalOsSummary();
-}
-
-function removerBlocoOSUI(id) {
-    const bloco = document.querySelector(`.os-bloco[data-id="${id}"]`);
-    if (!bloco) return;
-    bloco.remove();
-    atualizarVisibilidadeCamposPorBloco();
-    atualizarResumoDocumento();
-    autoSalvarRascunho();
-}
-
-function renderFinalOsSummary() {
-    const container = document.getElementById('finalOsSummary');
-    if (!container) return;
-    container.replaceChildren();
-    const blocos = [...document.querySelectorAll('.os-bloco')];
-    blocos.forEach((bloco, index) => {
-        const id = Number(bloco.dataset.id);
-        const cliente = document.getElementById(`cliente_${id}`)?.value.trim() || 'Nova O.S.';
-        const pecas = [...bloco.querySelectorAll('.peca-row-item')].filter(r => r.querySelector('.n')?.value.trim() || r.querySelector('.c')?.value.trim()).length;
-        const fotos = bloco.querySelectorAll('.foto-item').length;
-        const row = document.createElement('button');
-        row.type = 'button'; row.className = 'final-os-row';
-        row.addEventListener('click', () => { mostrarEtapaDocumento(); toggleOsEditor(id, true); setTimeout(() => bloco.scrollIntoView({behavior:'smooth', block:'start'}), 60); });
-        const num = document.createElement('span'); num.className = `final-os-num ${index % 2 ? 'violet' : 'green'}`; num.textContent = String(index + 1);
-        const name = document.createElement('b'); name.textContent = `O.S. ${index + 1} — ${cliente}`;
-        const meta = document.createElement('small'); meta.textContent = `${pecas} ${pecas === 1 ? 'peça' : 'peças'}, ${fotos} ${fotos === 1 ? 'foto' : 'fotos'}`;
-        const arrow = document.createElement('span'); arrow.className = 'final-os-arrow'; arrow.textContent = '›';
-        row.append(num, name, meta, arrow); container.appendChild(row);
-    });
-}
-
-function mostrarEtapaFinalizacao() {
-    const doc = document.getElementById('documentStage'); const fin = document.getElementById('finalStage');
-    if (!doc || !fin) return;
-    doc.classList.add('hidden'); fin.classList.remove('hidden');
-    atualizarResumoDocumento();
-    const header = document.getElementById('headerContextText'); if (header) header.textContent = 'Finalização do arquivo';
-    setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 80);
-    window.scrollTo({top:0, behavior:'smooth'});
-}
-
-function mostrarEtapaDocumento() {
-    const doc = document.getElementById('documentStage'); const fin = document.getElementById('finalStage');
-    if (!doc || !fin) return;
-    fin.classList.add('hidden'); doc.classList.remove('hidden');
-    atualizarResumoDocumento();
-    window.scrollTo({top:0, behavior:'smooth'});
-}
-
-async function irParaOrdensAtuais() {
-    await switchTab('novaOs'); mostrarEtapaDocumento();
-    document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));
-    document.getElementById('btnNavOrdens')?.classList.add('active');
-    setTimeout(() => document.getElementById('listaOrdensServico')?.scrollIntoView({behavior:'smooth', block:'start'}), 60);
-}
-
-async function adicionarOSPeloAtalho() {
-    await switchTab('novaOs'); mostrarEtapaDocumento(); adicionarBlocoOS();
-    setTimeout(() => document.querySelector('.os-bloco:last-child')?.scrollIntoView({behavior:'smooth', block:'start'}), 70);
-}
-
-function abrirMenuPrincipal() {
-    document.getElementById('menuPrincipalBackdrop')?.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-}
-function fecharMenuPrincipal(event = null) {
-    const backdrop = document.getElementById('menuPrincipalBackdrop');
-    if (event && event.target !== backdrop) return;
-    backdrop?.classList.add('hidden');
-    document.body.style.overflow = '';
-}
-
 function definirNomeAnexo(id, nome = '') {
     const el = document.getElementById(`anexoNome_${id}`);
     if (!el) return;
@@ -561,7 +209,6 @@ function mostrarToast(mensagem, isErro = false) {
 }
 
 async function abrirAbaHistoricoSegura() {
-    if (perfilTecnicoAtual && tecnicoAutenticado) { await switchTab('historico'); return; }
     let pinSalvo = await localforage.getItem('app_pin');
     if (!pinSalvo) { document.getElementById('inputNovoPin').value = ''; document.getElementById('modalCriarPin').classList.remove('hidden'); } 
     else { document.getElementById('inputDigitarPin').value = ''; document.getElementById('modalDigitarPin').classList.remove('hidden'); }
@@ -802,23 +449,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
         mostrarToast('Armazenamento local indisponível. Salvar e histórico não funcionarão nesta sessão.', true);
     }
-
-    await inicializarAcessoTecnico();
-    atualizarResumoDocumento();
-
-    document.getElementById('authFotoInput')?.addEventListener('change', async (e) => {
-        const file = e.target.files?.[0]; if (!file) return;
-        try { fotoPerfilTemporaria = await comprimirFotoPerfil(file); renderAvatar(fotoPerfilTemporaria, 'authAvatarImg', 'authAvatarInitials', document.getElementById('authNome').value || 'Técnico'); }
-        catch(err) { mostrarToast(err.message, true); } finally { e.target.value = ''; }
-    });
-    document.getElementById('perfilFotoInput')?.addEventListener('change', async (e) => {
-        const file = e.target.files?.[0]; if (!file) return;
-        try { fotoPerfilEdicaoTemporaria = await comprimirFotoPerfil(file); renderAvatar(fotoPerfilEdicaoTemporaria, 'perfilModalImg', 'perfilModalIniciais', document.getElementById('perfilNomeInput').value || perfilTecnicoAtual?.nome); }
-        catch(err) { mostrarToast(err.message, true); } finally { e.target.value = ''; }
-    });
-    document.getElementById('authNome')?.addEventListener('input', e => renderAvatar(fotoPerfilTemporaria, 'authAvatarImg', 'authAvatarInitials', e.target.value));
-    document.getElementById('authSenha')?.addEventListener('keydown', e => { if (e.key === 'Enter' && authModo === 'login') submeterAcessoTecnico(); });
-    document.addEventListener('click', (e) => { const menu = document.getElementById('menuPerfil'); if (menu && !menu.classList.contains('hidden') && !e.target.closest('.app-top-actions')) fecharMenuPerfil(); });
 });
 
 async function autoSalvarRascunho() {
@@ -1089,7 +719,7 @@ function atualizarVisibilidadeCamposPorBloco() {
         if (isMontagem) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'block'; } 
         else if (isInterno) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true; } 
         else { if(cHoras) cHoras.style.display = 'grid'; if(cDias) cDias.style.display = 'none'; if(cReagendar) cReagendar.style.display = 'block'; }
-    }); atualizarVisibilidadeClienteGeral(); atualizarResumoDocumento();
+    }); atualizarVisibilidadeClienteGeral();
 }
 function atualizarVisibilidadeClienteGeral() {
     const isInterno = verificarServicoInternoGlobal();
@@ -1118,34 +748,23 @@ function desbloquearEdicao() { toggleLock(false); }
 function limparAssinatura(pad, isCliente = false) { if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); autoSalvarRascunho(); }
 
 async function switchTab(tabId) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-    const alvo = document.getElementById(tabId); if (!alvo) return;
-    alvo.classList.remove('hidden');
-
-    document.querySelectorAll('.nav-btn, .bottom-nav-item').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden')); 
+    document.getElementById(tabId).classList.remove('hidden');
+    
+    document.querySelectorAll('.nav-btn').forEach(btn => { btn.classList.remove('border-blue-500', 'text-white', 'bg-gray-800/50'); btn.classList.add('border-transparent', 'text-gray-400'); });
     const activeBtn = document.getElementById(`btnNav${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`);
-    if(activeBtn) activeBtn.classList.add('active');
-    const header = document.getElementById('headerContextText');
+    if(activeBtn) { activeBtn.classList.remove('border-transparent', 'text-gray-400'); activeBtn.classList.add('border-blue-500', 'text-white', 'bg-gray-800/50'); }
 
-    if(tabId === 'historico') {
-        if (header) header.textContent = 'Histórico de O.S.';
-        await carregarHistorico(); atualizarIndicadorArmazenamento();
-    } else if (tabId === 'bancoHoras') {
-        if (header) header.textContent = 'Banco de Horas';
-        document.getElementById('btnNavMenu')?.classList.add('active');
-        renderTabelaBancoHoras();
-    } else if(tabId === 'novaOs') {
-        atualizarResumoDocumento();
-        setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
-    }
-    fecharMenuPrincipal();
+    if(tabId === 'historico') { await carregarHistorico(); atualizarIndicadorArmazenamento(); } 
+    else if (tabId === 'bancoHoras') { renderTabelaBancoHoras(); } 
+    else if(tabId === 'novaOs') setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
     window.scrollTo(0, 0);
 }
 
 function iniciarNovaOS() {
     documentoAtualId = Date.now().toString(); document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0; 
-    if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = perfilTecnicoAtual?.nome || ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
-    desbloquearEdicao(); switchTab('novaOs'); mostrarEtapaDocumento(); atualizarVisibilidadeCamposPorBloco(); localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
+    if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
+    desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco(); localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
 }
 
 function adicionarBlocoOS(dados = null) {
@@ -1271,7 +890,6 @@ function adicionarBlocoOS(dados = null) {
         </div>
     `;
     document.getElementById('listaOrdensServico').appendChild(bloco);
-    transformarBlocoEmCardMockup(bloco, id);
 
     if (dados) {
         ['cliente','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
@@ -1292,8 +910,6 @@ function adicionarBlocoOS(dados = null) {
         if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
     } else { addPecaRow(id); addPecaRow(id); }
     atualizarVisibilidadeCamposPorBloco();
-    atualizarResumoOS(id);
-    atualizarResumoDocumento();
 }
 
 function addPecaRow(id) {
