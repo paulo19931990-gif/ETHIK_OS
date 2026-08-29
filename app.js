@@ -529,24 +529,63 @@ function ajustarTextoChecklist(font, texto, maxWidth, fontSize, minSize = 4.3) {
     return { texto: t ? t + '...' : '', size };
 }
 
+let checklistFontBytesPromise = null;
+async function carregarFontesChecklistPersonalizadas() {
+    if (checklistFontBytesPromise) return checklistFontBytesPromise;
+    checklistFontBytesPromise = (async () => {
+        try {
+            const [regularResp, boldResp] = await Promise.all([
+                fetch('./fonts/Carlito-Regular.ttf'),
+                fetch('./fonts/Carlito-Bold.ttf')
+            ]);
+            if (!regularResp.ok || !boldResp.ok) throw new Error('Fontes Carlito indisponíveis');
+            return {
+                regular: new Uint8Array(await regularResp.arrayBuffer()),
+                bold: new Uint8Array(await boldResp.arrayBuffer())
+            };
+        } catch (error) {
+            console.warn('Não foi possível carregar as fontes Carlito. A usar fallback.', error);
+            return null;
+        }
+    })();
+    return checklistFontBytesPromise;
+}
+
+async function obterFontesPdfChecklist(pdfChecklist, StandardFontsObj) {
+    let font = await pdfChecklist.embedFont(StandardFontsObj.Helvetica);
+    let fontBold = await pdfChecklist.embedFont(StandardFontsObj.HelveticaBold);
+    try {
+        if (typeof window.fontkit !== 'undefined') {
+            pdfChecklist.registerFontkit(window.fontkit);
+            const bytes = await carregarFontesChecklistPersonalizadas();
+            if (bytes?.regular && bytes?.bold) {
+                font = await pdfChecklist.embedFont(bytes.regular, { subset: true });
+                fontBold = await pdfChecklist.embedFont(bytes.bold, { subset: true });
+            }
+        }
+    } catch (error) {
+        console.warn('Falha ao embutir fontes personalizadas do checklist. A usar fallback.', error);
+    }
+    return { font, fontBold };
+}
+
 function desenharCampoChecklist(page, font, texto, campo, rgbFn) {
     texto = textoPdfChecklistSeguro(texto);
     if (!texto) return;
     const { height } = page.getSize();
-    const fontSize = Math.min(campo.fontSize || 4.4, 4.4);
+    const fontSize = Math.min(campo.fontSize || 10, 10);
     const y = height - campo.top - fontSize + 1;
     if (campo.clear) page.drawRectangle({ x: campo.x - 1, y: y - 1.5, width: campo.width + 2, height: fontSize + 4, color: rgbFn(1,1,1) });
-    const fit = ajustarTextoChecklist(font, texto, campo.width, fontSize);
+    const fit = ajustarTextoChecklist(font, texto, campo.width, fontSize, campo.minFontSize || 6);
     page.drawText(fit.texto, { x: campo.x, y, size: fit.size, font, color: rgbFn(0,0,0) });
 }
 
-function desenharStatusChecklist(page, font, valor, x, top, rgbFn) {
+function desenharStatusChecklist(page, font, valor, x, top, rgbFn, size = 10) {
     if (!valor) return;
     const { height } = page.getSize();
     const texto = valorStatusLabel(valor);
-    const size = 4.2;
     const tw = font.widthOfTextAtSize(texto, size);
-    page.drawText(texto, { x: x - tw / 2, y: height - top - size + 1, size, font, color: rgbFn(0,0,0) });
+    page.drawText(texto, { x: x - tw / 2, y: height - top - size + 0.4, size, font, color: rgbFn(0,0,0) });
 }
 
 async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, StandardFontsObj, rgbFn) {
@@ -558,8 +597,7 @@ async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, Stan
     if (!resposta.ok) throw new Error(`Modelo ${modelo.codigo} não disponível. Confirme a pasta checklists no GitHub.`);
     const bytes = await resposta.arrayBuffer();
     const pdfChecklist = await PDFDocumentCtor.load(bytes);
-    const font = await pdfChecklist.embedFont(StandardFontsObj.TimesRoman);
-    const fontBold = await pdfChecklist.embedFont(StandardFontsObj.TimesRomanBold);
+    const { font, fontBold } = await obterFontesPdfChecklist(pdfChecklist, StandardFontsObj);
     const paginas = pdfChecklist.getPages();
     const ctx = contextoChecklistPdf(osId, checklist);
 
@@ -576,13 +614,13 @@ async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, Stan
         const pag = paginas[item.page || 0];
         if (!pag) return;
         const r = checklist.respostas?.[item.key] || {};
-        desenharStatusChecklist(pag, fontBold, r.verificado, modelo.colunas.verificadoX, item.top, rgbFn);
-        desenharStatusChecklist(pag, fontBold, r.substituido, modelo.colunas.substituidoX, item.top, rgbFn);
+        desenharStatusChecklist(pag, fontBold, r.verificado, modelo.colunas.verificadoX, item.top, rgbFn, modelo.colunas.statusFontSize || 10);
+        desenharStatusChecklist(pag, fontBold, r.substituido, modelo.colunas.substituidoX, item.top, rgbFn, modelo.colunas.statusFontSize || 10);
         const obs = textoPdfChecklistSeguro(r.obs || '');
         if (obs) {
             const { height } = pag.getSize();
-            const fit = ajustarTextoChecklist(font, obs, modelo.colunas.obsWidth, 4.2, 3.5);
-            pag.drawText(fit.texto, { x: modelo.colunas.obsX, y: height - item.top - fit.size + 1, size: fit.size, font, color: rgbFn(0,0,0) });
+            const fit = ajustarTextoChecklist(font, obs, modelo.colunas.obsWidth, modelo.colunas.obsFontSize || 10, modelo.colunas.obsMinFontSize || 6);
+            pag.drawText(fit.texto, { x: modelo.colunas.obsX, y: height - item.top - fit.size + 0.2, size: fit.size, font, color: rgbFn(0,0,0) });
         }
     }));
 
