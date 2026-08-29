@@ -64,7 +64,7 @@ async function aprenderPecasDaOS() {
 }
 
 
-// === COMPARTILHAMENTO DO BANCO DE PEÇAS (v52) ===
+// === COMPARTILHAMENTO DO BANCO DE PEÇAS (v52+) ===
 // Exporta/mescla apenas peças. Não altera histórico, O.S., banco de horas ou demais dados.
 function chaveComparacaoPeca(valor) {
     return String(valor || '').trim().toLocaleUpperCase('pt-BR');
@@ -119,7 +119,7 @@ async function exportarBancoPecas() {
         const payload = {
             tipo: 'multi-os-banco-pecas',
             versaoFormato: 1,
-            versaoApp: 52,
+            versaoApp: 53,
             exportadoEm: new Date().toISOString(),
             total: pecasValidas.length,
             pecas: pecasValidas
@@ -219,6 +219,375 @@ function importarBancoPecasJSON(event) {
         input.value = '';
     };
     reader.readAsText(file);
+}
+
+// === CHECKLISTS DE MANUTENÇÃO PREVENTIVA (v53) ===
+let checklistOSAtual = null;
+
+function modelosChecklistDisponiveis() {
+    return (window.MULTIOS_CHECKLISTS && typeof window.MULTIOS_CHECKLISTS === 'object') ? window.MULTIOS_CHECKLISTS : {};
+}
+
+function obterModeloChecklist(modeloId) {
+    return modelosChecklistDisponiveis()[modeloId] || null;
+}
+
+function opcoesChecklistHtml(selecionado = '') {
+    const modelos = modelosChecklistDisponiveis();
+    let html = '<option value="">Sem checklist</option>';
+    Object.entries(modelos).forEach(([id, modelo]) => {
+        const selected = id === selecionado ? ' selected' : '';
+        html += `<option value="${escapeHTML(id)}"${selected}>${escapeHTML(modelo.codigo)} - ${escapeHTML(modelo.nome)}</option>`;
+    });
+    return html;
+}
+
+function normalizarChecklistPersistido(checklist) {
+    if (!checklist || typeof checklist !== 'object' || Array.isArray(checklist)) return null;
+    const modeloId = String(checklist.modeloId || '').trim();
+    const modelo = obterModeloChecklist(modeloId);
+    if (!modelo) return null;
+    const respostasEntrada = checklist.respostas && typeof checklist.respostas === 'object' && !Array.isArray(checklist.respostas) ? checklist.respostas : {};
+    const respostas = {};
+    modelo.grupos.forEach(grupo => grupo.itens.forEach(item => {
+        const r = respostasEntrada[item.key] || {};
+        const verificado = ['OK','NOK','NA'].includes(r.verificado) ? r.verificado : '';
+        const substituido = ['OK','NOK','NA'].includes(r.substituido) ? r.substituido : '';
+        const obs = String(r.obs || '').slice(0, 300);
+        respostas[item.key] = { verificado, substituido, obs };
+    }));
+    const extras = {};
+    (modelo.extrasInputs || []).forEach(campo => { extras[campo.key] = String(checklist.extras?.[campo.key] || '').slice(0, 160); });
+    return { modeloId, respostas, extras };
+}
+
+function obterChecklistDoCampo(osId) {
+    const el = document.getElementById(`checklistData_${osId}`);
+    if (!el || !el.value) return null;
+    try { return normalizarChecklistPersistido(JSON.parse(el.value)); } catch (e) { return null; }
+}
+
+function gravarChecklistNoCampo(osId, checklist) {
+    const el = document.getElementById(`checklistData_${osId}`);
+    if (!el) return;
+    const normalizado = normalizarChecklistPersistido(checklist);
+    el.value = normalizado ? JSON.stringify(normalizado) : '';
+}
+
+function totalItensChecklist(modelo) {
+    return modelo ? modelo.grupos.reduce((total, grupo) => total + grupo.itens.length, 0) : 0;
+}
+
+function resumoProgressoChecklist(checklist) {
+    const modelo = checklist ? obterModeloChecklist(checklist.modeloId) : null;
+    if (!modelo || !checklist) return { total: 0, completos: 0, pendentes: 0, comNok: 0 };
+    let completos = 0, comNok = 0;
+    modelo.grupos.forEach(grupo => grupo.itens.forEach(item => {
+        const r = checklist.respostas?.[item.key] || {};
+        if (r.verificado && r.substituido) completos++;
+        if (r.verificado === 'NOK' || r.substituido === 'NOK') comNok++;
+    }));
+    const total = totalItensChecklist(modelo);
+    return { total, completos, pendentes: Math.max(total - completos, 0), comNok };
+}
+
+function atualizarResumoChecklistOS(osId) {
+    const resumo = document.getElementById(`checklistResumo_${osId}`);
+    const btn = document.getElementById(`btnAbrirChecklist_${osId}`);
+    const select = document.getElementById(`checklistModelo_${osId}`);
+    const checklist = obterChecklistDoCampo(osId);
+    const modelo = checklist ? obterModeloChecklist(checklist.modeloId) : null;
+    if (select) {
+        select.value = modelo ? checklist.modeloId : '';
+        select.dataset.modeloAnterior = modelo ? checklist.modeloId : '';
+    }
+    if (!resumo || !btn) return;
+    if (!modelo) {
+        resumo.textContent = 'Nenhum checklist selecionado.';
+        resumo.className = 'text-xs text-gray-500 mt-2';
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        return;
+    }
+    const progresso = resumoProgressoChecklist(checklist);
+    resumo.textContent = `${modelo.codigo} - ${progresso.completos}/${progresso.total} itens completos${progresso.comNok ? ` - ${progresso.comNok} com NOK` : ''}`;
+    resumo.className = progresso.pendentes === 0 ? 'text-xs text-green-700 font-bold mt-2' : 'text-xs text-blue-700 font-bold mt-2';
+    btn.disabled = false;
+    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+}
+
+function alterarModeloChecklist(osId) {
+    const select = document.getElementById(`checklistModelo_${osId}`);
+    if (!select) return;
+    const novoModeloId = select.value;
+    const atual = obterChecklistDoCampo(osId);
+    const anteriorId = atual?.modeloId || select.dataset.modeloAnterior || '';
+    if (novoModeloId === anteriorId) return;
+    if (atual && anteriorId && novoModeloId !== anteriorId) {
+        const prog = resumoProgressoChecklist(atual);
+        const temConteudo = prog.completos > 0 || Object.values(atual.respostas || {}).some(r => r.obs);
+        if (temConteudo && !confirm('Trocar o modelo apagará o preenchimento deste checklist. Deseja continuar?')) {
+            select.value = anteriorId;
+            return;
+        }
+    }
+    if (!novoModeloId) {
+        gravarChecklistNoCampo(osId, null);
+    } else {
+        const modelo = obterModeloChecklist(novoModeloId);
+        if (!modelo) { select.value = anteriorId; return; }
+        const respostas = {};
+        modelo.grupos.forEach(grupo => grupo.itens.forEach(item => { respostas[item.key] = { verificado: '', substituido: '', obs: '' }; }));
+        const extras = {};
+        (modelo.extrasInputs || []).forEach(c => { extras[c.key] = ''; });
+        gravarChecklistNoCampo(osId, { modeloId: novoModeloId, respostas, extras });
+    }
+    atualizarResumoChecklistOS(osId);
+    autoSalvarRascunho();
+}
+
+function valorStatusLabel(valor) { return valor === 'NA' ? 'NA' : valor; }
+
+function classesBotaoChecklist(valor, selecionado) {
+    const base = 'px-3 py-2 rounded-lg border text-xs font-black transition-all min-w-[54px] ';
+    if (!selecionado) return base + 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50';
+    if (valor === 'OK') return base + 'border-green-600 bg-green-600 text-white shadow-sm';
+    if (valor === 'NOK') return base + 'border-red-600 bg-red-600 text-white shadow-sm';
+    return base + 'border-gray-700 bg-gray-700 text-white shadow-sm';
+}
+
+function botoesStatusChecklist(campo, atual) {
+    return ['OK','NOK','NA'].map(valor => `<button type="button" data-status-btn="${campo}" data-status-value="${valor}" onclick="selecionarChecklistStatus(this, '${campo}', '${valor}')" class="${classesBotaoChecklist(valor, atual === valor)}">${valorStatusLabel(valor)}</button>`).join('');
+}
+
+function resumoCabecalhoChecklist(osId) {
+    const modelo = getVal('modelo', osId).trim();
+    const equipamento = getVal('equipamento', osId).trim();
+    return {
+        cliente: getVal('cliente', osId).trim() || '-',
+        equipamento: equipamento || '-',
+        modelo: modelo || '-',
+        serie: getVal('serie', osId).trim() || '-',
+        tag: getVal('tag', osId).trim() || '-',
+        os: getVal('osNum', osId).trim() || '-',
+        tecnico: document.getElementById('tecnico')?.value.trim() || '-'
+    };
+}
+
+function abrirChecklist(osId) {
+    const checklist = obterChecklistDoCampo(osId);
+    const modelo = checklist ? obterModeloChecklist(checklist.modeloId) : null;
+    if (!modelo) { mostrarToast('Selecione primeiro o modelo do checklist.', true); return; }
+    checklistOSAtual = String(osId);
+    const cab = resumoCabecalhoChecklist(osId);
+    document.getElementById('checklistModalTitulo').textContent = `${modelo.codigo} - ${modelo.nome}`;
+    document.getElementById('checklistModalSubtitulo').textContent = `O.S. ${cab.os} - ${cab.cliente}`;
+    const cabEl = document.getElementById('checklistCabecalhoAuto');
+    cabEl.innerHTML = `
+        <div><span class="text-[10px] font-bold text-gray-400 uppercase">Cliente</span><div class="font-bold text-gray-800">${escapeHTML(cab.cliente)}</div></div>
+        <div><span class="text-[10px] font-bold text-gray-400 uppercase">Equipamento</span><div class="font-bold text-gray-800">${escapeHTML(cab.equipamento)}</div></div>
+        <div><span class="text-[10px] font-bold text-gray-400 uppercase">Modelo</span><div class="font-bold text-gray-800">${escapeHTML(cab.modelo)}</div></div>
+        <div><span class="text-[10px] font-bold text-gray-400 uppercase">Série / TAG</span><div class="font-bold text-gray-800">${escapeHTML(cab.serie)}${cab.tag !== '-' ? ` / ${escapeHTML(cab.tag)}` : ''}</div></div>
+        <div><span class="text-[10px] font-bold text-gray-400 uppercase">Nº O.S.</span><div class="font-bold text-gray-800">${escapeHTML(cab.os)}</div></div>
+        <div><span class="text-[10px] font-bold text-gray-400 uppercase">Técnico</span><div class="font-bold text-gray-800">${escapeHTML(cab.tecnico)}</div></div>`;
+
+    let html = '';
+    if (modelo.extrasInputs?.length) {
+        html += `<section class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4"><h4 class="font-black text-amber-900 mb-3 text-sm">Dados adicionais do formulário</h4><div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
+        modelo.extrasInputs.forEach(campo => {
+            html += `<label class="block"><span class="text-xs font-bold text-amber-900">${escapeHTML(campo.label)}</span><input type="text" maxlength="160" data-check-extra="${escapeHTML(campo.key)}" value="${escapeHTML(checklist.extras?.[campo.key] || '')}" class="mt-1 w-full border border-amber-200 bg-white rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-400"></label>`;
+        });
+        html += '</div></section>';
+    }
+
+    modelo.grupos.forEach(grupo => {
+        html += `<section class="mb-5"><div class="sticky top-0 z-10 bg-gray-100 border border-gray-200 rounded-lg px-3 py-2 font-black text-gray-700 text-xs uppercase tracking-wide">${escapeHTML(grupo.titulo)}</div><div class="space-y-3 mt-3">`;
+        grupo.itens.forEach(item => {
+            const r = checklist.respostas?.[item.key] || {verificado:'',substituido:'',obs:''};
+            html += `<div class="check-item bg-white border border-gray-200 rounded-xl p-4 shadow-sm" data-check-item="${escapeHTML(item.key)}">
+                <div class="font-bold text-gray-900 text-sm mb-3">${escapeHTML(item.label)}</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Verificado</div><div class="flex gap-2 flex-wrap">${botoesStatusChecklist('verificado', r.verificado)}</div><input type="hidden" data-check-field="verificado" value="${escapeHTML(r.verificado)}"></div>
+                    <div><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Substituído</div><div class="flex gap-2 flex-wrap">${botoesStatusChecklist('substituido', r.substituido)}</div><input type="hidden" data-check-field="substituido" value="${escapeHTML(r.substituido)}"></div>
+                </div>
+                <label class="block mt-3"><span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Observação</span><input type="text" maxlength="300" data-check-obs value="${escapeHTML(r.obs || '')}" placeholder="Opcional" class="mt-1 w-full border border-gray-200 bg-gray-50 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"></label>
+            </div>`;
+        });
+        html += '</div></section>';
+    });
+    document.getElementById('checklistEditorConteudo').innerHTML = html;
+    document.getElementById('modalChecklist').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    atualizarProgressoChecklistModal();
+}
+
+function selecionarChecklistStatus(botao, campo, valor) {
+    const item = botao.closest('.check-item');
+    if (!item) return;
+    const hidden = item.querySelector(`[data-check-field="${campo}"]`);
+    if (!hidden) return;
+    hidden.value = hidden.value === valor ? '' : valor;
+    item.querySelectorAll(`[data-status-btn="${campo}"]`).forEach(btn => {
+        const val = btn.dataset.statusValue;
+        btn.className = classesBotaoChecklist(val, val === hidden.value);
+    });
+    atualizarProgressoChecklistModal();
+}
+
+function coletarChecklistDoModal() {
+    if (!checklistOSAtual) return null;
+    const anterior = obterChecklistDoCampo(checklistOSAtual);
+    const modelo = anterior ? obterModeloChecklist(anterior.modeloId) : null;
+    if (!modelo) return null;
+    const respostas = {};
+    document.querySelectorAll('#checklistEditorConteudo .check-item').forEach(item => {
+        const key = item.dataset.checkItem;
+        respostas[key] = {
+            verificado: item.querySelector('[data-check-field="verificado"]')?.value || '',
+            substituido: item.querySelector('[data-check-field="substituido"]')?.value || '',
+            obs: (item.querySelector('[data-check-obs]')?.value || '').trim().slice(0, 300)
+        };
+    });
+    const extras = {};
+    document.querySelectorAll('#checklistEditorConteudo [data-check-extra]').forEach(el => { extras[el.dataset.checkExtra] = el.value.trim().slice(0,160); });
+    return normalizarChecklistPersistido({ modeloId: anterior.modeloId, respostas, extras });
+}
+
+function atualizarProgressoChecklistModal() {
+    if (!checklistOSAtual) return;
+    const checklist = coletarChecklistDoModal();
+    const p = resumoProgressoChecklist(checklist);
+    const el = document.getElementById('checklistModalProgresso');
+    if (el) el.textContent = `${p.completos} de ${p.total} itens completos${p.comNok ? ` • ${p.comNok} com NOK` : ''}`;
+}
+
+function guardarFecharChecklist() {
+    if (!checklistOSAtual) return;
+    const checklist = coletarChecklistDoModal();
+    if (checklist) gravarChecklistNoCampo(checklistOSAtual, checklist);
+    atualizarResumoChecklistOS(checklistOSAtual);
+    document.getElementById('modalChecklist').classList.add('hidden');
+    document.body.style.overflow = '';
+    checklistOSAtual = null;
+    autoSalvarRascunho();
+}
+
+function validarChecklistsAntesPDF() {
+    let pendentes = 0, selecionados = 0;
+    document.querySelectorAll('.os-bloco').forEach(bloco => {
+        const id = bloco.getAttribute('data-id');
+        const checklist = obterChecklistDoCampo(id);
+        if (!checklist) return;
+        selecionados++;
+        pendentes += resumoProgressoChecklist(checklist).pendentes;
+    });
+    if (selecionados > 0 && pendentes > 0) return confirm(`Existem ${pendentes} item(ns) de checklist sem preencher completamente. Deseja gerar o PDF mesmo assim?`);
+    return true;
+}
+
+function formatarDataChecklist(valor) {
+    const str = String(valor || '');
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : str;
+}
+
+function contextoChecklistPdf(osId, checklist) {
+    const modelo = getVal('modelo', osId).trim();
+    const equipamento = getVal('equipamento', osId).trim();
+    const data = getVal('dt', osId) || getVal('dtInicio', osId) || dataLocalISO();
+    const acompanhado = document.getElementById('nomeClienteFinal')?.value.trim() || '';
+    const cargo = document.getElementById('cargo')?.value.trim() || '';
+    const tecnico = document.getElementById('tecnico')?.value.trim() || '';
+    return {
+        modeloOuEquipamento: modelo || equipamento,
+        serie: getVal('serie', osId).trim(), tag: getVal('tag', osId).trim(), osNum: getVal('osNum', osId).trim(), cliente: getVal('cliente', osId).trim(),
+        nomeClienteFinal: acompanhado, cargo, dataChecklist: formatarDataChecklist(data), tecnico,
+        acompanhadoComRotulo: acompanhado ? `ACOMPANHADO POR: ${acompanhado}` : 'ACOMPANHADO POR:',
+        cargoComRotulo: cargo ? `CARGO: ${cargo}` : 'CARGO:',
+        dataComRotulo: `DATA: ${formatarDataChecklist(data)}`,
+        tecnicoComRotulo: tecnico ? `TÉCNICO: ${tecnico}` : 'TÉCNICO:',
+        extras: checklist?.extras || {}
+    };
+}
+
+function textoPdfChecklistSeguro(valor) {
+    return String(valor || '')
+        .replace(/[–—]/g, '-')
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'")
+        .replace(/[^\x20-\xFF]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function ajustarTextoChecklist(font, texto, maxWidth, fontSize, minSize = 4.3) {
+    let t = textoPdfChecklistSeguro(texto);
+    let size = fontSize;
+    while (size > minSize && font.widthOfTextAtSize(t, size) > maxWidth) size -= 0.25;
+    if (font.widthOfTextAtSize(t, size) <= maxWidth) return { texto: t, size };
+    while (t.length > 1 && font.widthOfTextAtSize(t + '...', size) > maxWidth) t = t.slice(0, -1);
+    return { texto: t ? t + '...' : '', size };
+}
+
+function desenharCampoChecklist(page, font, texto, campo, rgbFn) {
+    texto = textoPdfChecklistSeguro(texto);
+    if (!texto) return;
+    const { height } = page.getSize();
+    const fontSize = campo.fontSize || 6;
+    const y = height - campo.top - fontSize + 1;
+    if (campo.clear) page.drawRectangle({ x: campo.x - 1, y: y - 1.5, width: campo.width + 2, height: fontSize + 4, color: rgbFn(1,1,1) });
+    const fit = ajustarTextoChecklist(font, texto, campo.width, fontSize);
+    page.drawText(fit.texto, { x: campo.x, y, size: fit.size, font, color: rgbFn(0,0,0) });
+}
+
+function desenharStatusChecklist(page, font, valor, x, top, rgbFn) {
+    if (!valor) return;
+    const { height } = page.getSize();
+    const texto = valorStatusLabel(valor);
+    const size = 6.2;
+    const tw = font.widthOfTextAtSize(texto, size);
+    page.drawText(texto, { x: x - tw / 2, y: height - top - size + 1, size, font, color: rgbFn(0,0,0) });
+}
+
+async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, StandardFontsObj, rgbFn) {
+    const checklist = obterChecklistDoCampo(osId);
+    if (!checklist) return;
+    const modelo = obterModeloChecklist(checklist.modeloId);
+    if (!modelo) return;
+    const resposta = await fetch(modelo.pdf);
+    if (!resposta.ok) throw new Error(`Modelo ${modelo.codigo} não disponível. Confirme a pasta checklists no GitHub.`);
+    const bytes = await resposta.arrayBuffer();
+    const pdfChecklist = await PDFDocumentCtor.load(bytes);
+    const font = await pdfChecklist.embedFont(StandardFontsObj.Helvetica);
+    const fontBold = await pdfChecklist.embedFont(StandardFontsObj.HelveticaBold);
+    const paginas = pdfChecklist.getPages();
+    const ctx = contextoChecklistPdf(osId, checklist);
+
+    (modelo.campos || []).forEach(campo => {
+        const pag = paginas[campo.page || 0];
+        if (!pag) return;
+        let valor = '';
+        if (String(campo.source).startsWith('extra:')) valor = ctx.extras[String(campo.source).slice(6)] || '';
+        else valor = ctx[campo.source] || '';
+        desenharCampoChecklist(pag, font, valor, campo, rgbFn);
+    });
+
+    modelo.grupos.forEach(grupo => grupo.itens.forEach(item => {
+        const pag = paginas[item.page || 0];
+        if (!pag) return;
+        const r = checklist.respostas?.[item.key] || {};
+        desenharStatusChecklist(pag, fontBold, r.verificado, modelo.colunas.verificadoX, item.top, rgbFn);
+        desenharStatusChecklist(pag, fontBold, r.substituido, modelo.colunas.substituidoX, item.top, rgbFn);
+        const obs = textoPdfChecklistSeguro(r.obs || '');
+        if (obs) {
+            const { height } = pag.getSize();
+            const fit = ajustarTextoChecklist(font, obs, modelo.colunas.obsWidth, 5.5, 4.0);
+            pag.drawText(fit.texto, { x: modelo.colunas.obsX, y: height - item.top - fit.size + 1, size: fit.size, font, color: rgbFn(0,0,0) });
+        }
+    }));
+
+    const copias = await masterPdf.copyPages(pdfChecklist, pdfChecklist.getPageIndices());
+    copias.forEach(p => masterPdf.addPage(p));
 }
 
 let documentoAtualId = Date.now().toString();
@@ -853,6 +1222,7 @@ function recolherDadosDoFormulario() {
             dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id), 
             anexoBase64: document.getElementById(`anexoBase64_${id}`) ? document.getElementById(`anexoBase64_${id}`).value : null, 
             anexoNome: document.getElementById(`anexoBase64_${id}`)?.dataset.filename || null, 
+            checklist: obterChecklistDoCampo(id),
             fotos: []
         };
         b.querySelectorAll('.peca-row-item').forEach(row => { let q = row.querySelector('.q').value, n = row.querySelector('.n').value, c = row.querySelector('.c').value; if(q || n || c) ordem.pecas.push({ q, n, c }); });
@@ -898,7 +1268,7 @@ function confirmarAssinaturaExpandida() {
 }
 
 function toggleLock(locked) {
-    document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico button, #tecnico, #nomeClienteFinal, #cargo, #setor, #btnAddOs').forEach(el => { el.disabled = locked; locked ? el.classList.add('opacity-50', 'pointer-events-none') : el.classList.remove('opacity-50', 'pointer-events-none'); });
+    document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico select, #listaOrdensServico button, #tecnico, #nomeClienteFinal, #cargo, #setor, #btnAddOs').forEach(el => { el.disabled = locked; locked ? el.classList.add('opacity-50', 'pointer-events-none') : el.classList.remove('opacity-50', 'pointer-events-none'); });
     if(document.getElementById('lockStatus')) { document.getElementById('lockStatus').textContent = locked ? "BLOQUEADO" : "EDITÁVEL"; document.getElementById('lockStatus').className = locked ? "text-[10px] font-bold text-red-600 uppercase tracking-wider bg-red-50 px-2 py-1 rounded" : "text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-1 rounded"; }
 }
 function bloquearEdicao() { toggleLock(true); mostrarToast('Formulário selado pela Assinatura do Cliente.'); }
@@ -1000,6 +1370,24 @@ function adicionarBlocoOS(dados = null) {
                 </div>
             </div>
 
+            <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-4">
+                <div class="flex items-start gap-3 mb-3">
+                    <div class="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="text-xs font-black text-blue-900 uppercase tracking-widest">Checklist Preventiva</h4>
+                        <p class="text-xs text-blue-700 mt-1">Selecione o formulário do equipamento. Os dados da O.S. serão usados automaticamente no cabeçalho do checklist.</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                    <select id="checklistModelo_${id}" onchange="alterarModeloChecklist(${id})" class="w-full border border-blue-200 bg-white p-2.5 rounded-lg text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">${opcoesChecklistHtml(dados?.checklist?.modeloId || '')}</select>
+                    <button type="button" id="btnAbrirChecklist_${id}" onclick="abrirChecklist(${id})" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow transition-colors">Preencher Checklist</button>
+                </div>
+                <input type="hidden" id="checklistData_${id}">
+                <div id="checklistResumo_${id}" class="text-xs text-gray-500 mt-2">Nenhum checklist selecionado.</div>
+            </div>
+
             <div>
                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">PEÇA</h4>
                 <div id="pecasContainer_${id}" class="space-y-2 mb-3"></div>
@@ -1049,6 +1437,12 @@ function adicionarBlocoOS(dados = null) {
     `;
     document.getElementById('listaOrdensServico').appendChild(bloco);
 
+    if (dados?.checklist) {
+        const checklistRestaurado = normalizarChecklistPersistido(dados.checklist);
+        if (checklistRestaurado) gravarChecklistNoCampo(id, checklistRestaurado);
+    }
+    atualizarResumoChecklistOS(id);
+
     if (dados) {
         ['cliente','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
         ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
@@ -1067,6 +1461,7 @@ function adicionarBlocoOS(dados = null) {
         }); else { addPecaRow(id); addPecaRow(id); }
         if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
     } else { addPecaRow(id); addPecaRow(id); }
+    atualizarResumoChecklistOS(id);
     atualizarVisibilidadeCamposPorBloco();
 }
 
@@ -1171,6 +1566,7 @@ function atualizarProgressoPDF(percentual, texto) {
 
 async function construirPDFBytes(onProgressCallback) {
     if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios!");
+    if (!validarChecklistsAntesPDF()) throw new Error("Geração cancelada para revisão do checklist.");
     if (!dependenciasPdfDisponiveis(false)) throw new Error("Bibliotecas de PDF indisponíveis. Verifique a ligação ou o cache offline.");
     const reportProgress = async (pct, txt) => { if(onProgressCallback) { onProgressCallback(pct, txt); await new Promise(r => setTimeout(r, 15)); } };
     await reportProgress(5, "A iniciar motor PDF...");
@@ -1231,6 +1627,10 @@ async function construirPDFBytes(onProgressCallback) {
         for (let i = 1; i <= paginasDestaOS; i++) { docOS.setPage(i); if (imgObject && logoImgData) docOS.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH); }
         const osBuffer = docOS.output('arraybuffer'); const osPdfLib = await PDFDocument.load(osBuffer);
         const osPages = await masterPdf.copyPages(osPdfLib, osPdfLib.getPageIndices()); osPages.forEach((p) => masterPdf.addPage(p));
+        if (obterChecklistDoCampo(id)) {
+            await reportProgress(Math.min(basePct + 5, 86), `A incluir checklist da OS ${idx + 1}...`);
+            await adicionarChecklistAoMaster(masterPdf, id, PDFDocument, StandardFonts, rgb);
+        }
         const anexoB64 = getVal('anexoBase64', id);
         if (anexoB64) { 
             try { 
