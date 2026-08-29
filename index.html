@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=52">
+    <link rel="manifest" href="./manifest.json?v=53">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -30,7 +30,7 @@
     
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js?v=52').catch(err => console.error('Falha ao registar Service Worker:', err));
+            navigator.serviceWorker.register('./sw.js?v=53').catch(err => console.error('Falha ao registar Service Worker:', err));
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -40,7 +40,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=52">
+    <link rel="stylesheet" href="style.css?v=53">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -172,6 +172,36 @@
         </div>
     </div>
     
+
+    <!-- MODAL: Checklist Preventiva -->
+    <div id="modalChecklist" class="hidden fixed inset-0 bg-gray-900/90 z-[130] backdrop-blur-sm">
+        <div class="w-full h-full bg-gray-50 flex flex-col sm:max-w-4xl sm:h-[96vh] sm:my-[2vh] sm:mx-auto sm:rounded-2xl sm:overflow-hidden shadow-2xl">
+            <div class="bg-white border-b border-gray-200 px-4 py-3 sm:px-6 flex items-center justify-between gap-3 shrink-0">
+                <div class="min-w-0">
+                    <h3 id="checklistModalTitulo" class="font-black text-gray-900 text-base sm:text-lg truncate">Checklist Preventiva</h3>
+                    <p id="checklistModalSubtitulo" class="text-xs text-gray-500 font-medium truncate"></p>
+                </div>
+                <button type="button" onclick="guardarFecharChecklist()" class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 shrink-0" aria-label="Fechar checklist">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 sm:p-6">
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
+                    <div class="flex items-start gap-2 mb-3">
+                        <svg class="w-5 h-5 text-blue-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <p class="text-xs text-blue-800 font-semibold">Cabeçalho preenchido automaticamente com os dados da O.S. atual.</p>
+                    </div>
+                    <div id="checklistCabecalhoAuto" class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs"></div>
+                </div>
+                <div id="checklistEditorConteudo"></div>
+            </div>
+            <div class="bg-white border-t border-gray-200 p-4 sm:px-6 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between shrink-0">
+                <div id="checklistModalProgresso" class="text-xs font-bold text-gray-500">0 itens completos</div>
+                <button type="button" onclick="guardarFecharChecklist()" class="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-sm shadow-lg">Concluir Checklist</button>
+            </div>
+        </div>
+    </div>
+
     <!-- BARRA DE NAVEGAÇÃO -->
     <nav class="bg-gray-900 text-white shadow-lg sticky top-0 z-40">
         <div class="max-w-5xl mx-auto px-4">
@@ -438,8 +468,9 @@
 
     </div>
 
-    <!-- CERTIFIQUE-SE DE CARREGAR O BANCO DE PEÇAS AQUI -->
-    <script src="bancoPecas.js?v=52"></script>
-    <script src="app.js?v=52"></script>
+    <!-- Modelos de checklist fixos + banco de peças + aplicação -->
+    <script src="checklists/checklists.js?v=53"></script>
+    <script src="bancoPecas.js?v=53"></script>
+    <script src="app.js?v=53"></script>
 </body>
 </html>
