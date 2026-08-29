@@ -29,3 +29,28 @@
     0% { transform: rotate(0deg); } 
     100% { transform: rotate(360deg); } 
 }
+
+/* Pré-visualização PDF: zoom por gesto sem perder o lado esquerdo */
+#pdfRenderContainer {
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+.pdf-pages-wrapper {
+    width: max-content;
+    min-width: 100%;
+    align-items: center;
+    margin: 0 auto;
+}
+
+.pdf-page-canvas {
+    width: var(--pdf-page-width, 100%);
+    max-width: none;
+    height: auto;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 600px) {
+    #pdfRenderContainer { padding: 8px; }
+}
