@@ -11,23 +11,26 @@ let pecasPorCodigo = new Map();
 let pecasPorNome = new Map();
 
 async function iniciarBancoPecas() {
-    let salvo = await localforage.getItem('banco_pecas_inteligente');
-    if (!salvo || salvo.length === 0) {
-        bancoPecas = typeof pecasDeFabrica !== 'undefined' ? [...pecasDeFabrica] : [];
-    } else {
-        bancoPecas = salvo;
+    let salvo = null;
+    if (typeof localforage !== 'undefined') {
+        try { salvo = await localforage.getItem('banco_pecas_inteligente'); } catch (e) { console.warn('Falha ao carregar banco de peças local:', e); }
     }
+    bancoPecas = Array.isArray(salvo) && salvo.length > 0 ? salvo : (typeof pecasDeFabrica !== 'undefined' ? [...pecasDeFabrica] : []);
     pecasPorCodigo.clear(); pecasPorNome.clear();
-    bancoPecas.forEach(p => { pecasPorCodigo.set(p.c, p); pecasPorNome.set(p.n, p); });
+    bancoPecas.forEach(p => { if (p && typeof p.c === 'string' && typeof p.n === 'string') { pecasPorCodigo.set(p.c, p); pecasPorNome.set(p.n, p); } });
     atualizarListasHTML();
 }
 
 function atualizarListasHTML() {
     const dlCodigos = document.getElementById('dbCodigosPecas'); const dlNomes = document.getElementById('dbNomesPecas');
     if(!dlCodigos || !dlNomes) return;
-    let htmlCodigos = ''; let htmlNomes = '';
-    bancoPecas.forEach(peca => { htmlCodigos += `<option value="${peca.c}">${peca.n}</option>`; htmlNomes += `<option value="${peca.n}">${peca.c}</option>`; });
-    dlCodigos.innerHTML = htmlCodigos; dlNomes.innerHTML = htmlNomes;
+    dlCodigos.replaceChildren(); dlNomes.replaceChildren();
+    const fragCodigos = document.createDocumentFragment(); const fragNomes = document.createDocumentFragment();
+    bancoPecas.forEach(peca => {
+        const optCodigo = document.createElement('option'); optCodigo.value = String(peca.c || ''); optCodigo.textContent = String(peca.n || ''); fragCodigos.appendChild(optCodigo);
+        const optNome = document.createElement('option'); optNome.value = String(peca.n || ''); optNome.textContent = String(peca.c || ''); fragNomes.appendChild(optNome);
+    });
+    dlCodigos.appendChild(fragCodigos); dlNomes.appendChild(fragNomes);
 }
 
 function autoPreencherPeca(input, tipo) {
@@ -44,14 +47,20 @@ function autoPreencherPeca(input, tipo) {
 async function aprenderPecasDaOS() {
     let bancoAtualizado = false;
     document.querySelectorAll('.peca-row-item').forEach(row => {
-        let n = row.querySelector('.n').value.trim(); let c = row.querySelector('.c').value.trim();
-        if (n && c && !pecasPorCodigo.has(c) && !pecasPorNome.has(n)) {
-            const novaPeca = { c: c, n: n };
-            bancoPecas.push(novaPeca); pecasPorCodigo.set(c, novaPeca); pecasPorNome.set(n, novaPeca);
-            bancoAtualizado = true;
+        const n = row.querySelector('.n')?.value.trim(); const c = row.querySelector('.c')?.value.trim();
+        if (!n || !c) return;
+        const existenteCodigo = pecasPorCodigo.get(c);
+        if (existenteCodigo) {
+            if (existenteCodigo.n !== n && !pecasPorNome.has(n)) {
+                pecasPorNome.delete(existenteCodigo.n); existenteCodigo.n = n; pecasPorNome.set(n, existenteCodigo); bancoAtualizado = true;
+            }
+            return;
         }
+        if (pecasPorNome.has(n)) return;
+        const novaPeca = { c, n };
+        bancoPecas.push(novaPeca); pecasPorCodigo.set(c, novaPeca); pecasPorNome.set(n, novaPeca); bancoAtualizado = true;
     });
-    if (bancoAtualizado) { await localforage.setItem('banco_pecas_inteligente', bancoPecas); atualizarListasHTML(); }
+    if (bancoAtualizado && typeof localforage !== 'undefined') { await localforage.setItem('banco_pecas_inteligente', bancoPecas); atualizarListasHTML(); }
 }
 
 let documentoAtualId = Date.now().toString();
@@ -61,6 +70,7 @@ let objUrlPreview = null;
 let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
 
 let currentZoom = 1, startZoom = 1, startDist = 0;
+let pinchStartScrollLeft = 0, pinchStartScrollTop = 0, pinchStartViewportX = 0, pinchStartViewportY = 0;
 let registosBancoHoras = [];
 let contadorOS = 0;
 
@@ -75,6 +85,47 @@ const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(15,23,42)"
 function escapeHTML(str) {
     if (str === null || str === undefined) return '';
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function dataLocalISO(data = new Date()) {
+    const offset = data.getTimezoneOffset();
+    return new Date(data.getTime() - offset * 60000).toISOString().slice(0, 10);
+}
+
+function idLocalSeguro(valor) {
+    return typeof valor === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(valor);
+}
+
+function dependenciasPdfDisponiveis(incluirPdfJs = false) {
+    const baseOk = !!(window.jspdf?.jsPDF && window.PDFLib?.PDFDocument);
+    const pdfJsOk = !incluirPdfJs || typeof pdfjsLib !== 'undefined';
+    return baseOk && pdfJsOk;
+}
+
+function dataUrlImagemSegura(valor) {
+    return typeof valor === 'string' && /^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\r\n]+$/i.test(valor);
+}
+
+function dataUrlPdfSegura(valor) {
+    if (typeof valor !== 'string') return false;
+    const match = /^data:(?:application\/pdf|application\/octet-stream)?;base64,([a-z0-9+/=\r\n]+)$/i.exec(valor);
+    if (!match) return false;
+    try { return atob(match[1].replace(/\s/g, '').slice(0, 16)).startsWith('%PDF-'); } catch (e) { return false; }
+}
+
+function definirNomeAnexo(id, nome = '') {
+    const el = document.getElementById(`anexoNome_${id}`);
+    if (!el) return;
+    el.replaceChildren();
+    const icone = document.createElement('span');
+    icone.setAttribute('aria-hidden', 'true');
+    icone.textContent = '✓ ';
+    const texto = document.createElement('span');
+    let nomeLimpo = String(nome || '').replace(/^Anexado:\s*/i, '').trim();
+    if (/^Anexado$/i.test(nomeLimpo)) nomeLimpo = '';
+    texto.textContent = nomeLimpo ? `Anexado: ${nomeLimpo}` : 'Anexado';
+    el.append(icone, texto);
+    el.classList.remove('hidden');
 }
 
 let promptDeInstalacao = null;
@@ -101,7 +152,7 @@ async function atualizarIndicadorArmazenamento() {
 async function carregarLogoDoArmazenamento() {
     try {
         const logoSalvo = await localforage.getItem('oficialLogoApp');
-        if (logoSalvo) {
+        if (logoSalvo && dataUrlImagemSegura(logoSalvo)) {
             logoImgData = logoSalvo; logoImgFormat = (logoSalvo.includes('image/jpeg') || logoSalvo.includes('image/jpg')) ? 'JPEG' : 'PNG';
             const img = new Image(); img.src = logoSalvo;
             img.onload = () => {
@@ -116,11 +167,13 @@ async function carregarLogoDoArmazenamento() {
 async function lerLogotipo(event) {
     const file = event.target.files[0];
     if (file) {
+        if (!file.type.startsWith('image/')) { mostrarToast('Selecione uma imagem válida para o logótipo.', true); event.target.value = ''; return; }
         const reader = new FileReader();
-        reader.onload = async function(e) { await localforage.setItem('oficialLogoApp', e.target.result); await carregarLogoDoArmazenamento(); mostrarToast('Logótipo atualizado!'); }; 
+        reader.onload = async function(e) { try { if (!dataUrlImagemSegura(e.target.result)) throw new Error('Formato inválido'); await localforage.setItem('oficialLogoApp', e.target.result); await carregarLogoDoArmazenamento(); mostrarToast('Logótipo atualizado!'); } catch(err) { console.error(err); mostrarToast('Não foi possível guardar o logótipo.', true); } };
+        reader.onerror = () => mostrarToast('Não foi possível ler o logótipo.', true);
         reader.readAsDataURL(file);
     }
-    event.target.value = ''; 
+    event.target.value = '';
 }
 
 function gerarMetadadosResumo(doc) {
@@ -161,54 +214,104 @@ async function abrirAbaHistoricoSegura() {
     else { document.getElementById('inputDigitarPin').value = ''; document.getElementById('modalDigitarPin').classList.remove('hidden'); }
 }
 async function salvarNovoPin() {
-    const novoPin = document.getElementById('inputNovoPin').value;
-    if(novoPin && novoPin.length >= 4) { await localforage.setItem('app_pin', novoPin); document.getElementById('modalCriarPin').classList.add('hidden'); switchTab('historico'); mostrarToast("PIN registado!"); } 
-    else mostrarToast("O PIN deve ter no mínimo 4 dígitos.", true);
+    const novoPin = document.getElementById('inputNovoPin').value.trim();
+    if(/^\d{4,12}$/.test(novoPin)) { await localforage.setItem('app_pin', novoPin); document.getElementById('modalCriarPin').classList.add('hidden'); switchTab('historico'); mostrarToast("PIN registado!"); }
+    else mostrarToast("Use um PIN numérico de 4 a 12 dígitos.", true);
 }
 async function validarPinAcesso() {
-    const digitado = document.getElementById('inputDigitarPin').value; const pinSalvo = await localforage.getItem('app_pin');
-    if (digitado === pinSalvo) { document.getElementById('modalDigitarPin').classList.add('hidden'); switchTab('historico'); } 
-    else if (digitado === '2838') {
-        alert("Senha Master aceite. O PIN de segurança foi apagado.\nCrie um novo PIN."); await localforage.removeItem('app_pin');
-        document.getElementById('modalDigitarPin').classList.add('hidden'); document.getElementById('modalCriarPin').classList.remove('hidden');
-    } else { mostrarToast("PIN Incorreto!", true); document.getElementById('inputDigitarPin').value = ''; }
+    const digitado = document.getElementById('inputDigitarPin').value.trim(); const pinSalvo = await localforage.getItem('app_pin');
+    if (digitado === pinSalvo) { document.getElementById('modalDigitarPin').classList.add('hidden'); switchTab('historico'); }
+    else { mostrarToast("PIN incorreto!", true); document.getElementById('inputDigitarPin').value = ''; }
 }
 
-function abrirModalExportar() { document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${new Date().toISOString().split('T')[0]}`; document.getElementById('modalExportar').classList.remove('hidden'); }
+function abrirModalExportar() { document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${dataLocalISO()}`; document.getElementById('modalExportar').classList.remove('hidden'); }
 function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
 async function confirmarExportacao() {
-    let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${new Date().toISOString().split('T')[0]}`;
+    let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${dataLocalISO()}`;
     let historicoMeta = await obterHistoricoSalvo();
     let backupCompleto = { historicoOS: [], bancoHoras: registosBancoHoras || [] };
     for (let meta of historicoMeta) { let docFull = await localforage.getItem(`os_doc_${meta.id}`); if (docFull) backupCompleto.historicoOS.push(docFull); }
     const blob = new Blob([JSON.stringify(backupCompleto, null, 2)], { type: 'application/json' });
     if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado);
     urlDownloadGerado = URL.createObjectURL(blob);
+    inputNome = inputNome.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 100) || `Backup_${dataLocalISO()}`;
     const a = document.createElement('a'); a.href = urlDownloadGerado; a.download = `${inputNome}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     fecharModalExportar(); mostrarToast('Backup Exportado!');
 }
+function validarDocumentoBackup(doc) {
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return false;
+    if (!idLocalSeguro(doc.id) || !Array.isArray(doc.ordens)) return false;
+    return doc.ordens.every(ordem => {
+        if (!ordem || typeof ordem !== 'object' || Array.isArray(ordem)) return false;
+        if (ordem.fotos !== undefined && !Array.isArray(ordem.fotos)) return false;
+        if (ordem.pecas !== undefined && !Array.isArray(ordem.pecas)) return false;
+        if (ordem.anexoBase64 && !dataUrlPdfSegura(ordem.anexoBase64)) return false;
+        if (Array.isArray(ordem.fotos) && !ordem.fotos.every(f => f && typeof f === 'object' && (!f.b64 || dataUrlImagemSegura(f.b64)))) return false;
+        return true;
+    });
+}
+
+function validarRegistoBancoHoras(reg) {
+    return !!(reg && typeof reg === 'object' && idLocalSeguro(reg.id) && /^\d{4}-\d{2}-\d{2}$/.test(String(reg.data || '')) && /^\d{2}:\d{2}$/.test(String(reg.chegada || '')) && /^\d{2}:\d{2}$/.test(String(reg.saida || '')) && Number.isFinite(Number(reg.balancoFinal)));
+}
+
+function normalizarBackupImportado(importados) {
+    if (Array.isArray(importados)) return { historicoOS: importados, bancoHoras: [] };
+    if (!importados || typeof importados !== 'object' || !Array.isArray(importados.historicoOS) || !Array.isArray(importados.bancoHoras)) return null;
+    return { historicoOS: importados.historicoOS, bancoHoras: importados.bancoHoras };
+}
+
 function importarBackupJSON(event) {
     const file = event.target.files[0]; if(!file) return;
     const reader = new FileReader();
     reader.onload = async function(e) {
+        let rollbackDocs = new Map(); let historicoAnterior = null; let bancoHorasAnterior = null;
         try {
-            const importados = JSON.parse(e.target.result);
-            let listaOS = Array.isArray(importados) ? importados : (importados.historicoOS || []);
-            let listaBH = Array.isArray(importados) ? [] : (importados.bancoHoras || []);
-            let historicoMeta = await obterHistoricoSalvo();
-            for (let doc of listaOS) {
-                await localforage.setItem(`os_doc_${doc.id}`, doc); let meta = gerarMetadadosResumo(doc);
-                let idx = historicoMeta.findIndex(m => m.id === doc.id); if(idx >= 0) historicoMeta[idx] = meta; else historicoMeta.unshift(meta);
+            const normalizado = normalizarBackupImportado(JSON.parse(e.target.result));
+            if (!normalizado || !normalizado.historicoOS.every(validarDocumentoBackup) || !normalizado.bancoHoras.every(validarRegistoBancoHoras)) throw new Error('Estrutura inválida');
+
+            const ids = new Set();
+            for (const doc of normalizado.historicoOS) {
+                if (ids.has(doc.id)) throw new Error('IDs duplicados no backup');
+                ids.add(doc.id);
             }
-            await gravarHistoricoSalvo(historicoMeta);
-            if (listaBH.length > 0) {
-                for (let reg of listaBH) { let idx = registosBancoHoras.findIndex(r => r.id === reg.id); if (idx >= 0) registosBancoHoras[idx] = reg; else registosBancoHoras.push(reg); }
-                await localforage.setItem('banco_horas_data', registosBancoHoras); 
+
+            historicoAnterior = await obterHistoricoSalvo();
+            bancoHorasAnterior = Array.isArray(registosBancoHoras) ? [...registosBancoHoras] : [];
+            for (const doc of normalizado.historicoOS) rollbackDocs.set(doc.id, await localforage.getItem(`os_doc_${doc.id}`));
+
+            const novoHistorico = [...historicoAnterior];
+            for (const doc of normalizado.historicoOS) {
+                await localforage.setItem(`os_doc_${doc.id}`, doc);
+                const meta = gerarMetadadosResumo(doc); const idx = novoHistorico.findIndex(m => m.id === doc.id);
+                if(idx >= 0) novoHistorico[idx] = meta; else novoHistorico.unshift(meta);
             }
-            await carregarHistorico(); mostrarToast('Backup Importado!');
-        } catch(err) { mostrarToast('Ficheiro inválido.', true); }
-    }; reader.readAsText(file); event.target.value = ''; 
+            if (!await gravarHistoricoSalvo(novoHistorico)) throw new Error('Falha ao gravar índice');
+
+            const novoBancoHoras = [...bancoHorasAnterior];
+            for (const reg of normalizado.bancoHoras) {
+                const normalizadoReg = { ...reg, balancoFinal: Number(reg.balancoFinal) };
+                const idx = novoBancoHoras.findIndex(r => r.id === normalizadoReg.id);
+                if (idx >= 0) novoBancoHoras[idx] = normalizadoReg; else novoBancoHoras.push(normalizadoReg);
+            }
+            if (normalizado.bancoHoras.length > 0) await localforage.setItem('banco_horas_data', novoBancoHoras);
+            registosBancoHoras = novoBancoHoras;
+            await carregarHistorico(); mostrarToast('Backup importado e validado!');
+        } catch(err) {
+            console.error('Erro ao importar backup:', err);
+            try {
+                for (const [id, antigo] of rollbackDocs) {
+                    if (antigo === null || antigo === undefined) await localforage.removeItem(`os_doc_${id}`); else await localforage.setItem(`os_doc_${id}`, antigo);
+                }
+                if (historicoAnterior) await localforage.setItem('historico_os', historicoAnterior);
+                if (bancoHorasAnterior) { registosBancoHoras = bancoHorasAnterior; await localforage.setItem('banco_horas_data', bancoHorasAnterior); }
+            } catch (rollbackErr) { console.error('Falha no rollback da importação:', rollbackErr); }
+            mostrarToast('Backup inválido ou importação incompleta. Nenhum dado novo foi mantido.', true);
+        }
+    };
+    reader.onerror = () => mostrarToast('Não foi possível ler o ficheiro de backup.', true);
+    reader.readAsText(file); event.target.value = '';
 }
 async function limparTodoHistorico() {
     if(!confirm("Tem a certeza que deseja APAGAR TODO o histórico de O.S.? Esta ação não pode ser desfeita e os ficheiros não exportados serão perdidos.")) return;
@@ -222,12 +325,34 @@ async function limparTodoHistorico() {
 
 function atualizarZoomPdf() {
     const wrapper = document.getElementById('pdfPagesWrapper'); const container = document.getElementById('pdfRenderContainer'); if (!wrapper || !container) return;
-    const isDesktop = window.innerWidth > 600; const paddingLateral = isDesktop ? 48 : 16; const safeWidth = container.clientWidth - paddingLateral;
-    wrapper.querySelectorAll('canvas').forEach(c => { c.style.height = 'auto'; c.style.display = 'block'; c.style.maxWidth = 'none'; if (isDesktop) { c.style.width = (768 * currentZoom) + 'px'; } else { c.style.width = (safeWidth * currentZoom) + 'px'; } });
+    const isDesktop = window.innerWidth > 600; const paddingLateral = isDesktop ? 48 : 16; const safeWidth = Math.max(240, container.clientWidth - paddingLateral);
+    const baseWidth = isDesktop ? Math.min(768, safeWidth) : safeWidth;
+    const largura = Math.max(120, baseWidth * currentZoom);
+    wrapper.style.setProperty('--pdf-page-width', `${largura}px`);
+    wrapper.querySelectorAll('canvas').forEach(c => { c.style.height = 'auto'; c.style.display = 'block'; c.style.maxWidth = 'none'; c.style.width = `${largura}px`; });
     if(document.getElementById('zoomText')) document.getElementById('zoomText').innerText = Math.round(currentZoom * 100) + '%';
 }
-function zoomInPdf() { currentZoom = Math.min(currentZoom + 0.25, 4); atualizarZoomPdf(); }
-function zoomOutPdf() { currentZoom = Math.max(currentZoom - 0.25, 0.5); atualizarZoomPdf(); }
+
+function aplicarZoomPdf(novoZoom, focoClientX = null, focoClientY = null, zoomAnterior = currentZoom) {
+    const container = document.getElementById('pdfRenderContainer');
+    if (!container) return;
+    const limite = Math.min(Math.max(novoZoom, 0.5), 4);
+    const rect = container.getBoundingClientRect();
+    const viewportX = focoClientX == null ? container.clientWidth / 2 : focoClientX - rect.left;
+    const viewportY = focoClientY == null ? container.clientHeight / 2 : focoClientY - rect.top;
+    const conteudoX = container.scrollLeft + viewportX;
+    const conteudoY = container.scrollTop + viewportY;
+    const ratio = zoomAnterior > 0 ? limite / zoomAnterior : 1;
+    currentZoom = limite;
+    atualizarZoomPdf();
+    requestAnimationFrame(() => {
+        container.scrollLeft = Math.max(0, conteudoX * ratio - viewportX);
+        container.scrollTop = Math.max(0, conteudoY * ratio - viewportY);
+    });
+}
+
+function zoomInPdf() { aplicarZoomPdf(currentZoom + 0.25); }
+function zoomOutPdf() { aplicarZoomPdf(currentZoom - 0.25); }
 
 function resizeCanvasSeguro(canvas, pad, skipRestore = false) {
     if(!canvas) return; let dataURL = null; if(!skipRestore && pad && !pad.isEmpty()) dataURL = pad.toDataURL(); 
@@ -249,9 +374,9 @@ async function salvarNomeTecnicoBh() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-    iniciarBancoPecas(); // Inicializa o banco de dados e atualiza as HTML datalists
+    await iniciarBancoPecas(); // Inicializa o banco de dados e atualiza as HTML datalists
     
-    await carregarLogoDoArmazenamento();
+    if (typeof localforage !== 'undefined') await carregarLogoDoArmazenamento();
     
     const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
     if (typeof SignaturePad !== 'undefined') {
@@ -264,10 +389,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     bloquearMultiTouch(cCli);
     bloquearMultiTouch(cExp);
     
-    const observer = new ResizeObserver(() => {
-        if (!document.getElementById('novaOs').classList.contains('hidden')) { resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente); }
-    });
-    if(cTec && cTec.parentElement) observer.observe(cTec.parentElement);
+    if (typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(() => {
+            if (!document.getElementById('novaOs').classList.contains('hidden')) { resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente); }
+        });
+        if(cTec && cTec.parentElement) observer.observe(cTec.parentElement);
+    }
     
     window.addEventListener('resize', () => {
         if (!document.getElementById('novaOs').classList.contains('hidden')) { resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente); }
@@ -275,11 +402,32 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const pdfContainer = document.getElementById('pdfRenderContainer');
     if(pdfContainer) {
-        pdfContainer.addEventListener('touchstart', function(e) { if (e.touches.length === 2) { 
-            startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); 
-            if(startDist === 0) startDist = 1; startZoom = currentZoom; 
-        } }, {passive: false});
-        pdfContainer.addEventListener('touchmove', function(e) { if (e.touches.length === 2) { e.preventDefault(); let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY); currentZoom = Math.min(Math.max(0.5, startZoom * (dist / startDist)), 4); atualizarZoomPdf(); } }, {passive: false});
+        pdfContainer.addEventListener('touchstart', function(e) {
+            if (e.touches.length !== 2) return;
+            const [a, b] = e.touches;
+            startDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+            startZoom = currentZoom;
+            const rect = pdfContainer.getBoundingClientRect();
+            pinchStartViewportX = ((a.clientX + b.clientX) / 2) - rect.left;
+            pinchStartViewportY = ((a.clientY + b.clientY) / 2) - rect.top;
+            pinchStartScrollLeft = pdfContainer.scrollLeft;
+            pinchStartScrollTop = pdfContainer.scrollTop;
+        }, {passive: true});
+        pdfContainer.addEventListener('touchmove', function(e) {
+            if (e.touches.length !== 2 || !startDist) return;
+            e.preventDefault();
+            const [a, b] = e.touches;
+            const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+            const novoZoom = Math.min(Math.max(0.5, startZoom * (dist / startDist)), 4);
+            const ratio = novoZoom / startZoom;
+            currentZoom = novoZoom;
+            atualizarZoomPdf();
+            pdfContainer.scrollLeft = Math.max(0, (pinchStartScrollLeft + pinchStartViewportX) * ratio - pinchStartViewportX);
+            pdfContainer.scrollTop = Math.max(0, (pinchStartScrollTop + pinchStartViewportY) * ratio - pinchStartViewportY);
+        }, {passive: false});
+        const finalizarPinch = () => { startDist = 0; startZoom = currentZoom; };
+        pdfContainer.addEventListener('touchend', finalizarPinch, {passive: true});
+        pdfContainer.addEventListener('touchcancel', finalizarPinch, {passive: true});
     }
 
     adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco(); verificarRascunhoPendente();
@@ -292,18 +440,22 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    const hHoje = new Date().toISOString().split('T')[0]; const bhDataEl = document.getElementById('bh_data'); if(bhDataEl) bhDataEl.value = hHoje;
+    const hHoje = dataLocalISO(); const bhDataEl = document.getElementById('bh_data'); if(bhDataEl) bhDataEl.value = hHoje;
     const mesAtual = hHoje.slice(0, 7); const bhMesInicio = document.getElementById('bh_mes_inicio'); if(bhMesInicio) bhMesInicio.value = mesAtual; const bhMesFim = document.getElementById('bh_mes_fim'); if(bhMesFim) bhMesFim.value = mesAtual;
     
-    const nomeSalvo = await localforage.getItem('bh_nome_tecnico_salvo'); if (nomeSalvo && document.getElementById('bh_nome_tecnico')) document.getElementById('bh_nome_tecnico').value = nomeSalvo;
-    const horasSalvas = await localforage.getItem('banco_horas_data'); if (horasSalvas) registosBancoHoras = horasSalvas;
+    if (typeof localforage !== 'undefined') {
+        const nomeSalvo = await localforage.getItem('bh_nome_tecnico_salvo'); if (nomeSalvo && document.getElementById('bh_nome_tecnico')) document.getElementById('bh_nome_tecnico').value = nomeSalvo;
+        const horasSalvas = await localforage.getItem('banco_horas_data'); if (Array.isArray(horasSalvas)) registosBancoHoras = horasSalvas.filter(validarRegistoBancoHoras).map(r => ({...r, balancoFinal: Number(r.balancoFinal)}));
+    } else {
+        mostrarToast('Armazenamento local indisponível. Salvar e histórico não funcionarão nesta sessão.', true);
+    }
 });
 
 async function autoSalvarRascunho() {
     const clientePreenchido = document.querySelector('[id^="cliente_"]')?.value.trim();
-    if (document.getElementById('novaOs').classList.contains('hidden') || document.getElementById('lockStatus').textContent.includes('BLOQUEADO') || !clientePreenchido) return;
-    await localforage.setItem('draft_os', recolherDadosDoFormulario());
-    document.getElementById('autoSaveIndicator').textContent = `Salvo: ${new Date().toLocaleTimeString('pt-PT')}`;
+    if (typeof localforage === 'undefined' || document.getElementById('novaOs').classList.contains('hidden') || document.getElementById('lockStatus').textContent.includes('BLOQUEADO') || !clientePreenchido) return;
+    try { await localforage.setItem('draft_os', recolherDadosDoFormulario()); document.getElementById('autoSaveIndicator').textContent = `Salvo: ${new Date().toLocaleTimeString('pt-PT')}`; }
+    catch(e) { console.error('Falha no auto-salvamento:', e); document.getElementById('autoSaveIndicator').textContent = 'Falha ao salvar rascunho'; }
 }
 
 async function verificarRascunhoPendente() {
@@ -431,6 +583,8 @@ function renderTabelaBancoHoras() {
 }
 
 function gerarPdfBancoHoras() {
+    if (!window.jspdf?.jsPDF) { mostrarToast("Motor de PDF indisponível. Verifique a ligação ou o cache offline.", true); return; }
+    try {
     const inicioVal = document.getElementById('bh_mes_inicio').value; const fimVal = document.getElementById('bh_mes_fim').value;
     let regsFiltrados = registosBancoHoras; let strPeriodo = 'Todos os Registos';
     if (inicioVal && fimVal) { regsFiltrados = registosBancoHoras.filter(r => { const mesRegisto = r.data.slice(0, 7); return mesRegisto >= inicioVal && mesRegisto <= fimVal; }); strPeriodo = `${inicioVal.split('-').reverse().join('/')} a ${fimVal.split('-').reverse().join('/')}`; }
@@ -446,6 +600,10 @@ function gerarPdfBancoHoras() {
     posY += 10; doc.setFontSize(14); const textoSaldo = totalGlobal >= 0 ? "SALDO ACUMULADO (CRÉDITO)" : "SALDO ACUMULADO (DÉBITO)"; const textColor = totalGlobal >= 0 ? [37, 99, 235] : [239, 68, 68]; doc.setTextColor(...textColor); doc.text(`${textoSaldo}: ${formatarMins(totalGlobal)}`, 15, posY);
     doc.setTextColor(0, 0, 0); doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.line(80, posY + 35, 210, posY + 35); doc.text("ASSINATURA", 145, posY + 40, {align: "center"});
     doc.save(`Horas_${new Date().getTime()}.pdf`);
+    } catch (err) {
+        console.error('Erro ao gerar folha de ponto:', err);
+        mostrarToast('Não foi possível gerar a folha de ponto em PDF.', true);
+    }
 }
 
 function adicionarFoto(id, source) {
@@ -459,9 +617,10 @@ function adicionarFoto(id, source) {
     }
 }
 async function abrirCameraInterna() {
+    if (!navigator.mediaDevices?.getUserMedia) { mostrarToast('Câmara não suportada neste navegador ou fora de HTTPS.', true); return; }
     const modal = document.getElementById('modalCameraInterna'); const video = document.getElementById('videoCamera'); modal.classList.remove('hidden'); document.body.style.overflow = 'hidden';
-    try { mediaStreamCamera = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); video.srcObject = mediaStreamCamera; } 
-    catch (err) { mostrarToast('Sem permissão de câmara.', true); fecharCameraInterna(); document.getElementById('modalCameraInterna').classList.add('hidden'); }
+    try { mediaStreamCamera = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); video.srcObject = mediaStreamCamera; }
+    catch (err) { console.error('Erro ao abrir câmara:', err); mostrarToast('Sem permissão de câmara ou câmara indisponível.', true); fecharCameraInterna(); }
 }
 function fecharCameraInterna() { if (mediaStreamCamera) { mediaStreamCamera.getTracks().forEach(t => t.stop()); mediaStreamCamera = null; } document.getElementById('modalCameraInterna').classList.add('hidden'); document.body.style.overflow = ''; }
 function tirarFotoDoVideo() {
@@ -475,13 +634,18 @@ function tirarFotoDoVideo() {
     renderFotoItem(osIdAtualFoto, finalCanvas.toDataURL('image/jpeg', 0.65), ''); fecharCameraInterna(); mostrarToast('Capturada com sucesso!');
 }
 function processarFicheiroImagem(id, file) {
-    const objectUrl = URL.createObjectURL(file); const img = new Image(); 
+    if (!file?.type?.startsWith('image/')) { mostrarToast('Selecione um ficheiro de imagem válido.', true); return; }
+    const objectUrl = URL.createObjectURL(file); const img = new Image();
     img.onload = () => { URL.revokeObjectURL(objectUrl); const canvas = document.createElement('canvas'); const MAX_DIM = 900; let width = img.width; let height = img.height;
         if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } } else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
+        width = Math.max(1, Math.round(width)); height = Math.max(1, Math.round(height));
         canvas.width = width; canvas.height = height; const ctx = canvas.getContext("2d"); ctx.drawImage(img, 0, 0, width, height);
-        renderFotoItem(id, canvas.toDataURL("image/jpeg", 0.65), ''); }; img.src = objectUrl;
+        renderFotoItem(id, canvas.toDataURL("image/jpeg", 0.65), ''); };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); mostrarToast('Não foi possível ler a imagem.', true); };
+    img.src = objectUrl;
 }
 function renderFotoItem(id, base64, desc) {
+    if (!dataUrlImagemSegura(base64)) { console.warn('Imagem ignorada: formato inválido.'); return; }
     const div = document.createElement('div'); div.className = "foto-item flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative group";
     div.innerHTML = `
         <input type="hidden" class="foto-b64" value="${base64}">
@@ -500,18 +664,23 @@ function renderFotoItem(id, base64, desc) {
 
 function processarAnexo(id, input) {
     const file = input.files[0]; if (!file) { removerAnexo(id); return; }
-    const reader = new FileReader(); reader.onload = function(e) {
-        if (document.getElementById(`anexoBase64_${id}`)) document.getElementById(`anexoBase64_${id}`).value = e.target.result;
-        if (document.getElementById(`anexoNome_${id}`)) { document.getElementById(`anexoNome_${id}`).innerHTML = `<svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Anexado: ${file.name}`; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); }
-        if (document.getElementById(`btnRemoverAnexo_${id}`)) document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden');
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { mostrarToast('Selecione um PDF válido.', true); input.value = ''; return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        if (!dataUrlPdfSegura(e.target.result)) { mostrarToast('O ficheiro selecionado não parece ser um PDF válido.', true); removerAnexo(id); return; }
+        const b64 = document.getElementById(`anexoBase64_${id}`); if (b64) { b64.value = e.target.result; b64.dataset.filename = file.name; }
+        definirNomeAnexo(id, file.name);
+        const btn = document.getElementById(`btnRemoverAnexo_${id}`); if (btn) btn.classList.remove('hidden');
         autoSalvarRascunho();
-    }; reader.readAsDataURL(file); input.value = ''; 
+    };
+    reader.onerror = () => mostrarToast('Não foi possível ler o PDF anexado.', true);
+    reader.readAsDataURL(file); input.value = '';
 }
 function removerAnexo(id) {
-    if (document.getElementById(`anexoInput_${id}`)) document.getElementById(`anexoInput_${id}`).value = '';
-    if (document.getElementById(`anexoBase64_${id}`)) document.getElementById(`anexoBase64_${id}`).value = '';
-    if (document.getElementById(`anexoNome_${id}`)) { document.getElementById(`anexoNome_${id}`).innerHTML = ''; document.getElementById(`anexoNome_${id}`).classList.add('hidden'); }
-    if (document.getElementById(`btnRemoverAnexo_${id}`)) document.getElementById(`btnRemoverAnexo_${id}`).classList.add('hidden');
+    const input = document.getElementById(`anexoInput_${id}`); if (input) input.value = '';
+    const b64 = document.getElementById(`anexoBase64_${id}`); if (b64) { b64.value = ''; delete b64.dataset.filename; }
+    const nome = document.getElementById(`anexoNome_${id}`); if (nome) { nome.replaceChildren(); nome.classList.add('hidden'); }
+    const btn = document.getElementById(`btnRemoverAnexo_${id}`); if (btn) btn.classList.add('hidden');
     autoSalvarRascunho();
 }
 
@@ -525,7 +694,7 @@ function recolherDadosDoFormulario() {
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
             dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id), 
             anexoBase64: document.getElementById(`anexoBase64_${id}`) ? document.getElementById(`anexoBase64_${id}`).value : null, 
-            anexoNome: document.getElementById(`anexoNome_${id}`) ? document.getElementById(`anexoNome_${id}`).textContent : null, 
+            anexoNome: document.getElementById(`anexoBase64_${id}`)?.dataset.filename || null, 
             fotos: []
         };
         b.querySelectorAll('.peca-row-item').forEach(row => { let q = row.querySelector('.q').value, n = row.querySelector('.n').value, c = row.querySelector('.c').value; if(q || n || c) ordem.pecas.push({ q, n, c }); });
@@ -539,7 +708,7 @@ function restaurarDadosParaFormulario(doc) {
     if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
     if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o)); ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
     switchTab('novaOs'); 
-    setTimeout(() => { if(document.getElementById('canvasTecnico') && padTecnico && doc.assinaturaTecnico) padTecnico.fromDataURL(doc.assinaturaTecnico); if(document.getElementById('canvasCliente') && padCliente && doc.assinaturaCliente) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } atualizarVisibilidadeCamposPorBloco(); }, 100);
+    setTimeout(() => { if(document.getElementById('canvasTecnico') && padTecnico && dataUrlImagemSegura(doc.assinaturaTecnico)) padTecnico.fromDataURL(doc.assinaturaTecnico); if(document.getElementById('canvasCliente') && padCliente && dataUrlImagemSegura(doc.assinaturaCliente)) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } atualizarVisibilidadeCamposPorBloco(); }, 100);
 }
 
 function verificarServicoInternoGlobal() { return Array.from(document.querySelectorAll('.os-bloco')).every(b => document.getElementById(`cbServInterno_${b.getAttribute('data-id')}`).checked); }
@@ -599,7 +768,7 @@ function iniciarNovaOS() {
 }
 
 function adicionarBlocoOS(dados = null) {
-    contadorOS++; const id = contadorOS; const dataHoje = new Date().toISOString().split('T')[0]; const osManualValue = dados && dados.osNum ? dados.osNum : '';
+    contadorOS++; const id = contadorOS; const dataHoje = dataLocalISO(); const osManualValue = dados && dados.osNum ? dados.osNum : '';
     const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco(); autoSalvarRascunho();" class="text-gray-400 hover:text-red-600 transition-colors p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
     const bloco = document.createElement('div'); bloco.className = "os-bloco bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden relative transition-all"; bloco.setAttribute('data-id', id);
     
@@ -726,13 +895,13 @@ function adicionarBlocoOS(dados = null) {
         ['cliente','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
         ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
         if(document.getElementById(`cbMontagemSala_${id}`)) document.getElementById(`cbMontagemSala_${id}`).checked = dados.cbMontagemSala !== undefined ? !!dados.cbMontagemSala : !!dados.cbSemGarantia;
-        if (dados.anexoBase64) { document.getElementById(`anexoBase64_${id}`).value = dados.anexoBase64; document.getElementById(`anexoNome_${id}`).innerHTML = `<svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Anexado`; document.getElementById(`anexoNome_${id}`).classList.remove('hidden'); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
+        if (dados.anexoBase64 && dataUrlPdfSegura(dados.anexoBase64)) { const b64 = document.getElementById(`anexoBase64_${id}`); b64.value = dados.anexoBase64; let nomeAnexo = dados.anexoNome ? String(dados.anexoNome).replace(/^Anexado:\s*/i, '').trim() : ''; if (/^Anexado$/i.test(nomeAnexo)) nomeAnexo = ''; if (nomeAnexo) b64.dataset.filename = nomeAnexo; definirNomeAnexo(id, nomeAnexo); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
         if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { 
             const pContainer = document.getElementById(`pecasContainer_${id}`); 
             const row = document.createElement('div'); 
             row.className = "flex items-center gap-1 sm:gap-2 peca-row-item mb-2"; 
             row.innerHTML = `
-                <input type="number" min="0" max="99" maxlength="2" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-12 min-w-0 border border-gray-300 px-1 py-2 rounded-lg text-xs sm:text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
+                <input type="number" min="0" max="99" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-12 min-w-0 border border-gray-300 px-1 py-2 rounded-lg text-xs sm:text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
                 <input type="text" list="dbNomesPecas" onchange="autoPreencherPeca(this, 'nome')" placeholder="Nome da Peça" value="${escapeHTML(p.n)}" class="flex-1 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
                 <input type="text" list="dbCodigosPecas" onchange="autoPreencherPeca(this, 'codigo')" maxlength="25" placeholder="Código" value="${escapeHTML(p.c)}" class="w-28 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center">
             `; 
@@ -747,7 +916,7 @@ function addPecaRow(id) {
     const container = document.getElementById(`pecasContainer_${id}`); const row = document.createElement('div'); 
     row.className = "flex items-center gap-1 sm:gap-2 peca-row-item mb-2";
     row.innerHTML = `
-        <input type="number" min="0" max="99" maxlength="2" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" class="w-12 min-w-0 border border-gray-300 px-1 py-2 rounded-lg text-xs sm:text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
+        <input type="number" min="0" max="99" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" class="w-12 min-w-0 border border-gray-300 px-1 py-2 rounded-lg text-xs sm:text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
         <input type="text" list="dbNomesPecas" onchange="autoPreencherPeca(this, 'nome')" placeholder="Nome da Peça" class="flex-1 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
         <input type="text" list="dbCodigosPecas" onchange="autoPreencherPeca(this, 'codigo')" maxlength="25" placeholder="Código" class="w-28 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center">
     `; 
@@ -755,8 +924,10 @@ function addPecaRow(id) {
 }
 
 function calcH(id) {
-    const hc = document.getElementById(`hc_${id}`).value, hs = document.getElementById(`hs_${id}`).value;
-    if(hc && hs) { let [ch, cm] = hc.split(':').map(Number), [sh, sm] = hs.split(':').map(Number); let t = (sh*60+sm) - (ch*60+cm); const elTh = document.getElementById(`th_${id}`); if(t < 0) t += 1440; elTh.value = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`; }
+    const hc = document.getElementById(`hc_${id}`).value, hs = document.getElementById(`hs_${id}`).value; const elTh = document.getElementById(`th_${id}`);
+    if(!elTh) return;
+    if(hc && hs) { let [ch, cm] = hc.split(':').map(Number), [sh, sm] = hs.split(':').map(Number); let t = (sh*60+sm) - (ch*60+cm); if(t < 0) t += 1440; elTh.value = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`; }
+    else { elTh.value = ''; }
 }
 function calcDias(id) {
     let diffDays = Math.round((new Date(document.getElementById(`dtFim_${id}`).value) - new Date(document.getElementById(`dtInicio_${id}`).value)) / (1000 * 60 * 60 * 24)) + 1;
@@ -775,24 +946,41 @@ async function salvarDocumento(silencioso = false) {
     const btnSalvar = document.getElementById('btnSalvarOs');
     if (!silencioso && btnSalvar && btnSalvar.disabled) return false; if (!silencioso && btnSalvar) btnSalvar.disabled = true;
     if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos em vermelho.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
+    if (typeof localforage === 'undefined') { if(!silencioso) mostrarToast('Armazenamento local indisponível.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
+    let dados = null; let documentoAnterior = null; let historicoAnterior = null;
     try {
-        await aprenderPecasDaOS(); // Salva novas peças automaticamente
-        
-        let dados = recolherDadosDoFormulario(); await localforage.setItem(`os_doc_${dados.id}`, dados);
-        let historicoMeta = await obterHistoricoSalvo(); let meta = gerarMetadadosResumo(dados);
-        let index = historicoMeta.findIndex(d => d.id === dados.id); if(index >= 0) historicoMeta[index] = meta; else historicoMeta.unshift(meta);
-        let gravou = await gravarHistoricoSalvo(historicoMeta); if(!gravou) throw new Error("Falha IO.");
+        await aprenderPecasDaOS();
+        dados = recolherDadosDoFormulario();
+        documentoAnterior = await localforage.getItem(`os_doc_${dados.id}`);
+        historicoAnterior = await obterHistoricoSalvo();
+        await localforage.setItem(`os_doc_${dados.id}`, dados);
+        const historicoMeta = [...historicoAnterior]; const meta = gerarMetadadosResumo(dados);
+        const index = historicoMeta.findIndex(d => d.id === dados.id); if(index >= 0) historicoMeta[index] = meta; else historicoMeta.unshift(meta);
+        if(!await gravarHistoricoSalvo(historicoMeta)) throw new Error('Falha ao atualizar índice do histórico.');
         await localforage.removeItem('draft_os');
         if(!silencioso) { mostrarToast('Salvo com sucesso!'); await carregarHistorico(); }
-        if (!silencioso && btnSalvar) btnSalvar.disabled = false; return true;
-    } catch(e) { if(!silencioso) mostrarToast('Erro ao salvar.', true); if (!silencioso && btnSalvar) btnSalvar.disabled = false; return false; }
+        return true;
+    } catch(e) {
+        console.error('Erro ao salvar documento:', e);
+        if (dados && historicoAnterior) {
+            try {
+                if (documentoAnterior === null || documentoAnterior === undefined) await localforage.removeItem(`os_doc_${dados.id}`); else await localforage.setItem(`os_doc_${dados.id}`, documentoAnterior);
+                await localforage.setItem('historico_os', historicoAnterior);
+            } catch (rollbackErr) { console.error('Falha no rollback do salvamento:', rollbackErr); }
+        }
+        if(!silencioso) mostrarToast('Erro ao salvar. Os dados anteriores foram preservados quando possível.', true);
+        return false;
+    } finally {
+        if (!silencioso && btnSalvar) btnSalvar.disabled = false;
+    }
 }
 
 function filtrarHistorico() { const termo = document.getElementById('buscaHistorico').value.toLowerCase(); document.querySelectorAll('.historico-item').forEach(item => { item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none'; }); }
 
 async function carregarHistorico() {
     const list = document.getElementById('historicoList'); let historicoMeta = await obterHistoricoSalvo();
-    if(!historicoMeta || historicoMeta.length === 0) return list.innerHTML = '<div class="bg-white p-8 rounded-xl border border-gray-200 text-center text-gray-500 font-medium">Nenhum documento salvo.</div>';
+    historicoMeta = Array.isArray(historicoMeta) ? historicoMeta.filter(doc => doc && idLocalSeguro(doc.id)) : [];
+    if(historicoMeta.length === 0) return list.innerHTML = '<div class="bg-white p-8 rounded-xl border border-gray-200 text-center text-gray-500 font-medium">Nenhum documento salvo.</div>';
     
     list.innerHTML = historicoMeta.map(doc => `
     <div class="historico-item bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-md transition-all">
@@ -825,6 +1013,7 @@ function atualizarProgressoPDF(percentual, texto) {
 
 async function construirPDFBytes(onProgressCallback) {
     if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios!");
+    if (!dependenciasPdfDisponiveis(false)) throw new Error("Bibliotecas de PDF indisponíveis. Verifique a ligação ou o cache offline.");
     const reportProgress = async (pct, txt) => { if(onProgressCallback) { onProgressCallback(pct, txt); await new Promise(r => setTimeout(r, 15)); } };
     await reportProgress(5, "A iniciar motor PDF...");
     const blocosOS = document.querySelectorAll('.os-bloco'); const isServicoInterno = verificarServicoInternoGlobal(); const cb = (eid) => document.getElementById(eid).checked ? "[X]" : "[ ]";
@@ -929,17 +1118,24 @@ async function preVisualizarPDF() {
     const btn = document.getElementById('btnPreview'); if (btn.disabled) return;
     try {
         btn.disabled = true;
+        if (!dependenciasPdfDisponiveis(true)) throw new Error("Bibliotecas de pré-visualização indisponíveis. Verifique a ligação ou o cache offline.");
         const bytesPdf = await construirPDFBytes(atualizarProgressoPDF);
         if(objUrlPreview) URL.revokeObjectURL(objUrlPreview); const blob = new Blob([bytesPdf], { type: 'application/pdf' }); objUrlPreview = URL.createObjectURL(blob);
         const primeiraOs = document.querySelector('.os-bloco'); let pOs = 'Rascunho', pCliente = 'Cliente'; if(primeiraOs) { const pId = primeiraOs.getAttribute('data-id'); pOs = getVal('osNum', pId).trim() || 'Rascunho'; pCliente = getVal('cliente', pId).trim() || 'Cliente'; }
         document.getElementById('linkPreviewExt').download = `Pre_Visualizacao_${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`; document.getElementById('linkPreviewExt').href = objUrlPreview; 
-        const pdf = await pdfjsLib.getDocument({data: bytesPdf}).promise; const wrapper = document.getElementById('pdfPagesWrapper'); wrapper.innerHTML = ''; currentZoom = 1; atualizarZoomPdf();
-        for(let num = 1; num <= pdf.numPages; num++) { const page = await pdf.getPage(num); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); canvas.height = viewport.height; canvas.width = viewport.width; canvas.className = 'mb-4 bg-white shadow-xl border border-gray-300'; await page.render({canvasContext: ctx, viewport: viewport}).promise; wrapper.appendChild(canvas); }
-        atualizarZoomPdf(); document.getElementById('modalPreviewPDF').classList.remove('hidden');
+        const pdf = await pdfjsLib.getDocument({data: bytesPdf}).promise; const wrapper = document.getElementById('pdfPagesWrapper'); const container = document.getElementById('pdfRenderContainer'); wrapper.replaceChildren(); currentZoom = 1;
+        for(let num = 1; num <= pdf.numPages; num++) { const page = await pdf.getPage(num); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); canvas.height = viewport.height; canvas.width = viewport.width; canvas.className = 'pdf-page-canvas bg-white shadow-xl border border-gray-300'; await page.render({canvasContext: ctx, viewport: viewport}).promise; wrapper.appendChild(canvas); }
+        atualizarZoomPdf(); if (container) { container.scrollLeft = 0; container.scrollTop = 0; } document.getElementById('modalPreviewPDF').classList.remove('hidden');
     } catch (err) { mostrarToast(err.message || 'Erro ao pre-visualizar.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden'); } finally { btn.disabled = false; }
 }
 
-function fecharPreviewPDF() { document.getElementById('modalPreviewPDF').classList.add('hidden'); }
+function fecharPreviewPDF() {
+    document.getElementById('modalPreviewPDF').classList.add('hidden');
+    const wrapper = document.getElementById('pdfPagesWrapper'); if (wrapper) wrapper.replaceChildren();
+    if (objUrlPreview) { URL.revokeObjectURL(objUrlPreview); objUrlPreview = null; }
+    const link = document.getElementById('linkPreviewExt'); if (link) link.removeAttribute('href');
+    currentZoom = 1; startDist = 0;
+}
 
 async function gerarPDFConsolidado() {
     const btn = document.getElementById('btnGerarPdf'); const btnTxt = document.getElementById('btnTxt'); if(btn.disabled) return;
