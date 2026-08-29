@@ -2,13 +2,13 @@
   "id": "./",
   "name": "Multi-OS Pro",
   "short_name": "Multi-OS",
-  "description": "Ordens de serviço, histórico, peças, fotos, assinaturas e banco de horas para assistência técnica.",
+  "description": "Gerenciamento de ordens de serviço, histórico, banco de horas e geração de PDF.",
   "lang": "pt-BR",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f7f8fc",
-  "theme_color": "#f7f8fc",
+  "background_color": "#111827",
+  "theme_color": "#111827",
   "icons": [
     {
       "src": "./icon-192.png",
