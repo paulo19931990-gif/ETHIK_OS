@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json">
+    <link rel="manifest" href="./manifest.json?v=42">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -30,7 +30,7 @@
     
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js?v=30').catch(err => console.error('Falha ao registar Service Worker:', err));
+            navigator.serviceWorker.register('./sw.js?v=42').catch(err => console.error('Falha ao registar Service Worker:', err));
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -40,7 +40,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=30">
+    <link rel="stylesheet" href="style.css?v=42">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -430,7 +430,7 @@
     </div>
 
     <!-- CERTIFIQUE-SE DE CARREGAR O BANCO DE PEÇAS AQUI -->
-    <script src="bancoPecas.js?v=30"></script>
-    <script src="app.js?v=30"></script>
+    <script src="bancoPecas.js?v=42"></script>
+    <script src="app.js?v=42"></script>
 </body>
 </html>
