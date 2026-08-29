@@ -311,7 +311,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i32",
             "label": "Parte interna",
             "page": 0,
-            "top": 793.5
+            "top": 788.0
           },
           {
             "key": "i33",
