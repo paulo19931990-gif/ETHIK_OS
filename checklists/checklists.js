@@ -1,5 +1,5 @@
-// checklists.js - modelos fixos da v53
-// Os PDFs ficam na mesma pasta e são usados como fundo estável na geração do documento.
+// checklists.js - modelos fixos da v54
+// Base v53/v52/v42; ajustes de alinhamento e tipografia sem alterar dados salvos.
 window.MULTIOS_CHECKLISTS = {
   "fm408-climatica": {
     "codigo": "FM-408",
@@ -9,73 +9,73 @@ window.MULTIOS_CHECKLISTS = {
     "colunas": {
       "verificadoX": 251.9,
       "substituidoX": 306.3,
-      "obsX": 339.0,
-      "obsWidth": 227.0
+      "obsX": 339,
+      "obsWidth": 227
     },
     "campos": [
       {
         "source": "modeloOuEquipamento",
         "page": 0,
-        "x": 145,
-        "top": 191.5,
-        "width": 128,
-        "fontSize": 6.5
+        "x": 130,
+        "top": 199,
+        "width": 52,
+        "fontSize": 4.3
       },
       {
         "source": "serie",
         "page": 0,
-        "x": 315,
-        "top": 191.5,
-        "width": 98,
-        "fontSize": 6.5
+        "x": 219,
+        "top": 199,
+        "width": 53,
+        "fontSize": 4.3
       },
       {
         "source": "osNum",
         "page": 0,
-        "x": 460,
-        "top": 191.5,
-        "width": 100,
-        "fontSize": 6.5
+        "x": 313,
+        "top": 199,
+        "width": 54,
+        "fontSize": 4.3
       },
       {
         "source": "cliente",
         "page": 0,
-        "x": 86,
-        "top": 203.0,
-        "width": 475,
-        "fontSize": 6.5
+        "x": 412,
+        "top": 199,
+        "width": 145,
+        "fontSize": 4.3
       },
       {
         "source": "nomeClienteFinal",
         "page": 1,
-        "x": 108,
-        "top": 300.6,
+        "x": 110,
+        "top": 288.1,
         "width": 285,
-        "fontSize": 6.5
+        "fontSize": 4.3
       },
       {
         "source": "cargo",
         "page": 1,
-        "x": 438,
-        "top": 300.6,
-        "width": 120,
-        "fontSize": 6.5
+        "x": 440,
+        "top": 288.1,
+        "width": 115,
+        "fontSize": 4.3
       },
       {
         "source": "dataChecklist",
         "page": 1,
-        "x": 65,
-        "top": 324.7,
-        "width": 170,
-        "fontSize": 6.5
+        "x": 68,
+        "top": 312.2,
+        "width": 165,
+        "fontSize": 4.3
       },
       {
         "source": "tecnicoComRotulo",
         "page": 1,
         "x": 350,
-        "top": 324.7,
-        "width": 210,
-        "fontSize": 6.5,
+        "top": 312.2,
+        "width": 205,
+        "fontSize": 4.3,
         "clear": true
       }
     ],
@@ -117,7 +117,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i6",
             "label": "Bico aspersor",
             "page": 0,
-            "top": 310.0
+            "top": 310
           },
           {
             "key": "i7",
@@ -134,7 +134,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i8",
             "label": "Verificação dos filtros",
             "page": 0,
-            "top": 354.0
+            "top": 354
           },
           {
             "key": "i9",
@@ -233,7 +233,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i22",
             "label": "Configuração",
             "page": 0,
-            "top": 603.0
+            "top": 603
           },
           {
             "key": "i23",
@@ -307,26 +307,26 @@ window.MULTIOS_CHECKLISTS = {
           {
             "key": "i32",
             "label": "Parte interna",
-            "page": 1,
-            "top": 131.9
+            "page": 0,
+            "top": 793.5
           },
           {
             "key": "i33",
             "label": "Parte externa",
             "page": 1,
-            "top": 146.6
+            "top": 131.9
           },
           {
             "key": "i34",
             "label": "Dreno",
             "page": 1,
-            "top": 161.2
+            "top": 146.5
           },
           {
             "key": "i35",
             "label": "Vidros",
             "page": 1,
-            "top": 175.9
+            "top": 161.2
           }
         ]
       },
@@ -337,43 +337,43 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i36",
             "label": "Resistências",
             "page": 1,
-            "top": 205.2
+            "top": 190.5
           },
           {
             "key": "i37",
             "label": "Disjuntores",
             "page": 1,
-            "top": 219.8
+            "top": 205.1
           },
           {
             "key": "i38",
             "label": "Corrente motor",
             "page": 1,
-            "top": 234.5
+            "top": 219.8
           },
           {
             "key": "i39",
             "label": "Contatoras",
             "page": 1,
-            "top": 249.1
+            "top": 234.4
           },
           {
             "key": "i40",
             "label": "Integridade dos fios",
             "page": 1,
-            "top": 263.8
+            "top": 249.1
           },
           {
             "key": "i41",
             "label": "Conexões",
             "page": 1,
-            "top": 278.4
+            "top": 263.7
           },
           {
             "key": "i42",
             "label": "Componentes",
             "page": 1,
-            "top": 293.1
+            "top": 278.4
           }
         ]
       }
@@ -385,10 +385,10 @@ window.MULTIOS_CHECKLISTS = {
     "pdf": "./checklists/FM-409-durometros.pdf",
     "paginas": 1,
     "colunas": {
-      "verificadoX": 293.0,
+      "verificadoX": 293,
       "substituidoX": 343.7,
       "obsX": 372.5,
-      "obsWidth": 194.0
+      "obsWidth": 194
     },
     "campos": [
       {
@@ -397,7 +397,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 145,
         "top": 143.2,
         "width": 48,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -406,7 +406,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 224,
         "top": 143.2,
         "width": 161,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -415,7 +415,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 420,
         "top": 143.2,
         "width": 57,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -424,7 +424,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 659.3,
         "width": 240,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -433,25 +433,25 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 659.3,
         "width": 250,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
         "source": "dataComRotulo",
         "page": 0,
         "x": 42,
-        "top": 684.0,
+        "top": 684,
         "width": 240,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
         "source": "tecnicoComRotulo",
         "page": 0,
         "x": 295,
-        "top": 684.0,
+        "top": 684,
         "width": 250,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       }
     ],
@@ -504,7 +504,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i7",
             "label": "Rolamentos",
             "page": 0,
-            "top": 285.0
+            "top": 285
           },
           {
             "key": "i8",
@@ -603,7 +603,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i21",
             "label": "Parâmetros de fábrica?",
             "page": 0,
-            "top": 534.0
+            "top": 534
           },
           {
             "key": "i22",
@@ -656,161 +656,77 @@ window.MULTIOS_CHECKLISTS = {
     "pdf": "./checklists/FM-410-incubadora-estufa.pdf",
     "paginas": 2,
     "colunas": {
-      "verificadoX": 347.0,
+      "verificadoX": 347,
       "substituidoX": 410.8,
       "obsX": 445.5,
-      "obsWidth": 114.0
+      "obsWidth": 114
     },
     "campos": [
       {
         "source": "modeloOuEquipamento",
         "page": 0,
         "x": 177,
-        "top": 194.0,
+        "top": 195.5,
         "width": 63,
-        "fontSize": 6.0,
-        "clear": true
+        "fontSize": 4.4
       },
       {
         "source": "serie",
         "page": 0,
         "x": 278,
-        "top": 194.0,
+        "top": 195.5,
         "width": 62,
-        "fontSize": 6.0,
-        "clear": true
+        "fontSize": 4.4
       },
       {
         "source": "tag",
         "page": 0,
         "x": 368,
-        "top": 194.0,
+        "top": 195.5,
         "width": 85,
-        "fontSize": 6.0,
-        "clear": true
+        "fontSize": 4.4
       },
       {
         "source": "osNum",
         "page": 0,
         "x": 497,
-        "top": 194.0,
+        "top": 195.5,
         "width": 60,
-        "fontSize": 6.0,
-        "clear": true
+        "fontSize": 4.4
       },
       {
         "source": "nomeClienteFinal",
         "page": 0,
-        "x": 108,
-        "top": 691.2,
-        "width": 280,
-        "fontSize": 6.0
+        "x": 94,
+        "top": 688.4,
+        "width": 295,
+        "fontSize": 4.2
       },
       {
         "source": "cargo",
         "page": 0,
-        "x": 430,
-        "top": 691.2,
-        "width": 125,
-        "fontSize": 6.0
-      },
-      {
-        "source": "extra:padrao1",
-        "page": 0,
-        "x": 108,
-        "top": 709.6,
-        "width": 185,
-        "fontSize": 5.8,
-        "clear": true
-      },
-      {
-        "source": "extra:tag1",
-        "page": 0,
-        "x": 70,
-        "top": 718.7,
-        "width": 185,
-        "fontSize": 5.8,
-        "clear": true
-      },
-      {
-        "source": "extra:padrao2",
-        "page": 0,
-        "x": 108,
-        "top": 727.9,
-        "width": 185,
-        "fontSize": 5.8,
-        "clear": true
-      },
-      {
-        "source": "extra:tag2",
-        "page": 0,
-        "x": 70,
-        "top": 737.0,
-        "width": 185,
-        "fontSize": 5.8,
-        "clear": true
-      },
-      {
-        "source": "extra:padrao3",
-        "page": 0,
-        "x": 108,
-        "top": 746.2,
-        "width": 185,
-        "fontSize": 5.8,
-        "clear": true
-      },
-      {
-        "source": "extra:tag3",
-        "page": 0,
-        "x": 70,
-        "top": 755.3,
-        "width": 185,
-        "fontSize": 5.8,
-        "clear": true
+        "x": 451,
+        "top": 688.4,
+        "width": 104,
+        "fontSize": 4.2
       },
       {
         "source": "dataComRotulo",
         "page": 1,
-        "x": 40,
-        "top": 119.5,
-        "width": 230,
-        "fontSize": 6.0,
+        "x": 42,
+        "top": 118.2,
+        "width": 220,
+        "fontSize": 4.2,
         "clear": true
       },
       {
         "source": "tecnicoComRotulo",
         "page": 1,
-        "x": 350,
-        "top": 119.5,
-        "width": 210,
-        "fontSize": 6.0,
+        "x": 353,
+        "top": 118.2,
+        "width": 202,
+        "fontSize": 4.2,
         "clear": true
-      }
-    ],
-    "extrasInputs": [
-      {
-        "key": "padrao1",
-        "label": "Padrão utilizado 1"
-      },
-      {
-        "key": "tag1",
-        "label": "TAG do padrão 1"
-      },
-      {
-        "key": "padrao2",
-        "label": "Padrão utilizado 2"
-      },
-      {
-        "key": "tag2",
-        "label": "TAG do padrão 2"
-      },
-      {
-        "key": "padrao3",
-        "label": "Padrão utilizado 3"
-      },
-      {
-        "key": "tag3",
-        "label": "TAG do padrão 3"
       }
     ],
     "grupos": [
@@ -885,7 +801,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i10",
             "label": "Verificação dos parâmetros de configuração",
             "page": 0,
-            "top": 403.0
+            "top": 403
           },
           {
             "key": "i11",
@@ -983,7 +899,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i23",
             "label": "Integridade dos fios",
             "page": 0,
-            "top": 652.0
+            "top": 652
           },
           {
             "key": "i24",
@@ -1010,7 +926,7 @@ window.MULTIOS_CHECKLISTS = {
       "verificadoX": 315.4,
       "substituidoX": 366.3,
       "obsX": 395.2,
-      "obsWidth": 190.0
+      "obsWidth": 190
     },
     "campos": [
       {
@@ -1019,7 +935,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 166,
         "top": 143.2,
         "width": 53,
-        "fontSize": 6.0,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1028,7 +944,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 247,
         "top": 143.2,
         "width": 165,
-        "fontSize": 6.0,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1037,7 +953,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 442,
         "top": 143.2,
         "width": 60,
-        "fontSize": 6.0,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1046,7 +962,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 490.5,
         "width": 240,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1055,7 +971,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 490.5,
         "width": 250,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1064,7 +980,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 515.2,
         "width": 240,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1073,7 +989,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 515.2,
         "width": 250,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       }
     ],
@@ -1108,7 +1024,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i4",
             "label": "Teste das funções",
             "page": 0,
-            "top": 248.0
+            "top": 248
           },
           {
             "key": "i5",
@@ -1126,7 +1042,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i7",
             "label": "Verificação da saída de controle e retransmissão",
             "page": 0,
-            "top": 292.0
+            "top": 292
           }
         ]
       },
@@ -1216,7 +1132,7 @@ window.MULTIOS_CHECKLISTS = {
       "verificadoX": 315.4,
       "substituidoX": 366.3,
       "obsX": 395.2,
-      "obsWidth": 190.0
+      "obsWidth": 190
     },
     "campos": [
       {
@@ -1225,7 +1141,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 186,
         "top": 143.2,
         "width": 55,
-        "fontSize": 6.0,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1234,7 +1150,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 269,
         "top": 143.2,
         "width": 165,
-        "fontSize": 6.0,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1243,7 +1159,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 464,
         "top": 143.2,
         "width": 58,
-        "fontSize": 6.0,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1252,7 +1168,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 646.7,
         "width": 240,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1261,7 +1177,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 646.7,
         "width": 250,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1270,7 +1186,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 671.5,
         "width": 240,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       },
       {
@@ -1279,7 +1195,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 671.5,
         "width": 250,
-        "fontSize": 6.2,
+        "fontSize": 4.4,
         "clear": true
       }
     ],
@@ -1356,7 +1272,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i11",
             "label": "Lubrificação dos mancais",
             "page": 0,
-            "top": 331.0
+            "top": 331
           },
           {
             "key": "i12",
@@ -1373,7 +1289,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i13",
             "label": "Teste das funções",
             "page": 0,
-            "top": 375.0
+            "top": 375
           },
           {
             "key": "i14",
@@ -1471,7 +1387,7 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i26",
             "label": "Conectores",
             "page": 0,
-            "top": 624.0
+            "top": 624
           },
           {
             "key": "i27",
