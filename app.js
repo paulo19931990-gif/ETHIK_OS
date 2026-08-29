@@ -113,6 +113,167 @@ function dataUrlPdfSegura(valor) {
     try { return atob(match[1].replace(/\s/g, '').slice(0, 16)).startsWith('%PDF-'); } catch (e) { return false; }
 }
 
+
+// === PERFIL DO TÉCNICO, ACESSO INICIAL E TEMA (v50) ===
+const PERFIL_TECNICO_KEY = 'tecnico_perfil_v1';
+const SESSAO_TECNICO_KEY = 'multi_os_auth_session_v1';
+let perfilTecnicoAtual = null;
+let tecnicoAutenticado = false;
+let authModo = 'login';
+let fotoPerfilTemporaria = null;
+let fotoPerfilEdicaoTemporaria = null;
+
+function obterIniciais(nome = '') {
+    const partes = String(nome).trim().split(/\s+/).filter(Boolean);
+    return ((partes[0]?.[0] || 'T') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+}
+
+function criarSalt() {
+    if (window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(16); crypto.getRandomValues(bytes); return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+async function hashSenhaTecnico(senha, salt) {
+    const texto = `${salt}|${senha}|MultiOSPro`;
+    if (window.crypto?.subtle && window.TextEncoder) {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
+        return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+    }
+    let h = 2166136261; for (let i = 0; i < texto.length; i++) { h ^= texto.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return `fallback_${(h >>> 0).toString(16)}`;
+}
+
+function alternarVisibilidadeSenha(id, btn) {
+    const input = document.getElementById(id); if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+    if (btn) btn.setAttribute('aria-label', input.type === 'password' ? 'Mostrar senha' : 'Ocultar senha');
+}
+
+function aplicarTema(tema, salvar = true) {
+    const final = tema === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = final;
+    if (salvar) { try { localStorage.setItem('multi_os_theme', final); } catch(e) {} }
+    const meta = document.getElementById('themeColorMeta'); if (meta) meta.content = final === 'dark' ? '#0b1220' : '#f5f7fb';
+    const btn = document.getElementById('btnTema'); if (btn) btn.title = final === 'dark' ? 'Usar modo claro' : 'Usar modo escuro';
+}
+function alternarTema() { aplicarTema(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); }
+
+function renderAvatar(foto, imgId, iniciaisId, nome = '') {
+    const img = document.getElementById(imgId); const ini = document.getElementById(iniciaisId);
+    if (ini) ini.textContent = obterIniciais(nome);
+    if (img) { if (dataUrlImagemSegura(foto)) { img.src = foto; img.style.display = 'block'; if (ini) ini.style.display = 'none'; } else { img.removeAttribute('src'); img.style.display = 'none'; if (ini) ini.style.display = ''; } }
+}
+
+function atualizarInterfacePerfil() {
+    const nome = perfilTecnicoAtual?.nome || 'Técnico';
+    const elNome = document.getElementById('perfilTopoNome'); if (elNome) elNome.textContent = nome;
+    const saudacao = document.getElementById('saudacaoTopo'); if (saudacao) saudacao.textContent = 'Olá, técnico';
+    renderAvatar(perfilTecnicoAtual?.foto, 'perfilTopoFoto', 'perfilTopoIniciais', nome);
+    renderAvatar(perfilTecnicoAtual?.foto, 'perfilModalImg', 'perfilModalIniciais', nome);
+}
+
+async function comprimirFotoPerfil(file) {
+    if (!file || !file.type.startsWith('image/')) throw new Error('Escolha uma imagem válida.');
+    if (file.size > 8 * 1024 * 1024) throw new Error('A foto deve ter no máximo 8 MB.');
+    const dataUrl = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(file); });
+    const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = dataUrl; });
+    const size = 320; const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d'); const scale = Math.max(size / img.width, size / img.height); const w = img.width * scale, h = img.height * scale;
+    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+    return canvas.toDataURL('image/jpeg', 0.82);
+}
+
+function mostrarTelaAcesso(modo = 'login') {
+    authModo = modo; const screen = document.getElementById('authScreen'); if (!screen) return;
+    const setup = modo === 'setup'; screen.classList.remove('auth-hidden'); document.body.classList.add('auth-open');
+    document.getElementById('authTitulo').textContent = setup ? 'Crie seu acesso' : 'Bem-vindo de volta';
+    document.getElementById('authDescricao').textContent = setup ? 'Cadastre o técnico que utilizará este dispositivo. Seus dados antigos serão mantidos.' : 'Digite sua senha para acessar o Multi-OS Pro.';
+    document.getElementById('authConfirmarWrap').classList.toggle('hidden', !setup);
+    document.getElementById('authFotoLabel').classList.toggle('hidden', !setup);
+    const nome = document.getElementById('authNome'); nome.readOnly = false; nome.value = setup ? '' : ''; nome.placeholder = setup ? 'Seu nome' : 'Digite seu nome';
+    document.getElementById('authSenha').value = ''; document.getElementById('authConfirmarSenha').value = '';
+    document.getElementById('authSubmitBtn').querySelector('span').textContent = setup ? 'Criar acesso' : 'Entrar';
+    fotoPerfilTemporaria = setup ? null : perfilTecnicoAtual?.foto || null;
+    renderAvatar(fotoPerfilTemporaria || perfilTecnicoAtual?.foto, 'authAvatarImg', 'authAvatarInitials', nome.value || perfilTecnicoAtual?.nome || 'Técnico');
+    setTimeout(() => (setup ? nome : document.getElementById('authSenha')).focus(), 80);
+}
+function ocultarTelaAcesso() { document.getElementById('authScreen')?.classList.add('auth-hidden'); document.body.classList.remove('auth-open'); }
+
+async function sincronizarNomeTecnicoPerfil() {
+    if (!perfilTecnicoAtual?.nome) return;
+    const tecnicoEl = document.getElementById('tecnico'); if (tecnicoEl && !tecnicoEl.value.trim()) tecnicoEl.value = perfilTecnicoAtual.nome;
+    const bh = document.getElementById('bh_nome_tecnico'); if (bh) { bh.value = perfilTecnicoAtual.nome; try { await localforage.setItem('bh_nome_tecnico_salvo', perfilTecnicoAtual.nome); } catch(e) {} }
+}
+
+async function inicializarAcessoTecnico() {
+    aplicarTema(document.documentElement.dataset.theme || 'light', false);
+    if (typeof localforage === 'undefined') { tecnicoAutenticado = true; ocultarTelaAcesso(); return; }
+    try { perfilTecnicoAtual = await localforage.getItem(PERFIL_TECNICO_KEY); } catch(e) { perfilTecnicoAtual = null; }
+    atualizarInterfacePerfil();
+    if (!perfilTecnicoAtual?.nome || !perfilTecnicoAtual?.senhaHash || !perfilTecnicoAtual?.salt) { mostrarTelaAcesso('setup'); return; }
+    if (sessionStorage.getItem(SESSAO_TECNICO_KEY) === 'ok') { tecnicoAutenticado = true; ocultarTelaAcesso(); await sincronizarNomeTecnicoPerfil(); return; }
+    mostrarTelaAcesso('login');
+}
+
+async function submeterAcessoTecnico() {
+    if (typeof localforage === 'undefined') return mostrarToast('Armazenamento local indisponível.', true);
+    const nome = document.getElementById('authNome').value.trim(); const senha = document.getElementById('authSenha').value;
+    const btn = document.getElementById('authSubmitBtn'); if (btn) btn.disabled = true;
+    try {
+        if (authModo === 'setup') {
+            const confirmar = document.getElementById('authConfirmarSenha').value;
+            if (nome.length < 2) throw new Error('Informe o nome do técnico.');
+            if (senha.length < 4) throw new Error('A senha deve ter pelo menos 4 caracteres.');
+            if (senha !== confirmar) throw new Error('As senhas não conferem.');
+            const salt = criarSalt(); const senhaHash = await hashSenhaTecnico(senha, salt);
+            perfilTecnicoAtual = { nome, senhaHash, salt, foto: fotoPerfilTemporaria || null, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() };
+            await localforage.setItem(PERFIL_TECNICO_KEY, perfilTecnicoAtual);
+        } else {
+            const nomeCorreto = nome.localeCompare(perfilTecnicoAtual.nome, 'pt-BR', { sensitivity: 'base' }) === 0;
+            const hash = await hashSenhaTecnico(senha, perfilTecnicoAtual.salt);
+            if (!nomeCorreto || hash !== perfilTecnicoAtual.senhaHash) throw new Error('Nome ou senha incorretos.');
+        }
+        tecnicoAutenticado = true; sessionStorage.setItem(SESSAO_TECNICO_KEY, 'ok'); atualizarInterfacePerfil(); ocultarTelaAcesso(); await sincronizarNomeTecnicoPerfil(); mostrarToast(`Bem-vindo, ${perfilTecnicoAtual.nome.split(' ')[0]}!`);
+    } catch(e) { mostrarToast(e.message || 'Não foi possível entrar.', true); }
+    finally { if (btn) btn.disabled = false; }
+}
+
+function toggleMenuPerfil(e) { if (e) e.stopPropagation(); document.getElementById('menuPerfil')?.classList.toggle('hidden'); }
+function fecharMenuPerfil() { document.getElementById('menuPerfil')?.classList.add('hidden'); }
+function abrirPerfilTecnico() {
+    fecharMenuPerfil(); if (!perfilTecnicoAtual) return;
+    document.getElementById('perfilNomeInput').value = perfilTecnicoAtual.nome || '';
+    document.getElementById('perfilSenhaAtual').value = ''; document.getElementById('perfilNovaSenha').value = '';
+    fotoPerfilEdicaoTemporaria = perfilTecnicoAtual.foto || null; renderAvatar(fotoPerfilEdicaoTemporaria, 'perfilModalImg', 'perfilModalIniciais', perfilTecnicoAtual.nome);
+    document.getElementById('modalPerfilTecnico').classList.remove('hidden');
+}
+function fecharPerfilTecnico() { document.getElementById('modalPerfilTecnico')?.classList.add('hidden'); }
+
+async function salvarPerfilTecnico() {
+    if (!perfilTecnicoAtual) return;
+    const nome = document.getElementById('perfilNomeInput').value.trim(); const atual = document.getElementById('perfilSenhaAtual').value; const nova = document.getElementById('perfilNovaSenha').value;
+    try {
+        if (nome.length < 2) throw new Error('Informe um nome válido.');
+        let senhaHash = perfilTecnicoAtual.senhaHash, salt = perfilTecnicoAtual.salt;
+        if (nova) {
+            if (nova.length < 4) throw new Error('A nova senha deve ter pelo menos 4 caracteres.');
+            const hashAtual = await hashSenhaTecnico(atual, perfilTecnicoAtual.salt); if (hashAtual !== perfilTecnicoAtual.senhaHash) throw new Error('Senha atual incorreta.');
+            salt = criarSalt(); senhaHash = await hashSenhaTecnico(nova, salt);
+        }
+        perfilTecnicoAtual = { ...perfilTecnicoAtual, nome, senhaHash, salt, foto: fotoPerfilEdicaoTemporaria || null, atualizadoEm: new Date().toISOString() };
+        await localforage.setItem(PERFIL_TECNICO_KEY, perfilTecnicoAtual); atualizarInterfacePerfil(); await sincronizarNomeTecnicoPerfil(); fecharPerfilTecnico(); mostrarToast('Perfil atualizado.');
+    } catch(e) { mostrarToast(e.message || 'Não foi possível salvar o perfil.', true); }
+}
+
+function sairDoAppTecnico() { fecharMenuPerfil(); tecnicoAutenticado = false; sessionStorage.removeItem(SESSAO_TECNICO_KEY); mostrarTelaAcesso('login'); }
+
+function atualizarResumoDocumento() {
+    const n = document.querySelectorAll('.os-bloco').length; const badge = document.getElementById('osCountBadge');
+    if (badge) badge.textContent = `${n} O.S. ${n === 1 ? 'no arquivo' : 'no mesmo arquivo'}`;
+}
+
 function definirNomeAnexo(id, nome = '') {
     const el = document.getElementById(`anexoNome_${id}`);
     if (!el) return;
@@ -209,6 +370,7 @@ function mostrarToast(mensagem, isErro = false) {
 }
 
 async function abrirAbaHistoricoSegura() {
+    if (perfilTecnicoAtual && tecnicoAutenticado) { await switchTab('historico'); return; }
     let pinSalvo = await localforage.getItem('app_pin');
     if (!pinSalvo) { document.getElementById('inputNovoPin').value = ''; document.getElementById('modalCriarPin').classList.remove('hidden'); } 
     else { document.getElementById('inputDigitarPin').value = ''; document.getElementById('modalDigitarPin').classList.remove('hidden'); }
@@ -449,6 +611,23 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
         mostrarToast('Armazenamento local indisponível. Salvar e histórico não funcionarão nesta sessão.', true);
     }
+
+    await inicializarAcessoTecnico();
+    atualizarResumoDocumento();
+
+    document.getElementById('authFotoInput')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0]; if (!file) return;
+        try { fotoPerfilTemporaria = await comprimirFotoPerfil(file); renderAvatar(fotoPerfilTemporaria, 'authAvatarImg', 'authAvatarInitials', document.getElementById('authNome').value || 'Técnico'); }
+        catch(err) { mostrarToast(err.message, true); } finally { e.target.value = ''; }
+    });
+    document.getElementById('perfilFotoInput')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0]; if (!file) return;
+        try { fotoPerfilEdicaoTemporaria = await comprimirFotoPerfil(file); renderAvatar(fotoPerfilEdicaoTemporaria, 'perfilModalImg', 'perfilModalIniciais', document.getElementById('perfilNomeInput').value || perfilTecnicoAtual?.nome); }
+        catch(err) { mostrarToast(err.message, true); } finally { e.target.value = ''; }
+    });
+    document.getElementById('authNome')?.addEventListener('input', e => renderAvatar(fotoPerfilTemporaria, 'authAvatarImg', 'authAvatarInitials', e.target.value));
+    document.getElementById('authSenha')?.addEventListener('keydown', e => { if (e.key === 'Enter' && authModo === 'login') submeterAcessoTecnico(); });
+    document.addEventListener('click', (e) => { const menu = document.getElementById('menuPerfil'); if (menu && !menu.classList.contains('hidden') && !e.target.closest('.app-top-actions')) fecharMenuPerfil(); });
 });
 
 async function autoSalvarRascunho() {
@@ -719,7 +898,7 @@ function atualizarVisibilidadeCamposPorBloco() {
         if (isMontagem) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'block'; } 
         else if (isInterno) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true; } 
         else { if(cHoras) cHoras.style.display = 'grid'; if(cDias) cDias.style.display = 'none'; if(cReagendar) cReagendar.style.display = 'block'; }
-    }); atualizarVisibilidadeClienteGeral();
+    }); atualizarVisibilidadeClienteGeral(); atualizarResumoDocumento();
 }
 function atualizarVisibilidadeClienteGeral() {
     const isInterno = verificarServicoInternoGlobal();
@@ -751,9 +930,9 @@ async function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden')); 
     document.getElementById(tabId).classList.remove('hidden');
     
-    document.querySelectorAll('.nav-btn').forEach(btn => { btn.classList.remove('border-blue-500', 'text-white', 'bg-gray-800/50'); btn.classList.add('border-transparent', 'text-gray-400'); });
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.getElementById(`btnNav${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`);
-    if(activeBtn) { activeBtn.classList.remove('border-transparent', 'text-gray-400'); activeBtn.classList.add('border-blue-500', 'text-white', 'bg-gray-800/50'); }
+    if(activeBtn) activeBtn.classList.add('active');
 
     if(tabId === 'historico') { await carregarHistorico(); atualizarIndicadorArmazenamento(); } 
     else if (tabId === 'bancoHoras') { renderTabelaBancoHoras(); } 
@@ -763,7 +942,7 @@ async function switchTab(tabId) {
 
 function iniciarNovaOS() {
     documentoAtualId = Date.now().toString(); document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0; 
-    if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
+    if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = perfilTecnicoAtual?.nome || ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
     desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco(); localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
 }
 
