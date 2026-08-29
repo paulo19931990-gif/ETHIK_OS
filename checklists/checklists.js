@@ -9,8 +9,11 @@ window.MULTIOS_CHECKLISTS = {
     "colunas": {
       "verificadoX": 251.9,
       "substituidoX": 306.3,
-      "obsX": 339,
-      "obsWidth": 227
+      "obsX": 346,
+      "obsWidth": 214,
+      "statusFontSize": 10,
+      "obsFontSize": 10,
+      "obsMinFontSize": 6
     },
     "campos": [
       {
@@ -19,7 +22,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 130,
         "top": 199,
         "width": 52,
-        "fontSize": 4.3
+        "fontSize": 10
       },
       {
         "source": "serie",
@@ -27,7 +30,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 219,
         "top": 199,
         "width": 53,
-        "fontSize": 4.3
+        "fontSize": 10
       },
       {
         "source": "osNum",
@@ -35,7 +38,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 313,
         "top": 199,
         "width": 54,
-        "fontSize": 4.3
+        "fontSize": 10
       },
       {
         "source": "cliente",
@@ -43,39 +46,39 @@ window.MULTIOS_CHECKLISTS = {
         "x": 412,
         "top": 199,
         "width": 145,
-        "fontSize": 4.3
+        "fontSize": 10
       },
       {
         "source": "nomeClienteFinal",
         "page": 1,
-        "x": 110,
-        "top": 288.1,
-        "width": 285,
-        "fontSize": 4.3
+        "x": 106,
+        "top": 287.8,
+        "width": 290,
+        "fontSize": 10
       },
       {
         "source": "cargo",
         "page": 1,
-        "x": 440,
-        "top": 288.1,
-        "width": 115,
-        "fontSize": 4.3
+        "x": 462,
+        "top": 287.8,
+        "width": 82,
+        "fontSize": 10
       },
       {
         "source": "dataChecklist",
         "page": 1,
-        "x": 68,
-        "top": 312.2,
+        "x": 62,
+        "top": 311.7,
         "width": 165,
-        "fontSize": 4.3
+        "fontSize": 10
       },
       {
         "source": "tecnicoComRotulo",
         "page": 1,
-        "x": 350,
-        "top": 312.2,
-        "width": 205,
-        "fontSize": 4.3,
+        "x": 347,
+        "top": 311.7,
+        "width": 196,
+        "fontSize": 10,
         "clear": true
       }
     ],
@@ -387,8 +390,11 @@ window.MULTIOS_CHECKLISTS = {
     "colunas": {
       "verificadoX": 293,
       "substituidoX": 343.7,
-      "obsX": 372.5,
-      "obsWidth": 194
+      "obsX": 376,
+      "obsWidth": 186,
+      "statusFontSize": 10,
+      "obsFontSize": 10,
+      "obsMinFontSize": 6
     },
     "campos": [
       {
@@ -397,7 +403,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 145,
         "top": 143.2,
         "width": 48,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -406,7 +412,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 224,
         "top": 143.2,
         "width": 161,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -415,7 +421,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 420,
         "top": 143.2,
         "width": 57,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -424,7 +430,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 659.3,
         "width": 240,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -433,7 +439,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 659.3,
         "width": 250,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -442,7 +448,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 684,
         "width": 240,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -451,7 +457,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 684,
         "width": 250,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       }
     ],
@@ -658,8 +664,11 @@ window.MULTIOS_CHECKLISTS = {
     "colunas": {
       "verificadoX": 347,
       "substituidoX": 410.8,
-      "obsX": 445.5,
-      "obsWidth": 114
+      "obsX": 449,
+      "obsWidth": 108,
+      "statusFontSize": 10,
+      "obsFontSize": 10,
+      "obsMinFontSize": 6
     },
     "campos": [
       {
@@ -668,7 +677,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 177,
         "top": 195.5,
         "width": 63,
-        "fontSize": 4.4
+        "fontSize": 10
       },
       {
         "source": "serie",
@@ -676,7 +685,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 278,
         "top": 195.5,
         "width": 62,
-        "fontSize": 4.4
+        "fontSize": 10
       },
       {
         "source": "tag",
@@ -684,7 +693,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 368,
         "top": 195.5,
         "width": 85,
-        "fontSize": 4.4
+        "fontSize": 10
       },
       {
         "source": "osNum",
@@ -692,40 +701,40 @@ window.MULTIOS_CHECKLISTS = {
         "x": 497,
         "top": 195.5,
         "width": 60,
-        "fontSize": 4.4
+        "fontSize": 10
       },
       {
         "source": "nomeClienteFinal",
         "page": 0,
-        "x": 94,
-        "top": 688.4,
-        "width": 295,
-        "fontSize": 4.2
+        "x": 102,
+        "top": 689.2,
+        "width": 280,
+        "fontSize": 10
       },
       {
         "source": "cargo",
         "page": 0,
-        "x": 451,
-        "top": 688.4,
-        "width": 104,
-        "fontSize": 4.2
+        "x": 468,
+        "top": 689.2,
+        "width": 76,
+        "fontSize": 10
       },
       {
         "source": "dataComRotulo",
         "page": 1,
-        "x": 42,
-        "top": 118.2,
-        "width": 220,
-        "fontSize": 4.2,
+        "x": 38,
+        "top": 118.5,
+        "width": 190,
+        "fontSize": 10,
         "clear": true
       },
       {
         "source": "tecnicoComRotulo",
         "page": 1,
-        "x": 353,
-        "top": 118.2,
-        "width": 202,
-        "fontSize": 4.2,
+        "x": 332,
+        "top": 118.5,
+        "width": 216,
+        "fontSize": 10,
         "clear": true
       }
     ],
@@ -925,8 +934,11 @@ window.MULTIOS_CHECKLISTS = {
     "colunas": {
       "verificadoX": 315.4,
       "substituidoX": 366.3,
-      "obsX": 395.2,
-      "obsWidth": 190
+      "obsX": 399,
+      "obsWidth": 182,
+      "statusFontSize": 10,
+      "obsFontSize": 10,
+      "obsMinFontSize": 6
     },
     "campos": [
       {
@@ -935,7 +947,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 166,
         "top": 143.2,
         "width": 53,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -944,7 +956,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 247,
         "top": 143.2,
         "width": 165,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -953,7 +965,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 442,
         "top": 143.2,
         "width": 60,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -962,7 +974,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 490.5,
         "width": 240,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -971,7 +983,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 490.5,
         "width": 250,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -980,7 +992,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 515.2,
         "width": 240,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -989,7 +1001,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 515.2,
         "width": 250,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       }
     ],
@@ -1131,8 +1143,11 @@ window.MULTIOS_CHECKLISTS = {
     "colunas": {
       "verificadoX": 315.4,
       "substituidoX": 366.3,
-      "obsX": 395.2,
-      "obsWidth": 190
+      "obsX": 399,
+      "obsWidth": 182,
+      "statusFontSize": 10,
+      "obsFontSize": 10,
+      "obsMinFontSize": 6
     },
     "campos": [
       {
@@ -1141,7 +1156,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 186,
         "top": 143.2,
         "width": 55,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -1150,7 +1165,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 269,
         "top": 143.2,
         "width": 165,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -1159,7 +1174,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 464,
         "top": 143.2,
         "width": 58,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -1168,7 +1183,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 646.7,
         "width": 240,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -1177,7 +1192,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 646.7,
         "width": 250,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -1186,7 +1201,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 42,
         "top": 671.5,
         "width": 240,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       },
       {
@@ -1195,7 +1210,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 295,
         "top": 671.5,
         "width": 250,
-        "fontSize": 4.4,
+        "fontSize": 10,
         "clear": true
       }
     ],
