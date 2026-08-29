@@ -114,7 +114,7 @@ function dataUrlPdfSegura(valor) {
 }
 
 
-// === PERFIL DO TÉCNICO, ACESSO INICIAL E TEMA (v50) ===
+// === PERFIL DO TÉCNICO, ACESSO INICIAL E TEMA (v51) ===
 const PERFIL_TECNICO_KEY = 'tecnico_perfil_v1';
 const SESSAO_TECNICO_KEY = 'multi_os_auth_session_v1';
 let perfilTecnicoAtual = null;
@@ -270,8 +270,199 @@ async function salvarPerfilTecnico() {
 function sairDoAppTecnico() { fecharMenuPerfil(); tecnicoAutenticado = false; sessionStorage.removeItem(SESSAO_TECNICO_KEY); mostrarTelaAcesso('login'); }
 
 function atualizarResumoDocumento() {
-    const n = document.querySelectorAll('.os-bloco').length; const badge = document.getElementById('osCountBadge');
-    if (badge) badge.textContent = `${n} O.S. ${n === 1 ? 'no arquivo' : 'no mesmo arquivo'}`;
+    const blocos = [...document.querySelectorAll('.os-bloco')];
+    const n = blocos.length;
+    const plural = n === 1 ? 'O.S.' : 'O.S.';
+    const textoDocumento = `Documento com ${n} ${plural}`;
+    const badge = document.getElementById('osCountBadge');
+    if (badge) badge.textContent = `${n} O.S. no arquivo`;
+    const title = document.getElementById('documentTitle');
+    if (title) title.textContent = textoDocumento;
+    const finalCount = document.getElementById('finalDocCount');
+    if (finalCount) finalCount.textContent = textoDocumento;
+    const header = document.getElementById('headerContextText');
+    const novaOs = document.getElementById('novaOs');
+    if (header && novaOs && !novaOs.classList.contains('hidden')) {
+        const finalStage = document.getElementById('finalStage');
+        header.textContent = finalStage && !finalStage.classList.contains('hidden') ? 'Finalização do arquivo' : textoDocumento;
+    }
+    const info = document.getElementById('consolidatedInfoText');
+    if (info) info.textContent = `Este será um único arquivo PDF consolidado, com ${n === 1 ? 'a O.S.' : `as ${n} O.S.`} neste documento.`;
+    blocos.forEach((b, index) => {
+        const badgeNum = b.querySelector('.os-number-badge');
+        if (badgeNum) badgeNum.textContent = String(index + 1);
+        atualizarResumoOS(Number(b.dataset.id));
+    });
+    renderFinalOsSummary();
+}
+
+function transformarBlocoEmCardMockup(bloco, id) {
+    if (!bloco || bloco.dataset.mockupReady === '1') return;
+    bloco.dataset.mockupReady = '1';
+    bloco.classList.add('os-card-mockup');
+    const legacyHeader = bloco.children[0];
+    const editor = bloco.children[1];
+    if (!legacyHeader || !editor) return;
+    legacyHeader.classList.add('legacy-os-header');
+    editor.classList.add('os-editor-content');
+
+    const summary = document.createElement('div');
+    summary.className = 'os-card-summary';
+    summary.innerHTML = `
+      <div class="os-card-topline">
+        <div class="os-number-badge">${id}</div>
+        <div class="os-card-title-wrap"><strong id="osResumoTitulo_${id}">O.S. ${id}</strong></div>
+        <span class="os-state-badge editing" id="osResumoStatus_${id}">Em edição</span>
+        <button class="os-chevron" type="button" aria-label="Expandir ou recolher O.S." onclick="toggleOsEditor(${id})"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"></path></svg></button>
+      </div>
+      <div class="os-summary-rows">
+        <div><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg><span>Cliente</span><b id="osResumoCliente_${id}">Não informado</b></div>
+        <div><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"></rect><path d="M9 8h6M9 12h6M9 16h4"></path></svg><span>Equipamento</span><b id="osResumoEquip_${id}">Não informado</b></div>
+        <div><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5-5L7.5 3.5l3 3-6.8 6.8a2 2 0 0 0 0 2.8l4.2 4.2a2 2 0 0 0 2.8 0l6.8-6.8 3 3 2.2-2.2a4 4 0 0 0-5-5"></path></svg><span>Serviço Executado</span><b id="osResumoServico_${id}">Não informado</b></div>
+      </div>
+      <div class="os-summary-actions">
+        <button class="edit-os-button" type="button" onclick="toggleOsEditor(${id}, true)"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13 7 4 4"></path></svg> Editar</button>
+        ${id > 1 ? `<button class="remove-os-button" type="button" onclick="removerBlocoOSUI(${id})">Remover</button>` : ''}
+      </div>`;
+    bloco.insertBefore(summary, legacyHeader);
+
+    bloco.addEventListener('input', () => atualizarResumoOS(id));
+    bloco.addEventListener('change', () => atualizarResumoOS(id));
+
+    document.querySelectorAll('.os-bloco').forEach(outro => {
+        if (outro !== bloco) toggleOsEditor(Number(outro.dataset.id), false);
+    });
+    toggleOsEditor(id, true);
+    atualizarResumoOS(id);
+}
+
+function toggleOsEditor(id, forceOpen = null) {
+    const bloco = document.querySelector(`.os-bloco[data-id="${id}"]`);
+    if (!bloco) return;
+    const editor = bloco.querySelector('.os-editor-content');
+    if (!editor) return;
+    const isOpen = bloco.classList.contains('is-open');
+    const abrir = forceOpen === null ? !isOpen : !!forceOpen;
+    if (abrir) {
+        document.querySelectorAll('.os-bloco.is-open').forEach(outro => {
+            if (outro !== bloco) {
+                outro.classList.remove('is-open');
+                const outroEditor = outro.querySelector('.os-editor-content');
+                if (outroEditor) outroEditor.style.display = 'none';
+                atualizarEstadoResumoOS(Number(outro.dataset.id));
+            }
+        });
+        bloco.classList.add('is-open');
+        editor.style.display = 'grid';
+    } else {
+        bloco.classList.remove('is-open');
+        editor.style.display = 'none';
+    }
+    atualizarEstadoResumoOS(id);
+}
+
+function atualizarEstadoResumoOS(id) {
+    const bloco = document.querySelector(`.os-bloco[data-id="${id}"]`);
+    const status = document.getElementById(`osResumoStatus_${id}`);
+    if (!bloco || !status) return;
+    const aberto = bloco.classList.contains('is-open');
+    const cliente = document.getElementById(`cliente_${id}`)?.value.trim();
+    const numero = document.getElementById(`osNum_${id}`)?.value.trim();
+    status.className = 'os-state-badge';
+    if (aberto) { status.textContent = 'Em edição'; status.classList.add('editing'); }
+    else if (cliente && numero) { status.textContent = 'Concluída'; status.classList.add('complete'); }
+    else { status.textContent = 'Rascunho'; status.classList.add('draft'); }
+}
+
+function atualizarResumoOS(id) {
+    if (!id) return;
+    const bloco = document.querySelector(`.os-bloco[data-id="${id}"]`);
+    const indice = bloco ? [...document.querySelectorAll('.os-bloco')].indexOf(bloco) + 1 : id;
+    const cliente = document.getElementById(`cliente_${id}`)?.value.trim() || 'Não informado';
+    const equipamento = document.getElementById(`equipamento_${id}`)?.value.trim() || 'Não informado';
+    const descricao = document.getElementById(`descricao_${id}`)?.value.trim() || 'Não informado';
+    const numero = document.getElementById(`osNum_${id}`)?.value.trim();
+    const title = document.getElementById(`osResumoTitulo_${id}`);
+    const c = document.getElementById(`osResumoCliente_${id}`);
+    const e = document.getElementById(`osResumoEquip_${id}`);
+    const d = document.getElementById(`osResumoServico_${id}`);
+    if (title) title.textContent = `O.S. ${indice} — ${cliente === 'Não informado' ? (numero ? `Nº ${numero}` : 'Nova O.S.') : cliente}`;
+    if (c) c.textContent = cliente;
+    if (e) e.textContent = equipamento;
+    if (d) d.textContent = descricao.length > 62 ? `${descricao.slice(0, 59)}...` : descricao;
+    atualizarEstadoResumoOS(id);
+    renderFinalOsSummary();
+}
+
+function removerBlocoOSUI(id) {
+    const bloco = document.querySelector(`.os-bloco[data-id="${id}"]`);
+    if (!bloco) return;
+    bloco.remove();
+    atualizarVisibilidadeCamposPorBloco();
+    atualizarResumoDocumento();
+    autoSalvarRascunho();
+}
+
+function renderFinalOsSummary() {
+    const container = document.getElementById('finalOsSummary');
+    if (!container) return;
+    container.replaceChildren();
+    const blocos = [...document.querySelectorAll('.os-bloco')];
+    blocos.forEach((bloco, index) => {
+        const id = Number(bloco.dataset.id);
+        const cliente = document.getElementById(`cliente_${id}`)?.value.trim() || 'Nova O.S.';
+        const pecas = [...bloco.querySelectorAll('.peca-row-item')].filter(r => r.querySelector('.n')?.value.trim() || r.querySelector('.c')?.value.trim()).length;
+        const fotos = bloco.querySelectorAll('.foto-item').length;
+        const row = document.createElement('button');
+        row.type = 'button'; row.className = 'final-os-row';
+        row.addEventListener('click', () => { mostrarEtapaDocumento(); toggleOsEditor(id, true); setTimeout(() => bloco.scrollIntoView({behavior:'smooth', block:'start'}), 60); });
+        const num = document.createElement('span'); num.className = `final-os-num ${index % 2 ? 'violet' : 'green'}`; num.textContent = String(index + 1);
+        const name = document.createElement('b'); name.textContent = `O.S. ${index + 1} — ${cliente}`;
+        const meta = document.createElement('small'); meta.textContent = `${pecas} ${pecas === 1 ? 'peça' : 'peças'}, ${fotos} ${fotos === 1 ? 'foto' : 'fotos'}`;
+        const arrow = document.createElement('span'); arrow.className = 'final-os-arrow'; arrow.textContent = '›';
+        row.append(num, name, meta, arrow); container.appendChild(row);
+    });
+}
+
+function mostrarEtapaFinalizacao() {
+    const doc = document.getElementById('documentStage'); const fin = document.getElementById('finalStage');
+    if (!doc || !fin) return;
+    doc.classList.add('hidden'); fin.classList.remove('hidden');
+    atualizarResumoDocumento();
+    const header = document.getElementById('headerContextText'); if (header) header.textContent = 'Finalização do arquivo';
+    setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 80);
+    window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function mostrarEtapaDocumento() {
+    const doc = document.getElementById('documentStage'); const fin = document.getElementById('finalStage');
+    if (!doc || !fin) return;
+    fin.classList.add('hidden'); doc.classList.remove('hidden');
+    atualizarResumoDocumento();
+    window.scrollTo({top:0, behavior:'smooth'});
+}
+
+async function irParaOrdensAtuais() {
+    await switchTab('novaOs'); mostrarEtapaDocumento();
+    document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));
+    document.getElementById('btnNavOrdens')?.classList.add('active');
+    setTimeout(() => document.getElementById('listaOrdensServico')?.scrollIntoView({behavior:'smooth', block:'start'}), 60);
+}
+
+async function adicionarOSPeloAtalho() {
+    await switchTab('novaOs'); mostrarEtapaDocumento(); adicionarBlocoOS();
+    setTimeout(() => document.querySelector('.os-bloco:last-child')?.scrollIntoView({behavior:'smooth', block:'start'}), 70);
+}
+
+function abrirMenuPrincipal() {
+    document.getElementById('menuPrincipalBackdrop')?.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+function fecharMenuPrincipal(event = null) {
+    const backdrop = document.getElementById('menuPrincipalBackdrop');
+    if (event && event.target !== backdrop) return;
+    backdrop?.classList.add('hidden');
+    document.body.style.overflow = '';
 }
 
 function definirNomeAnexo(id, nome = '') {
@@ -927,23 +1118,34 @@ function desbloquearEdicao() { toggleLock(false); }
 function limparAssinatura(pad, isCliente = false) { if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); autoSalvarRascunho(); }
 
 async function switchTab(tabId) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden')); 
-    document.getElementById(tabId).classList.remove('hidden');
-    
-    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    const alvo = document.getElementById(tabId); if (!alvo) return;
+    alvo.classList.remove('hidden');
+
+    document.querySelectorAll('.nav-btn, .bottom-nav-item').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.getElementById(`btnNav${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`);
     if(activeBtn) activeBtn.classList.add('active');
+    const header = document.getElementById('headerContextText');
 
-    if(tabId === 'historico') { await carregarHistorico(); atualizarIndicadorArmazenamento(); } 
-    else if (tabId === 'bancoHoras') { renderTabelaBancoHoras(); } 
-    else if(tabId === 'novaOs') setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
+    if(tabId === 'historico') {
+        if (header) header.textContent = 'Histórico de O.S.';
+        await carregarHistorico(); atualizarIndicadorArmazenamento();
+    } else if (tabId === 'bancoHoras') {
+        if (header) header.textContent = 'Banco de Horas';
+        document.getElementById('btnNavMenu')?.classList.add('active');
+        renderTabelaBancoHoras();
+    } else if(tabId === 'novaOs') {
+        atualizarResumoDocumento();
+        setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasTecnico'), padTecnico); resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50);
+    }
+    fecharMenuPrincipal();
     window.scrollTo(0, 0);
 }
 
 function iniciarNovaOS() {
     documentoAtualId = Date.now().toString(); document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0; 
     if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = perfilTecnicoAtual?.nome || ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
-    desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco(); localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
+    desbloquearEdicao(); switchTab('novaOs'); mostrarEtapaDocumento(); atualizarVisibilidadeCamposPorBloco(); localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
 }
 
 function adicionarBlocoOS(dados = null) {
@@ -1069,6 +1271,7 @@ function adicionarBlocoOS(dados = null) {
         </div>
     `;
     document.getElementById('listaOrdensServico').appendChild(bloco);
+    transformarBlocoEmCardMockup(bloco, id);
 
     if (dados) {
         ['cliente','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
@@ -1089,6 +1292,8 @@ function adicionarBlocoOS(dados = null) {
         if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
     } else { addPecaRow(id); addPecaRow(id); }
     atualizarVisibilidadeCamposPorBloco();
+    atualizarResumoOS(id);
+    atualizarResumoDocumento();
 }
 
 function addPecaRow(id) {
