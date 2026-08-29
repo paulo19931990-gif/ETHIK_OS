@@ -551,22 +551,30 @@ async function carregarFontesChecklistPersonalizadas() {
     return checklistFontBytesPromise;
 }
 
-async function obterFontesPdfChecklist(pdfChecklist, StandardFontsObj) {
-    let font = await pdfChecklist.embedFont(StandardFontsObj.Helvetica);
-    let fontBold = await pdfChecklist.embedFont(StandardFontsObj.HelveticaBold);
+const cacheFontesChecklistPdf = new WeakMap();
+async function obterFontesPdfChecklist(pdfDocument, StandardFontsObj) {
+    const cache = cacheFontesChecklistPdf.get(pdfDocument);
+    if (cache) return cache;
+
+    let font = await pdfDocument.embedFont(StandardFontsObj.Helvetica);
+    let fontBold = await pdfDocument.embedFont(StandardFontsObj.HelveticaBold);
     try {
         if (typeof window.fontkit !== 'undefined') {
-            pdfChecklist.registerFontkit(window.fontkit);
+            pdfDocument.registerFontkit(window.fontkit);
             const bytes = await carregarFontesChecklistPersonalizadas();
             if (bytes?.regular && bytes?.bold) {
-                font = await pdfChecklist.embedFont(bytes.regular, { subset: true });
-                fontBold = await pdfChecklist.embedFont(bytes.bold, { subset: true });
+                // Importante: não usar subset aqui. O subset da fonte era perdido/corrompido
+                // ao copiar as páginas do checklist para o PDF consolidado em alguns leitores Android.
+                font = await pdfDocument.embedFont(bytes.regular, { subset: false });
+                fontBold = await pdfDocument.embedFont(bytes.bold, { subset: false });
             }
         }
     } catch (error) {
         console.warn('Falha ao embutir fontes personalizadas do checklist. A usar fallback.', error);
     }
-    return { font, fontBold };
+    const resultado = { font, fontBold };
+    cacheFontesChecklistPdf.set(pdfDocument, resultado);
+    return resultado;
 }
 
 function desenharCampoChecklist(page, font, texto, campo, rgbFn) {
@@ -597,8 +605,14 @@ async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, Stan
     if (!resposta.ok) throw new Error(`Modelo ${modelo.codigo} não disponível. Confirme a pasta checklists no GitHub.`);
     const bytes = await resposta.arrayBuffer();
     const pdfChecklist = await PDFDocumentCtor.load(bytes);
-    const { font, fontBold } = await obterFontesPdfChecklist(pdfChecklist, StandardFontsObj);
-    const paginas = pdfChecklist.getPages();
+
+    // Primeiro copia as páginas-base para o PDF final. Só depois escreve os dados.
+    // Assim, a fonte Carlito/Calibri-compatible é incorporada diretamente no PDF final,
+    // evitando letras faltando ou fragmentadas após o copyPages().
+    const copias = await masterPdf.copyPages(pdfChecklist, pdfChecklist.getPageIndices());
+    copias.forEach(p => masterPdf.addPage(p));
+    const paginas = copias;
+    const { font, fontBold } = await obterFontesPdfChecklist(masterPdf, StandardFontsObj);
     const ctx = contextoChecklistPdf(osId, checklist);
 
     (modelo.campos || []).forEach(campo => {
@@ -624,8 +638,6 @@ async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, Stan
         }
     }));
 
-    const copias = await masterPdf.copyPages(pdfChecklist, pdfChecklist.getPageIndices());
-    copias.forEach(p => masterPdf.addPage(p));
 }
 
 let documentoAtualId = Date.now().toString();
