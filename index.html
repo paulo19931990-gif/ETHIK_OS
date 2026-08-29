@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=42">
+    <link rel="manifest" href="./manifest.json?v=52">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -30,7 +30,7 @@
     
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js?v=42').catch(err => console.error('Falha ao registar Service Worker:', err));
+            navigator.serviceWorker.register('./sw.js?v=52').catch(err => console.error('Falha ao registar Service Worker:', err));
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -40,7 +40,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=42">
+    <link rel="stylesheet" href="style.css?v=52">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -305,7 +305,16 @@
                     <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="Buscar cliente..." class="w-full sm:w-48 px-4 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                     <button onclick="abrirModalExportar()" class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold shadow-sm hover:bg-gray-900 text-sm">Backup</button>
                     <label class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-bold shadow-sm hover:bg-gray-300 text-sm cursor-pointer">
-                        Importar <input type="file" accept=".json" onchange="importarBackupJSON(event)" class="hidden">
+                        Importar Backup <input type="file" accept=".json,application/json" onchange="importarBackupJSON(event)" class="hidden">
+                    </label>
+                    <button onclick="exportarBancoPecas()" title="Exportar a lista de peças para outro técnico" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold shadow-sm hover:bg-indigo-700 text-sm flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2h-5.586a1 1 0 00-.707.293L5.293 8.707A1 1 0 005 9.414V19a2 2 0 002 2z"></path></svg>
+                        Exportar Peças
+                    </button>
+                    <label title="Adicionar peças de outro técnico sem apagar as suas" class="px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg font-bold shadow-sm hover:bg-indigo-100 text-sm cursor-pointer flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v12m0 0l-3-3m3 3l3-3M5 20h14"></path></svg>
+                        Importar Peças
+                        <input type="file" accept=".json,application/json" onchange="importarBancoPecasJSON(event)" class="hidden">
                     </label>
                     <button onclick="limparTodoHistorico()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-bold shadow-sm hover:bg-red-700 text-sm">Apagar Tudo</button>
                 </div>
@@ -430,7 +439,7 @@
     </div>
 
     <!-- CERTIFIQUE-SE DE CARREGAR O BANCO DE PEÇAS AQUI -->
-    <script src="bancoPecas.js?v=46"></script>
-    <script src="app.js?v=46"></script>
+    <script src="bancoPecas.js?v=52"></script>
+    <script src="app.js?v=52"></script>
 </body>
 </html>
