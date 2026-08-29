@@ -1,12 +1,18 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v52';
+const CACHE_NAME = 'multios-pro-v53';
 
 // Arquivos indispensáveis para abrir e usar o núcleo do app offline.
 const ASSETS_CRITICOS = [
   './index.html',
   './app.js',
   './style.css',
-  './bancoPecas.js'
+  './bancoPecas.js',
+  './checklists/checklists.js',
+  './checklists/FM-408-climatica.pdf',
+  './checklists/FM-409-durometros.pdf',
+  './checklists/FM-410-incubadora-estufa.pdf',
+  './checklists/FM-411-banho-maria.pdf',
+  './checklists/FM-411-dissolutor-desintegrador.pdf'
 ];
 
 // A falha de um item opcional não impede a instalação do Service Worker.
@@ -97,7 +103,7 @@ self.addEventListener('fetch', event => {
 
         return networkResponse;
       } catch (error) {
-        // ignoreSearch permite que /index.html?v=52 use /index.html do pré-cache.
+        // ignoreSearch permite que /index.html?v=53 use /index.html do pré-cache.
         const cachedRequest = await caches.match(request, { ignoreSearch: true });
         if (cachedRequest) return cachedRequest;
 
@@ -118,7 +124,7 @@ self.addEventListener('fetch', event => {
   if (!podeUsarRuntimeCache) return;
 
   event.respondWith((async () => {
-    // Nos arquivos locais, ignora apenas a query de versão (?v=52).
+    // Nos arquivos locais, ignora apenas a query de versão (?v=53).
     const cachedResponse = await caches.match(request, {
       ignoreSearch: mesmaOrigem
     });
