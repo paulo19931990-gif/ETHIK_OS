@@ -221,7 +221,7 @@ function importarBancoPecasJSON(event) {
     reader.readAsText(file);
 }
 
-// === CHECKLISTS DE MANUTENÇÃO PREVENTIVA (v53) ===
+// === CHECKLISTS DE MANUTENÇÃO PREVENTIVA (v54) ===
 let checklistOSAtual = null;
 
 function modelosChecklistDisponiveis() {
@@ -533,7 +533,7 @@ function desenharCampoChecklist(page, font, texto, campo, rgbFn) {
     texto = textoPdfChecklistSeguro(texto);
     if (!texto) return;
     const { height } = page.getSize();
-    const fontSize = campo.fontSize || 6;
+    const fontSize = Math.min(campo.fontSize || 4.4, 4.4);
     const y = height - campo.top - fontSize + 1;
     if (campo.clear) page.drawRectangle({ x: campo.x - 1, y: y - 1.5, width: campo.width + 2, height: fontSize + 4, color: rgbFn(1,1,1) });
     const fit = ajustarTextoChecklist(font, texto, campo.width, fontSize);
@@ -544,7 +544,7 @@ function desenharStatusChecklist(page, font, valor, x, top, rgbFn) {
     if (!valor) return;
     const { height } = page.getSize();
     const texto = valorStatusLabel(valor);
-    const size = 6.2;
+    const size = 4.2;
     const tw = font.widthOfTextAtSize(texto, size);
     page.drawText(texto, { x: x - tw / 2, y: height - top - size + 1, size, font, color: rgbFn(0,0,0) });
 }
@@ -558,8 +558,8 @@ async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, Stan
     if (!resposta.ok) throw new Error(`Modelo ${modelo.codigo} não disponível. Confirme a pasta checklists no GitHub.`);
     const bytes = await resposta.arrayBuffer();
     const pdfChecklist = await PDFDocumentCtor.load(bytes);
-    const font = await pdfChecklist.embedFont(StandardFontsObj.Helvetica);
-    const fontBold = await pdfChecklist.embedFont(StandardFontsObj.HelveticaBold);
+    const font = await pdfChecklist.embedFont(StandardFontsObj.TimesRoman);
+    const fontBold = await pdfChecklist.embedFont(StandardFontsObj.TimesRomanBold);
     const paginas = pdfChecklist.getPages();
     const ctx = contextoChecklistPdf(osId, checklist);
 
@@ -581,7 +581,7 @@ async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, Stan
         const obs = textoPdfChecklistSeguro(r.obs || '');
         if (obs) {
             const { height } = pag.getSize();
-            const fit = ajustarTextoChecklist(font, obs, modelo.colunas.obsWidth, 5.5, 4.0);
+            const fit = ajustarTextoChecklist(font, obs, modelo.colunas.obsWidth, 4.2, 3.5);
             pag.drawText(fit.texto, { x: modelo.colunas.obsX, y: height - item.top - fit.size + 1, size: fit.size, font, color: rgbFn(0,0,0) });
         }
     }));
