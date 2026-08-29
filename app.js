@@ -593,7 +593,7 @@ function desenharStatusChecklist(page, font, valor, x, top, rgbFn, size = 10) {
     const { height } = page.getSize();
     const texto = valorStatusLabel(valor);
     const tw = font.widthOfTextAtSize(texto, size);
-    page.drawText(texto, { x: x - tw / 2, y: height - top - size + 0.4, size, font, color: rgbFn(0,0,0) });
+    page.drawText(texto, { x: x - tw / 2, y: height - top - size + 2.8, size, font, color: rgbFn(0,0,0) });
 }
 
 async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, StandardFontsObj, rgbFn) {
@@ -634,7 +634,7 @@ async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, Stan
         if (obs) {
             const { height } = pag.getSize();
             const fit = ajustarTextoChecklist(font, obs, modelo.colunas.obsWidth, modelo.colunas.obsFontSize || 10, modelo.colunas.obsMinFontSize || 6);
-            pag.drawText(fit.texto, { x: modelo.colunas.obsX, y: height - item.top - fit.size + 0.2, size: fit.size, font, color: rgbFn(0,0,0) });
+            pag.drawText(fit.texto, { x: modelo.colunas.obsX, y: height - item.top - fit.size + 2.4, size: fit.size, font, color: rgbFn(0,0,0) });
         }
     }));
 
