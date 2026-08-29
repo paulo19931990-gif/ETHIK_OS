@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=55">
+    <link rel="manifest" href="./manifest.json?v=56">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -25,12 +25,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js?v=55').catch(err => console.error('Falha ao registar Service Worker:', err));
+            navigator.serviceWorker.register('./sw.js?v=56').catch(err => console.error('Falha ao registar Service Worker:', err));
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -40,7 +41,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=55">
+    <link rel="stylesheet" href="style.css?v=56">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -469,8 +470,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=55"></script>
-    <script src="bancoPecas.js?v=55"></script>
-    <script src="app.js?v=55"></script>
+    <script src="checklists/checklists.js?v=56"></script>
+    <script src="bancoPecas.js?v=56"></script>
+    <script src="app.js?v=56"></script>
 </body>
 </html>
