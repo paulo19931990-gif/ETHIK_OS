@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v55';
+const CACHE_NAME = 'multios-pro-v56';
 
 // Arquivos indispensáveis para abrir e usar o núcleo do app offline.
 const ASSETS_CRITICOS = [
@@ -12,7 +12,9 @@ const ASSETS_CRITICOS = [
   './checklists/FM-409-durometros.pdf',
   './checklists/FM-410-incubadora-estufa.pdf',
   './checklists/FM-411-banho-maria.pdf',
-  './checklists/FM-411-dissolutor-desintegrador.pdf'
+  './checklists/FM-411-dissolutor-desintegrador.pdf',
+  './fonts/Carlito-Regular.ttf',
+  './fonts/Carlito-Bold.ttf'
 ];
 
 // A falha de um item opcional não impede a instalação do Service Worker.
@@ -28,6 +30,7 @@ const ASSETS_OPCIONAIS = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
   'https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js',
   'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js',
+  'https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
