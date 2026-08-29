@@ -1,36 +1,32 @@
 <!DOCTYPE html>
+
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Multi-OS Pro</title>
-    
-    <!-- Metatags Anti-Cache Poderosas -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    
-    <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=42">
-    <link rel="icon" type="image/png" href="./icon-192.png">
-    <link rel="apple-touch-icon" href="./icon-192.png">
-    
-    <meta name="theme-color" content="#111827">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    
-    <script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Multi-OS Pro</title>
+<!-- Metatags Anti-Cache Poderosas -->
+<meta content="no-cache, no-store, must-revalidate" http-equiv="Cache-Control"/>
+<meta content="no-cache" http-equiv="Pragma"/>
+<meta content="0" http-equiv="Expires"/>
+<!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
+<link href="./manifest.json?v=50" rel="manifest"/>
+<link href="./icon-192.png" rel="icon" type="image/png"/>
+<link href="./icon-192.png" rel="apple-touch-icon"/>
+<meta content="#f5f7fb" id="themeColorMeta" name="theme-color"/>
+<meta content="yes" name="apple-mobile-web-app-capable"/>
+<meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
+<meta content="Multi-OS Pro" name="apple-mobile-web-app-title"/>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('multi_os_theme')||((window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light');}catch(e){document.documentElement.dataset.theme='light';}</script><script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js?v=42').catch(err => console.error('Falha ao registar Service Worker:', err));
+            navigator.serviceWorker.register('./sw.js?v=50').catch(err => console.error('Falha ao registar Service Worker:', err));
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -39,398 +35,389 @@
             }
         });
     </script>
-    
-    <link rel="stylesheet" href="style.css?v=42">
+<link href="style.css?v=50" rel="stylesheet"/>
 </head>
-<body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+<body class="app-shell bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
-    <!-- DATALISTS PARA O BANCO DE PEÇAS INTELIGENTE -->
-    <datalist id="dbCodigosPecas"></datalist>
-    <datalist id="dbNomesPecas"></datalist>
+<div class="hidden profile-modal-backdrop" id="modalPerfilTecnico">
+<section class="profile-modal">
+<div class="profile-modal-head"><div><small>Conta local</small><h3>Meu perfil</h3></div><button onclick="fecharPerfilTecnico()" type="button">×</button></div>
+<div class="profile-editor-avatar">
+<div class="profile-avatar-xl" id="perfilModalAvatar"><span id="perfilModalIniciais">T</span><img alt="Foto de perfil" id="perfilModalImg"/></div>
+<label class="secondary-action">Alterar foto<input accept="image/png,image/jpeg,image/webp" hidden="" id="perfilFotoInput" type="file"/></label>
+</div>
+<label class="field-stack"><span>Nome do técnico</span><input id="perfilNomeInput" maxlength="80" type="text"/></label>
+<div class="profile-password-box"><p>Alterar senha <small>(opcional)</small></p><label class="field-stack"><span>Senha atual</span><input id="perfilSenhaAtual" maxlength="64" type="password"/></label><label class="field-stack"><span>Nova senha</span><input id="perfilNovaSenha" maxlength="64" type="password"/></label></div>
+<div class="profile-modal-actions"><button class="secondary-action" onclick="fecharPerfilTecnico()" type="button">Cancelar</button><button class="primary-action" onclick="salvarPerfilTecnico()" type="button">Salvar alterações</button></div>
+</section>
+</div>
+<div aria-live="polite" class="auth-screen" id="authScreen">
+<div class="auth-orb auth-orb-one"></div><div class="auth-orb auth-orb-two"></div>
+<section class="auth-card">
+<div class="auth-brand"><span class="auth-logo-mark">M</span><div><strong>Multi-OS <em>Pro</em></strong><small>Acesso do técnico</small></div></div>
+<div class="auth-avatar-wrap">
+<div class="auth-avatar" id="authAvatarPreview"><span id="authAvatarInitials">T</span><img alt="Foto do técnico" id="authAvatarImg"/></div>
+<label class="auth-photo-action" id="authFotoLabel" title="Escolher foto">📷<input accept="image/png,image/jpeg,image/webp" hidden="" id="authFotoInput" type="file"/></label>
+</div>
+<div class="auth-copy"><h1 id="authTitulo">Acesso do técnico</h1><p id="authDescricao">Entre para acessar suas O.S., histórico e banco de horas.</p></div>
+<div class="auth-fields">
+<label><span>Nome do técnico</span><div class="modern-input"><svg viewbox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"></path></svg><input autocomplete="username" id="authNome" maxlength="80" placeholder="Seu nome" type="text"/></div></label>
+<label><span>Senha</span><div class="modern-input"><svg viewbox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12a2 2 0 0 1 2 2v8H4v-8a2 2 0 0 1 2-2Z"></path></svg><input autocomplete="current-password" id="authSenha" maxlength="64" placeholder="Sua senha" type="password"/><button aria-label="Mostrar senha" class="input-eye" onclick="alternarVisibilidadeSenha('authSenha', this)" type="button">◉</button></div></label>
+<label class="hidden" id="authConfirmarWrap"><span>Confirmar senha</span><div class="modern-input"><svg viewbox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12a2 2 0 0 1 2 2v8H4v-8a2 2 0 0 1 2-2Z"></path></svg><input autocomplete="new-password" id="authConfirmarSenha" maxlength="64" placeholder="Repita a senha" type="password"/></div></label>
+</div>
+<button class="auth-submit" id="authSubmitBtn" onclick="submeterAcessoTecnico()" type="button"><span>Entrar</span><svg viewbox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button>
+<p class="auth-note"><svg viewbox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path></svg>Os dados existentes do aplicativo permanecem preservados neste dispositivo.</p>
+</section>
+</div>
 
-    <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 sm:translate-x-0 sm:left-auto sm:right-6 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-[200] flex items-center gap-3 font-semibold bg-gray-900">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-        <span id="toastMsg" class="font-medium text-sm">Mensagem</span>
-    </div>
+<!-- DATALISTS PARA O BANCO DE PEÇAS INTELIGENTE -->
+<datalist id="dbCodigosPecas"></datalist>
+<datalist id="dbNomesPecas"></datalist>
+<div class="fixed bottom-6 left-1/2 transform -translate-x-1/2 sm:translate-x-0 sm:left-auto sm:right-6 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-[200] flex items-center gap-3 font-semibold bg-gray-900" id="toast">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="font-medium text-sm" id="toastMsg">Mensagem</span>
+</div>
+<!-- MODAL: Câmara Interna -->
+<div class="hidden fixed inset-0 bg-black z-[110] flex flex-col items-center justify-center" id="modalCameraInterna">
+<div class="relative w-full h-full flex flex-col justify-between p-4 pb-8">
+<div class="flex justify-between items-center text-white z-10 p-3">
+<button class="text-white p-2 bg-gray-800/80 rounded-full backdrop-blur-md" onclick="fecharCameraInterna()">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<div class="flex-1 relative flex items-center justify-center overflow-hidden my-2 rounded-2xl">
+<video autoplay="" class="max-h-full max-w-full object-cover rounded-2xl" id="videoCamera" playsinline=""></video>
+</div>
+<div class="flex justify-center p-4 z-10">
+<button class="bg-white text-gray-900 rounded-full w-20 h-20 flex items-center justify-center shadow-[0_0_0_4px_rgba(255,255,255,0.3)] active:scale-95 transition-transform" onclick="tirarFotoDoVideo()" type="button">
+<div class="w-16 h-16 rounded-full border-2 border-gray-900 flex items-center justify-center">
+<svg class="w-8 h-8" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</div>
+</button>
+</div>
+</div>
+</div>
+<!-- MODAL: Assinatura Expandida -->
+<div class="hidden fixed inset-0 bg-gray-900/95 backdrop-blur-sm z-[100] flex flex-col" id="modalAssinaturaExpandida">
+<div class="p-4 text-white flex justify-between items-center shrink-0 z-10">
+<h3 class="font-bold text-lg" id="tituloModalAssinatura">Área de Assinatura</h3>
+<button class="text-gray-300 hover:text-white p-2 bg-gray-800 rounded-full" onclick="fecharModalAssinatura()"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+</div>
+<div class="flex-1 bg-white relative w-full h-full overflow-hidden mx-4 rounded-xl">
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+<span class="text-3xl font-bold text-gray-300 select-none">Assine Aqui</span>
+</div>
+<canvas class="absolute inset-0 w-full h-full touch-none" id="canvasExpandido"></canvas>
+</div>
+<div class="p-4 pb-8 sm:pb-4 flex justify-between gap-3 shrink-0 z-10">
+<button class="px-4 py-4 bg-gray-800 text-white font-bold rounded-xl w-1/3 text-sm uppercase tracking-wider" onclick="limparPadExpandido()">Limpar</button>
+<button class="px-4 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl w-2/3 text-sm uppercase tracking-wider shadow-lg transition-colors" onclick="confirmarAssinaturaExpandida()">Confirmar Assinatura</button>
+</div>
+</div>
+<!-- MODAL: Progresso PDF -->
+<div class="hidden fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center px-4 backdrop-blur-md transition-opacity" id="pdfProgressOverlay">
+<div class="bg-gray-800 p-8 rounded-3xl max-w-sm w-full shadow-2xl border border-gray-700 text-center relative overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-1 bg-blue-500"></div>
+<div class="mb-6 mt-2">
+<div class="loader mx-auto mb-5"></div>
+<h3 class="text-xl font-bold text-white mb-2">A Gerar Documento PDF</h3>
+<p class="text-sm text-blue-400 font-semibold h-5" id="pdfProgressText">A preparar ficheiros...</p>
+</div>
+<div class="w-full bg-gray-900 rounded-full h-4 mb-2 overflow-hidden shadow-inner border border-gray-700 relative">
+<div class="bg-blue-500 h-full rounded-full transition-all duration-200" id="pdfProgressBar" style="width: 0%"></div>
+</div>
+<p class="text-right text-sm font-bold text-white mb-6" id="pdfProgressPercent">0%</p>
+<div class="bg-gray-900/50 rounded-xl p-4 border border-gray-700">
+<p class="text-xs text-gray-400 italic">⏳ Aguarde, não feche a aplicação.</p>
+</div>
+</div>
+</div>
+<!-- MODAL: Pré-visualização do PDF -->
+<div class="hidden fixed inset-0 bg-gray-900/95 flex items-center justify-center z-[90] p-2 sm:p-4 backdrop-blur-sm" id="modalPreviewPDF">
+<div class="bg-gray-100 rounded-2xl w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden relative border border-gray-700">
+<div class="flex justify-between items-center p-3 sm:p-4 border-b bg-white shrink-0 z-10 shadow-sm">
+<h3 class="text-base font-bold text-gray-800">Visualização</h3>
+<div class="flex gap-2">
+<a class="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-blue-100 flex items-center gap-1 border border-blue-200" id="linkPreviewExt" target="_blank">Download</a>
+<button class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-gray-900" onclick="fecharPreviewPDF()">Fechar</button>
+</div>
+</div>
+<div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-900 text-white rounded-full shadow-2xl px-2 py-1.5 z-20 gap-2 border border-gray-700">
+<button class="w-10 h-10 flex items-center justify-center hover:bg-gray-700 rounded-full text-xl font-bold transition-all" onclick="zoomOutPdf()">−</button>
+<span class="text-xs font-bold w-12 text-center tracking-wider" id="zoomText">100%</span>
+<button class="w-10 h-10 flex items-center justify-center hover:bg-gray-700 rounded-full text-xl font-bold transition-all" onclick="zoomInPdf()">+</button>
+</div>
+<div class="flex-1 w-full bg-gray-200 overflow-auto relative p-4 overscroll-contain" id="pdfRenderContainer">
+<div class="pdf-pages-wrapper pb-24 flex flex-col gap-4" id="pdfPagesWrapper"></div>
+</div>
+</div>
+</div>
+<!-- MODAL: PIN Segurança - Criar -->
+<div class="hidden fixed inset-0 bg-gray-900/90 flex items-center justify-center z-[100] px-4 backdrop-blur-sm" id="modalCriarPin">
+<div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
+<h3 class="text-2xl font-black mb-2 text-gray-900">Segurança</h3>
+<p class="mb-6 text-sm text-gray-500 font-medium">Crie um PIN numérico (mín. 4 dígitos) para proteger o acesso aos dados dos clientes.</p>
+<input autocomplete="new-password" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" id="inputNovoPin" inputmode="numeric" maxlength="12" placeholder="••••" type="password"/>
+<button class="w-full py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 uppercase tracking-wider text-sm shadow-lg" onclick="salvarNovoPin()">Guardar PIN</button>
+<button class="w-full mt-3 py-3 text-gray-500 font-bold text-sm uppercase tracking-wider" onclick="document.getElementById('modalCriarPin').classList.add('hidden')">Cancelar</button>
+</div>
+</div>
+<!-- MODAL: PIN Segurança - Digitar -->
+<div class="hidden fixed inset-0 bg-gray-900/90 flex items-center justify-center z-[100] px-4 backdrop-blur-sm" id="modalDigitarPin">
+<div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
+<h3 class="text-2xl font-black mb-2 text-gray-900 flex items-center gap-2"><svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Acesso Restrito</h3>
+<p class="mb-6 text-sm text-gray-500 font-medium">Digite o seu PIN para aceder ao Histórico.</p>
+<input autocomplete="current-password" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" id="inputDigitarPin" inputmode="numeric" maxlength="12" placeholder="••••" type="password"/>
+<button class="w-full py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 uppercase tracking-wider text-sm shadow-lg" onclick="validarPinAcesso()">Desbloquear</button>
+<button class="w-full mt-3 py-3 text-gray-500 font-bold text-sm uppercase tracking-wider" onclick="document.getElementById('modalDigitarPin').classList.add('hidden')">Cancelar</button>
+</div>
+</div>
+<!-- MODAL: Exportar Backup -->
+<div class="hidden fixed inset-0 bg-gray-900/90 flex items-center justify-center z-[100] px-4 backdrop-blur-sm" id="modalExportar">
+<div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
+<h3 class="text-2xl font-black mb-2 text-gray-900">Salvar Backup</h3>
+<p class="mb-6 text-sm text-gray-500 font-medium">Baixe um ficheiro com todas as OS e Horas.</p>
+<div class="mb-6">
+<div class="flex rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden bg-gray-50 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 transition-all">
+<input class="flex-1 w-full px-4 py-3 outline-none text-sm font-medium bg-transparent" id="inputNomeBackup" placeholder="Ex: meu_backup" type="text"/>
+<span class="inline-flex items-center px-4 text-gray-400 text-sm border-l border-gray-200 font-mono font-bold">.json</span>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="w-1/3 py-4 text-gray-500 font-bold text-sm uppercase tracking-wider bg-gray-100 rounded-xl hover:bg-gray-200" onclick="fecharModalExportar()">Cancelar</button>
+<button class="w-2/3 py-4 bg-gray-900 text-white font-bold rounded-xl hover:bg-black uppercase tracking-wider text-sm shadow-lg" onclick="confirmarExportacao()">Baixar Ficheiro</button>
+</div>
+</div>
+</div>
+<!-- BARRA DE NAVEGAÇÃO -->
 
-    <!-- MODAL: Câmara Interna -->
-    <div id="modalCameraInterna" class="hidden fixed inset-0 bg-black z-[110] flex flex-col items-center justify-center">
-        <div class="relative w-full h-full flex flex-col justify-between p-4 pb-8">
-            <div class="flex justify-between items-center text-white z-10 p-3">
-                <button onclick="fecharCameraInterna()" class="text-white p-2 bg-gray-800/80 rounded-full backdrop-blur-md">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-            </div>
-            <div class="flex-1 relative flex items-center justify-center overflow-hidden my-2 rounded-2xl">
-                <video id="videoCamera" autoplay playsinline class="max-h-full max-w-full object-cover rounded-2xl"></video>
-            </div>
-            <div class="flex justify-center p-4 z-10">
-                <button type="button" onclick="tirarFotoDoVideo()" class="bg-white text-gray-900 rounded-full w-20 h-20 flex items-center justify-center shadow-[0_0_0_4px_rgba(255,255,255,0.3)] active:scale-95 transition-transform">
-                    <div class="w-16 h-16 rounded-full border-2 border-gray-900 flex items-center justify-center">
-                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                    </div>
-                </button>
-            </div>
-        </div>
-    </div>
+<nav class="app-topbar sticky top-0 z-40">
+<div class="app-topbar-inner">
+<div class="app-profile-summary" onclick="abrirPerfilTecnico()" role="button" tabindex="0">
+<div class="profile-avatar-sm"><span id="perfilTopoIniciais">T</span><img alt="Foto do técnico" id="perfilTopoFoto"/></div>
+<div class="profile-copy"><span id="saudacaoTopo">Olá, técnico</span><strong id="perfilTopoNome">Multi-OS Pro</strong><small><span class="online-dot"></span> Dados locais protegidos</small></div>
+</div>
+<div class="app-top-actions">
+<button aria-label="Alternar tema" class="icon-action" id="btnTema" onclick="alternarTema()" type="button"><svg class="theme-sun" viewbox="0 0 24 24"><path d="M12 3V1m0 22v-2m9-9h2M1 12h2m15.36-6.36 1.42-1.42M4.22 19.78l1.42-1.42m12.72 0 1.42 1.42M4.22 4.22l1.42 1.42M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0Z"></path></svg></button>
+<button aria-label="Menu" class="icon-action" onclick="toggleMenuPerfil(event)" type="button"><svg viewbox="0 0 24 24"><circle cx="12" cy="5" r="1.7"></circle><circle cx="12" cy="12" r="1.7"></circle><circle cx="12" cy="19" r="1.7"></circle></svg></button>
+<div class="profile-dropdown hidden" id="menuPerfil">
+<button onclick="abrirPerfilTecnico(); fecharMenuPerfil()" type="button"><span>👤</span> Meu perfil</button>
+<button onclick="acionarInstalacaoApp(); fecharMenuPerfil()" type="button"><span>⇩</span> Instalar aplicativo</button>
+<button class="danger" onclick="sairDoAppTecnico()" type="button"><span>↪</span> Sair</button>
+</div>
+</div>
+</div>
+<div class="app-tabs-wrap">
+<button class="nav-btn active" id="btnNavNovaOs" onclick="switchTab('novaOs')"><svg viewbox="0 0 24 24"><path d="M6 3h9l3 3v15H6V3Z"></path><path d="M9 11h6M9 15h6M14 3v4h4"></path></svg><span>Doc. Atual</span></button>
+<button class="nav-btn" id="btnNavHistorico" onclick="abrirAbaHistoricoSegura()"><svg viewbox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5M12 7v5l3 2"></path></svg><span>Histórico</span></button>
+<button class="nav-btn" id="btnNavBancoHoras" onclick="switchTab('bancoHoras')"><svg viewbox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Banco de Horas</span></button>
+</div>
+</nav>
 
-    <!-- MODAL: Assinatura Expandida -->
-    <div id="modalAssinaturaExpandida" class="hidden fixed inset-0 bg-gray-900/95 backdrop-blur-sm z-[100] flex flex-col">
-        <div class="p-4 text-white flex justify-between items-center shrink-0 z-10">
-            <h3 id="tituloModalAssinatura" class="font-bold text-lg">Área de Assinatura</h3>
-            <button onclick="fecharModalAssinatura()" class="text-gray-300 hover:text-white p-2 bg-gray-800 rounded-full"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
-        </div>
-        <div class="flex-1 bg-white relative w-full h-full overflow-hidden mx-4 rounded-xl">
-            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-                <span class="text-3xl font-bold text-gray-300 select-none">Assine Aqui</span>
-            </div>
-            <canvas id="canvasExpandido" class="absolute inset-0 w-full h-full touch-none"></canvas>
-        </div>
-        <div class="p-4 pb-8 sm:pb-4 flex justify-between gap-3 shrink-0 z-10">
-            <button onclick="limparPadExpandido()" class="px-4 py-4 bg-gray-800 text-white font-bold rounded-xl w-1/3 text-sm uppercase tracking-wider">Limpar</button>
-            <button onclick="confirmarAssinaturaExpandida()" class="px-4 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl w-2/3 text-sm uppercase tracking-wider shadow-lg transition-colors">Confirmar Assinatura</button>
-        </div>
-    </div>
+<div class="max-w-5xl mx-auto p-4 md:p-6 mt-2 mb-24">
+<!-- ABA: NOVA OS -->
+<div class="tab-content block" id="novaOs">
+<section class="workspace-hero">
+<div><span class="eyebrow">Documento em edição</span><h1>Ordem de Serviço</h1><p>Preencha as informações por etapas. Você pode reunir várias O.S. no mesmo PDF.</p></div>
+<div class="workspace-status"><span id="osCountBadge">1 O.S. no arquivo</span><small id="workspaceSaveStatus">Salvamento automático ativo</small></div>
+</section>
 
-    <!-- MODAL: Progresso PDF -->
-    <div id="pdfProgressOverlay" class="hidden fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center px-4 backdrop-blur-md transition-opacity">
-        <div class="bg-gray-800 p-8 rounded-3xl max-w-sm w-full shadow-2xl border border-gray-700 text-center relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-full h-1 bg-blue-500"></div>
-            <div class="mb-6 mt-2">
-                <div class="loader mx-auto mb-5"></div>
-                <h3 class="text-xl font-bold text-white mb-2">A Gerar Documento PDF</h3>
-                <p id="pdfProgressText" class="text-sm text-blue-400 font-semibold h-5">A preparar ficheiros...</p>
-            </div>
-            <div class="w-full bg-gray-900 rounded-full h-4 mb-2 overflow-hidden shadow-inner border border-gray-700 relative">
-                <div id="pdfProgressBar" class="bg-blue-500 h-full rounded-full transition-all duration-200" style="width: 0%"></div>
-            </div>
-            <p id="pdfProgressPercent" class="text-right text-sm font-bold text-white mb-6">0%</p>
-            <div class="bg-gray-900/50 rounded-xl p-4 border border-gray-700">
-                <p class="text-xs text-gray-400 italic">⏳ Aguarde, não feche a aplicação.</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: Pré-visualização do PDF -->
-    <div id="modalPreviewPDF" class="hidden fixed inset-0 bg-gray-900/95 flex items-center justify-center z-[90] p-2 sm:p-4 backdrop-blur-sm">
-        <div class="bg-gray-100 rounded-2xl w-full max-w-5xl h-[95vh] flex flex-col shadow-2xl overflow-hidden relative border border-gray-700">
-            <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-white shrink-0 z-10 shadow-sm">
-                <h3 class="text-base font-bold text-gray-800">Visualização</h3>
-                <div class="flex gap-2">
-                    <a id="linkPreviewExt" target="_blank" class="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-blue-100 flex items-center gap-1 border border-blue-200">Download</a>
-                    <button onclick="fecharPreviewPDF()" class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-gray-900">Fechar</button>
-                </div>
-            </div>
-            <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center bg-gray-900 text-white rounded-full shadow-2xl px-2 py-1.5 z-20 gap-2 border border-gray-700">
-                <button onclick="zoomOutPdf()" class="w-10 h-10 flex items-center justify-center hover:bg-gray-700 rounded-full text-xl font-bold transition-all">−</button>
-                <span id="zoomText" class="text-xs font-bold w-12 text-center tracking-wider">100%</span>
-                <button onclick="zoomInPdf()" class="w-10 h-10 flex items-center justify-center hover:bg-gray-700 rounded-full text-xl font-bold transition-all">+</button>
-            </div>
-            <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-200 overflow-auto relative p-4 overscroll-contain">
-                <div id="pdfPagesWrapper" class="pdf-pages-wrapper pb-24 flex flex-col gap-4"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: PIN Segurança - Criar -->
-    <div id="modalCriarPin" class="hidden fixed inset-0 bg-gray-900/90 flex items-center justify-center z-[100] px-4 backdrop-blur-sm">
-        <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
-            <h3 class="text-2xl font-black mb-2 text-gray-900">Segurança</h3>
-            <p class="mb-6 text-sm text-gray-500 font-medium">Crie um PIN numérico (mín. 4 dígitos) para proteger o acesso aos dados dos clientes.</p>
-            <input type="password" id="inputNovoPin" inputmode="numeric" maxlength="12" autocomplete="new-password" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" placeholder="••••">
-            <button onclick="salvarNovoPin()" class="w-full py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 uppercase tracking-wider text-sm shadow-lg">Guardar PIN</button>
-            <button onclick="document.getElementById('modalCriarPin').classList.add('hidden')" class="w-full mt-3 py-3 text-gray-500 font-bold text-sm uppercase tracking-wider">Cancelar</button>
-        </div>
-    </div>
-
-    <!-- MODAL: PIN Segurança - Digitar -->
-    <div id="modalDigitarPin" class="hidden fixed inset-0 bg-gray-900/90 flex items-center justify-center z-[100] px-4 backdrop-blur-sm">
-        <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
-            <h3 class="text-2xl font-black mb-2 text-gray-900 flex items-center gap-2"><svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg> Acesso Restrito</h3>
-            <p class="mb-6 text-sm text-gray-500 font-medium">Digite o seu PIN para aceder ao Histórico.</p>
-            <input type="password" id="inputDigitarPin" inputmode="numeric" maxlength="12" autocomplete="current-password" class="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none text-center text-3xl tracking-widest mb-6 font-mono bg-gray-50" placeholder="••••">
-            <button onclick="validarPinAcesso()" class="w-full py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 uppercase tracking-wider text-sm shadow-lg">Desbloquear</button>
-            <button onclick="document.getElementById('modalDigitarPin').classList.add('hidden')" class="w-full mt-3 py-3 text-gray-500 font-bold text-sm uppercase tracking-wider">Cancelar</button>
-        </div>
-    </div>
-
-    <!-- MODAL: Exportar Backup -->
-    <div id="modalExportar" class="hidden fixed inset-0 bg-gray-900/90 flex items-center justify-center z-[100] px-4 backdrop-blur-sm">
-        <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
-            <h3 class="text-2xl font-black mb-2 text-gray-900">Salvar Backup</h3>
-            <p class="mb-6 text-sm text-gray-500 font-medium">Baixe um ficheiro com todas as OS e Horas.</p>
-            <div class="mb-6">
-                <div class="flex rounded-xl shadow-sm border-2 border-gray-200 overflow-hidden bg-gray-50 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 transition-all">
-                    <input type="text" id="inputNomeBackup" class="flex-1 w-full px-4 py-3 outline-none text-sm font-medium bg-transparent" placeholder="Ex: meu_backup">
-                    <span class="inline-flex items-center px-4 text-gray-400 text-sm border-l border-gray-200 font-mono font-bold">.json</span>
-                </div>
-            </div>
-            <div class="flex gap-3">
-                <button onclick="fecharModalExportar()" class="w-1/3 py-4 text-gray-500 font-bold text-sm uppercase tracking-wider bg-gray-100 rounded-xl hover:bg-gray-200">Cancelar</button>
-                <button onclick="confirmarExportacao()" class="w-2/3 py-4 bg-gray-900 text-white font-bold rounded-xl hover:bg-black uppercase tracking-wider text-sm shadow-lg">Baixar Ficheiro</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- BARRA DE NAVEGAÇÃO -->
-    <nav class="bg-gray-900 text-white shadow-lg sticky top-0 z-40">
-        <div class="max-w-5xl mx-auto px-4">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center gap-3">
-                    <div id="headerLogoContainer" class="hidden bg-white p-1 rounded-md shadow-sm">
-                        <img id="headerLogo" src="" alt="Logo" class="h-8 object-contain" />
-                    </div>
-                    <div class="flex flex-col">
-                        <span class="text-lg font-bold text-white tracking-tight leading-none">Multi-OS <span class="text-blue-400 font-black">PRO</span></span>
-                        <span class="text-[10px] text-gray-400 font-medium uppercase tracking-widest leading-tight">Enterprise</span>
-                    </div>
-                </div>
-                <!-- Botão Instalar App -->
-                <button onclick="acionarInstalacaoApp()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-xs font-semibold">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    Instalar App
-                </button>
-            </div>
-            <div class="flex overflow-x-auto hide-scrollbar border-t border-gray-800">
-                <button id="btnNavNovaOs" onclick="switchTab('novaOs')" class="nav-btn border-blue-500 text-white bg-gray-800/50 flex-1 flex justify-center items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 transition-all whitespace-nowrap">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                    Nova O.S.
-                </button>
-                <button id="btnNavHistorico" onclick="abrirAbaHistoricoSegura()" class="nav-btn border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 flex-1 flex justify-center items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 transition-all whitespace-nowrap">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    Histórico
-                </button>
-                <button id="btnNavBancoHoras" onclick="switchTab('bancoHoras')" class="nav-btn border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 flex-1 flex justify-center items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 transition-all whitespace-nowrap">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    Banco de Horas
-                </button>
-            </div>
-        </div>
-    </nav>
-
-    <div class="max-w-5xl mx-auto p-4 md:p-6 mt-2 mb-24">
-        
-        <!-- ABA: NOVA OS -->
-        <div id="novaOs" class="tab-content block">
-            <div id="configLogoCard" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 flex items-center justify-between gap-4">
-                <div>
-                    <h3 class="font-bold text-sm text-gray-800">Logótipo da Empresa</h3>
-                    <p class="text-xs text-gray-500">Defina ou troque o logótipo que aparecerá no PDF a qualquer momento.</p>
-                </div>
-                <label class="px-4 py-2 bg-blue-50 text-blue-700 font-semibold text-sm rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
+<div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 flex items-center justify-between gap-4 settings-card" id="configLogoCard">
+<div>
+<h3 class="font-bold text-sm text-gray-800">Identidade do PDF</h3>
+<p class="text-xs text-gray-500">Logotipo usado nas páginas geradas.</p>
+</div>
+<label class="px-4 py-2 bg-blue-50 text-blue-700 font-semibold text-sm rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
                     Fazer Upload
-                    <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="hidden">
-                </label>
-            </div>
-
-            <form id="osForm" class="space-y-6" onsubmit="event.preventDefault();">
-                <div class="flex justify-between items-center px-1">
-                    <h2 class="text-2xl font-black text-gray-900 tracking-tight">Relatório de Serviço</h2>
-                    <span id="autoSaveIndicator" class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100"></span>
-                </div>
-
-                <div id="listaOrdensServico" class="space-y-6"></div>
-
-                <button type="button" id="btnAddOs" onclick="adicionarBlocoOS()" class="w-full py-4 bg-white text-blue-600 border-2 border-dashed border-blue-300 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    <input accept="image/png, image/jpeg" class="hidden" onchange="lerLogotipo(event)" type="file"/>
+</label>
+</div>
+<form class="space-y-6" id="osForm" onsubmit="event.preventDefault();">
+<div class="flex justify-between items-center px-1">
+<h2 class="text-2xl font-black text-gray-900 tracking-tight">Preenchimento da O.S.</h2>
+<span class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100" id="autoSaveIndicator"></span>
+</div>
+<div class="space-y-6" id="listaOrdensServico"></div>
+<p class="multi-os-hint"><strong>Precisa de outra O.S. no mesmo arquivo?</strong> Adicione abaixo. As assinaturas continuam na conferência final.</p><button class="w-full py-4 bg-white text-blue-600 border-2 border-dashed border-blue-300 rounded-xl font-bold text-sm uppercase tracking-wider hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm flex items-center justify-center gap-2" id="btnAddOs" onclick="adicionarBlocoOS()" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                     Adicionar Nova O.S. ao Documento
                 </button>
-
-                <div class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden mt-8">
-                    <div class="bg-gray-900 p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <div>
-                            <h4 class="font-bold text-white text-lg">Conferência Final</h4>
-                            <p class="text-sm text-gray-400">Verifique o rascunho antes da assinatura do cliente.</p>
-                        </div>
-                        <button type="button" onclick="preVisualizarPDF()" id="btnPreview" class="w-full sm:w-auto px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg shadow border border-gray-600 transition-colors flex items-center justify-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+<div class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden mt-8">
+<div class="bg-gray-900 p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
+<div>
+<h4 class="font-bold text-white text-lg">Conferência Final</h4>
+<p class="text-sm text-gray-400">Verifique o rascunho antes da assinatura do cliente.</p>
+</div>
+<button class="w-full sm:w-auto px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg shadow border border-gray-600 transition-colors flex items-center justify-center gap-2" id="btnPreview" onclick="preVisualizarPDF()" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                             Ver Rascunho
                         </button>
-                    </div>
-
-                    <div class="p-5 space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-3">
-                                <label class="block text-sm font-bold text-gray-700 uppercase tracking-wide">Técnico Responsável</label>
-                                <input type="text" id="tecnico" placeholder="Seu nome" class="w-full border border-gray-300 p-3 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium">
-                                <div class="canvas-container w-full h-32 relative bg-white border border-gray-300 rounded-lg shadow-sm" onclick="abrirModalAssinatura('tecnico')">
-                                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
-                                        <span class="text-sm font-semibold text-gray-500">Tocar para Assinar</span>
-                                    </div>
-                                    <canvas id="canvasTecnico" class="sig-canvas pointer-events-none z-10 relative w-full h-full"></canvas>
-                                </div>
-                                <div class="flex justify-end"><button type="button" onclick="limparAssinatura(padTecnico, false)" class="text-gray-500 hover:text-red-600 text-xs font-bold uppercase tracking-wider transition-colors">Limpar</button></div>
-                            </div>
-
-                            <div id="secaoClienteContainer" class="space-y-3 relative">
-                                <div class="flex justify-between items-end">
-                                    <label class="block text-sm font-bold text-gray-700 uppercase tracking-wide">Assinatura do Cliente</label>
-                                    <span id="lockStatus" class="text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-1 rounded">Editável</span>
-                                </div>
-                                <input type="text" id="nomeClienteFinal" placeholder="Nome do Cliente" class="w-full border border-gray-300 p-3 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium">
-                                <div class="grid grid-cols-2 gap-3">
-                                    <input type="text" id="cargo" placeholder="Cargo" class="w-full border border-gray-300 p-2.5 rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all">
-                                    <input type="text" id="setor" placeholder="Setor" class="w-full border border-gray-300 p-2.5 rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all">
-                                </div>
-                                <div class="canvas-container w-full h-32 relative bg-white border border-gray-300 rounded-lg shadow-sm" onclick="abrirModalAssinatura('cliente')">
-                                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
-                                        <span class="text-sm font-semibold text-gray-500">Tocar para Assinar</span>
-                                    </div>
-                                    <canvas id="canvasCliente" class="sig-canvas pointer-events-none z-10 relative w-full h-full"></canvas>
-                                </div>
-                                <div class="flex justify-end"><button type="button" onclick="limparAssinatura(padCliente, true)" class="text-gray-500 hover:text-red-600 text-xs font-bold uppercase tracking-wider transition-colors">Limpar</button></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex flex-col sm:flex-row gap-4 pt-4">
-                    <button type="button" id="btnSalvarOs" onclick="salvarDocumento(false)" class="w-full sm:w-1/3 bg-gray-800 hover:bg-gray-900 text-white font-bold py-4 rounded-xl text-sm uppercase tracking-wide shadow-lg transition-colors flex items-center justify-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+</div>
+<div class="p-5 space-y-6">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="space-y-3">
+<label class="block text-sm font-bold text-gray-700 uppercase tracking-wide">Técnico Responsável</label>
+<input class="w-full border border-gray-300 p-3 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" id="tecnico" placeholder="Seu nome" type="text"/>
+<div class="canvas-container w-full h-32 relative bg-white border border-gray-300 rounded-lg shadow-sm" onclick="abrirModalAssinatura('tecnico')">
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
+<span class="text-sm font-semibold text-gray-500">Tocar para Assinar</span>
+</div>
+<canvas class="sig-canvas pointer-events-none z-10 relative w-full h-full" id="canvasTecnico"></canvas>
+</div>
+<div class="flex justify-end"><button class="text-gray-500 hover:text-red-600 text-xs font-bold uppercase tracking-wider transition-colors" onclick="limparAssinatura(padTecnico, false)" type="button">Limpar</button></div>
+</div>
+<div class="space-y-3 relative" id="secaoClienteContainer">
+<div class="flex justify-between items-end">
+<label class="block text-sm font-bold text-gray-700 uppercase tracking-wide">Assinatura do Cliente</label>
+<span class="text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-1 rounded" id="lockStatus">Editável</span>
+</div>
+<input class="w-full border border-gray-300 p-3 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium" id="nomeClienteFinal" placeholder="Nome do Cliente" type="text"/>
+<div class="grid grid-cols-2 gap-3">
+<input class="w-full border border-gray-300 p-2.5 rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all" id="cargo" placeholder="Cargo" type="text"/>
+<input class="w-full border border-gray-300 p-2.5 rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition-all" id="setor" placeholder="Setor" type="text"/>
+</div>
+<div class="canvas-container w-full h-32 relative bg-white border border-gray-300 rounded-lg shadow-sm" onclick="abrirModalAssinatura('cliente')">
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
+<span class="text-sm font-semibold text-gray-500">Tocar para Assinar</span>
+</div>
+<canvas class="sig-canvas pointer-events-none z-10 relative w-full h-full" id="canvasCliente"></canvas>
+</div>
+<div class="flex justify-end"><button class="text-gray-500 hover:text-red-600 text-xs font-bold uppercase tracking-wider transition-colors" onclick="limparAssinatura(padCliente, true)" type="button">Limpar</button></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col sm:flex-row gap-4 pt-4">
+<button class="w-full sm:w-1/3 bg-gray-800 hover:bg-gray-900 text-white font-bold py-4 rounded-xl text-sm uppercase tracking-wide shadow-lg transition-colors flex items-center justify-center gap-2" id="btnSalvarOs" onclick="salvarDocumento(false)" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                         Salvar O.S.
                     </button>
-                    <button type="button" id="btnGerarPdf" onclick="gerarPDFConsolidado()" class="w-full sm:w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl text-sm uppercase tracking-wide shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        <span id="btnTxt">Gerar PDF & Partilhar</span>
-                    </button>
-                </div>
-            </form>
-        </div>
-
-        <!-- ABA: HISTÓRICO -->
-        <div id="historico" class="tab-content hidden">
-            <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <h2 class="text-2xl font-black text-gray-900 tracking-tight">Histórico</h2>
-                <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                    <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="Buscar cliente..." class="w-full sm:w-48 px-4 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                    <button onclick="abrirModalExportar()" class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold shadow-sm hover:bg-gray-900 text-sm">Backup</button>
-                    <label class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-bold shadow-sm hover:bg-gray-300 text-sm cursor-pointer">
-                        Importar <input type="file" accept=".json" onchange="importarBackupJSON(event)" class="hidden">
-                    </label>
-                    <button onclick="limparTodoHistorico()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-bold shadow-sm hover:bg-red-700 text-sm">Apagar Tudo</button>
-                </div>
-            </div>
-            
-            <div class="mb-6 bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex justify-between items-center gap-4">
-                <div class="flex-1">
-                    <div class="flex justify-between text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                        <span>Armazenamento Dispositivo</span>
-                        <span id="storage-text">Calculando...</span>
-                    </div>
-                    <div class="w-full bg-gray-100 rounded-full h-2">
-                        <div id="storage-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="historicoList" class="space-y-4"></div>
-        </div>
-
-        <!-- ABA: BANCO DE HORAS -->
-        <div id="bancoHoras" class="tab-content hidden">
-            <h2 class="text-2xl font-black text-gray-900 tracking-tight mb-6">Gestão de Horas</h2>
-            
-            <div class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden mb-6">
-                <div class="p-5 border-b border-gray-100 bg-gray-50/50">
-                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Identificação do Técnico</label>
-                    <input type="text" id="bh_nome_tecnico" onchange="salvarNomeTecnicoBh()" placeholder="Nome completo" class="w-full sm:w-1/2 border border-gray-300 p-2.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500 font-medium">
-                </div>
-
-                <div class="p-5 space-y-5">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Data</label><input type="date" id="bh_data" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono"></div>
-                        <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Cliente / Empresa</label><input type="text" id="bh_cliente" placeholder="Onde foi o serviço?" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium"></div>
-                    </div>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Motivo / Atividade</label><input type="text" id="bh_motivo" placeholder="Ex: Preventiva fora de hora" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium"></div>
-                        <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Local / Obra</label><input type="text" id="bh_local" placeholder="Ex: Ibiúna - SP" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium"></div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Natureza do Registo</label>
-                            <div class="flex p-1 bg-gray-200/80 rounded-lg">
-                                <label class="flex-1 text-center cursor-pointer relative"><input type="radio" name="bh_tipo" id="bh_tipo_credito" checked class="peer sr-only"><div class="py-2.5 rounded-md text-sm font-bold text-gray-500 peer-checked:bg-blue-600 peer-checked:text-white transition-all">+ Crédito (Extra)</div></label>
-                                <label class="flex-1 text-center cursor-pointer relative"><input type="radio" name="bh_tipo" id="bh_tipo_debito" class="peer sr-only"><div class="py-2.5 rounded-md text-sm font-bold text-gray-500 peer-checked:bg-red-500 peer-checked:text-white transition-all">- Débito (Falta)</div></label>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Período de Desvio (Opcional p/ Horário)</label>
-                            <div class="flex items-center gap-3">
-                                <input type="time" id="bh_chegada" class="w-full border border-gray-300 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-center">
-                                <span class="text-gray-400 font-bold">às</span>
-                                <input type="time" id="bh_saida" class="w-full border border-gray-300 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-center">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                        <button onclick="adicionarRegistoBancoHoras()" class="py-4 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900 shadow-md transition-colors text-sm uppercase tracking-wide">
+<button class="w-full sm:w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl text-sm uppercase tracking-wide shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-2" id="btnGerarPdf" onclick="gerarPDFConsolidado()" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span id="btnTxt">Gerar PDF &amp; Partilhar</span>
+</button>
+</div>
+</form>
+</div>
+<!-- ABA: HISTÓRICO -->
+<div class="tab-content hidden" id="historico">
+<div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+<h2 class="text-2xl font-black text-gray-900 tracking-tight">Histórico</h2>
+<div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+<input class="w-full sm:w-48 px-4 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="Buscar cliente..." type="text"/>
+<button class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold shadow-sm hover:bg-gray-900 text-sm" onclick="abrirModalExportar()">Backup</button>
+<label class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-bold shadow-sm hover:bg-gray-300 text-sm cursor-pointer">
+                        Importar <input accept=".json" class="hidden" onchange="importarBackupJSON(event)" type="file"/>
+</label>
+<button class="px-4 py-2 bg-red-600 text-white rounded-lg font-bold shadow-sm hover:bg-red-700 text-sm" onclick="limparTodoHistorico()">Apagar Tudo</button>
+</div>
+</div>
+<div class="mb-6 bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex justify-between items-center gap-4">
+<div class="flex-1">
+<div class="flex justify-between text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+<span>Armazenamento Dispositivo</span>
+<span id="storage-text">Calculando...</span>
+</div>
+<div class="w-full bg-gray-100 rounded-full h-2">
+<div class="bg-blue-500 h-2 rounded-full transition-all duration-500" id="storage-bar" style="width: 0%"></div>
+</div>
+</div>
+</div>
+<div class="space-y-4" id="historicoList"></div>
+</div>
+<!-- ABA: BANCO DE HORAS -->
+<div class="tab-content hidden" id="bancoHoras">
+<h2 class="text-2xl font-black text-gray-900 tracking-tight mb-6">Gestão de Horas</h2>
+<div class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden mb-6">
+<div class="p-5 border-b border-gray-100 bg-gray-50/50">
+<label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Identificação do Técnico</label>
+<input class="w-full sm:w-1/2 border border-gray-300 p-2.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500 font-medium" id="bh_nome_tecnico" onchange="salvarNomeTecnicoBh()" placeholder="Nome completo" type="text"/>
+</div>
+<div class="p-5 space-y-5">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+<div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Data</label><input class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono" id="bh_data" type="date"/></div>
+<div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Cliente / Empresa</label><input class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium" id="bh_cliente" placeholder="Onde foi o serviço?" type="text"/></div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+<div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Motivo / Atividade</label><input class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium" id="bh_motivo" placeholder="Ex: Preventiva fora de hora" type="text"/></div>
+<div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Local / Obra</label><input class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium" id="bh_local" placeholder="Ex: Ibiúna - SP" type="text"/></div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
+<div>
+<label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Natureza do Registo</label>
+<div class="flex p-1 bg-gray-200/80 rounded-lg">
+<label class="flex-1 text-center cursor-pointer relative"><input checked="" class="peer sr-only" id="bh_tipo_credito" name="bh_tipo" type="radio"/><div class="py-2.5 rounded-md text-sm font-bold text-gray-500 peer-checked:bg-blue-600 peer-checked:text-white transition-all">+ Crédito (Extra)</div></label>
+<label class="flex-1 text-center cursor-pointer relative"><input class="peer sr-only" id="bh_tipo_debito" name="bh_tipo" type="radio"/><div class="py-2.5 rounded-md text-sm font-bold text-gray-500 peer-checked:bg-red-500 peer-checked:text-white transition-all">- Débito (Falta)</div></label>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Período de Desvio (Opcional p/ Horário)</label>
+<div class="flex items-center gap-3">
+<input class="w-full border border-gray-300 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-center" id="bh_chegada" type="time"/>
+<span class="text-gray-400 font-bold">às</span>
+<input class="w-full border border-gray-300 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-center" id="bh_saida" type="time"/>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+<button class="py-4 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900 shadow-md transition-colors text-sm uppercase tracking-wide" onclick="adicionarRegistoBancoHoras()">
                             Adicionar por Horário
                         </button>
-                        <button onclick="adicionarDiaCompletoBancoHoras()" class="py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+<button class="py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2" onclick="adicionarDiaCompletoBancoHoras()">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                             Adicionar Dia Completo (Auto)
                         </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex justify-between items-center mb-4 px-1">
-                <div class="flex items-center gap-3">
-                    <input type="month" id="bh_mes_inicio" onchange="renderTabelaBancoHoras()" class="border-none bg-white shadow-sm rounded-lg p-2 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                    <span class="text-gray-400 font-medium">até</span>
-                    <input type="month" id="bh_mes_fim" onchange="renderTabelaBancoHoras()" class="border-none bg-white shadow-sm rounded-lg p-2 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-                <button onclick="limparTabelaHoras()" class="text-red-500 hover:text-red-700 p-2 bg-white rounded-lg shadow-sm border border-red-100 transition-colors" title="Apagar Período">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                </button>
-            </div>
-            
-            <div class="overflow-x-auto bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
-                <table class="w-full text-left border-collapse min-w-[650px]">
-                    <thead>
-                        <tr class="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider font-bold">
-                            <th class="p-4">Data</th>
-                            <th class="p-4">Registo</th>
-                            <th class="p-4 text-center">Horário</th>
-                            <th class="p-4 text-right">Saldo</th>
-                            <th class="p-4 text-center w-16">Ação</th>
-                        </tr>
-                    </thead>
-                    <tbody id="bh_tabela_registos" class="divide-y divide-gray-100 text-sm"></tbody>
-                </table>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div class="bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center shadow-lg">
-                    <span class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Saldo do Filtro</span>
-                    <div class="flex items-baseline gap-3">
-                        <span id="bh_periodo_horas" class="text-4xl font-black font-mono text-white tracking-tight">00:00</span>
-                        <span id="bh_status_periodo" class="px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest">NEUTRO</span>
-                    </div>
-                </div>
-
-                <div id="card_global_glow" class="bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center border border-gray-800 shadow-lg transition-all duration-500">
-                    <span class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Saldo Global Acumulado</span>
-                    <div class="flex items-baseline gap-3">
-                        <span id="bh_total_horas" class="text-4xl font-black font-mono text-white tracking-tight">00:00</span>
-                        <span id="bh_status_saldo" class="px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest">NEUTRO</span>
-                    </div>
-                </div>
-            </div>
-
-            <button onclick="gerarPdfBancoHoras()" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-2 uppercase tracking-wide text-sm">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+</div>
+</div>
+</div>
+<div class="flex justify-between items-center mb-4 px-1">
+<div class="flex items-center gap-3">
+<input class="border-none bg-white shadow-sm rounded-lg p-2 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500" id="bh_mes_inicio" onchange="renderTabelaBancoHoras()" type="month"/>
+<span class="text-gray-400 font-medium">até</span>
+<input class="border-none bg-white shadow-sm rounded-lg p-2 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500" id="bh_mes_fim" onchange="renderTabelaBancoHoras()" type="month"/>
+</div>
+<button class="text-red-500 hover:text-red-700 p-2 bg-white rounded-lg shadow-sm border border-red-100 transition-colors" onclick="limparTabelaHoras()" title="Apagar Período">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+<div class="overflow-x-auto bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
+<table class="w-full text-left border-collapse min-w-[650px]">
+<thead>
+<tr class="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider font-bold">
+<th class="p-4">Data</th>
+<th class="p-4">Registo</th>
+<th class="p-4 text-center">Horário</th>
+<th class="p-4 text-right">Saldo</th>
+<th class="p-4 text-center w-16">Ação</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-gray-100 text-sm" id="bh_tabela_registos"></tbody>
+</table>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+<div class="bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center shadow-lg">
+<span class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Saldo do Filtro</span>
+<div class="flex items-baseline gap-3">
+<span class="text-4xl font-black font-mono text-white tracking-tight" id="bh_periodo_horas">00:00</span>
+<span class="px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest" id="bh_status_periodo">NEUTRO</span>
+</div>
+</div>
+<div class="bg-gray-900 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center border border-gray-800 shadow-lg transition-all duration-500" id="card_global_glow">
+<span class="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Saldo Global Acumulado</span>
+<div class="flex items-baseline gap-3">
+<span class="text-4xl font-black font-mono text-white tracking-tight" id="bh_total_horas">00:00</span>
+<span class="px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest" id="bh_status_saldo">NEUTRO</span>
+</div>
+</div>
+</div>
+<button class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-2 uppercase tracking-wide text-sm" onclick="gerarPdfBancoHoras()">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                 Gerar Folha de Ponto (PDF)
             </button>
-        </div>
-
-    </div>
-
-    <!-- CERTIFIQUE-SE DE CARREGAR O BANCO DE PEÇAS AQUI -->
-    <script src="bancoPecas.js?v=42"></script>
-    <script src="app.js?v=42"></script>
+</div>
+</div>
+<!-- CERTIFIQUE-SE DE CARREGAR O BANCO DE PEÇAS AQUI -->
+<script src="bancoPecas.js?v=50"></script>
+<script src="app.js?v=50"></script>
 </body>
 </html>
