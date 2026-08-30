@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v59';
+const CACHE_NAME = 'multios-pro-v60';
 
 // Arquivos indispensáveis para abrir e usar o núcleo do app offline.
 const ASSETS_CRITICOS = [
@@ -106,7 +106,7 @@ self.addEventListener('fetch', event => {
 
         return networkResponse;
       } catch (error) {
-        // ignoreSearch permite que /index.html?v=55 use /index.html do pré-cache.
+        // ignoreSearch permite que /index.html?v=60 use /index.html do pré-cache.
         const cachedRequest = await caches.match(request, { ignoreSearch: true });
         if (cachedRequest) return cachedRequest;
 
@@ -127,7 +127,7 @@ self.addEventListener('fetch', event => {
   if (!podeUsarRuntimeCache) return;
 
   event.respondWith((async () => {
-    // Nos arquivos locais, ignora apenas a query de versão (?v=55).
+    // Nos arquivos locais, ignora apenas a query de versão (?v=60).
     const cachedResponse = await caches.match(request, {
       ignoreSearch: mesmaOrigem
     });
