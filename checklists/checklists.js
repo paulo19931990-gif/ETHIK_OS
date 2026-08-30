@@ -73,13 +73,12 @@ window.MULTIOS_CHECKLISTS = {
         "fontSize": 10
       },
       {
-        "source": "tecnicoComRotulo",
+        "source": "tecnico",
         "page": 1,
-        "x": 347,
-        "top": 311.7,
-        "width": 196,
-        "fontSize": 10,
-        "clear": true
+        "x": 350,
+        "top": 308,
+        "width": 138,
+        "fontSize": 10
       }
     ],
     "grupos": [
@@ -425,40 +424,36 @@ window.MULTIOS_CHECKLISTS = {
         "clear": true
       },
       {
-        "source": "acompanhadoComRotulo",
+        "source": "nomeClienteFinal",
         "page": 0,
-        "x": 42,
-        "top": 659.3,
-        "width": 240,
-        "fontSize": 10,
-        "clear": true
+        "x": 115,
+        "top": 655,
+        "width": 165,
+        "fontSize": 10
       },
       {
-        "source": "cargoComRotulo",
+        "source": "cargo",
         "page": 0,
-        "x": 295,
-        "top": 659.3,
-        "width": 250,
-        "fontSize": 10,
-        "clear": true
+        "x": 350,
+        "top": 655,
+        "width": 115,
+        "fontSize": 10
       },
       {
-        "source": "dataComRotulo",
+        "source": "dataChecklist",
         "page": 0,
-        "x": 42,
-        "top": 684,
-        "width": 240,
-        "fontSize": 10,
-        "clear": true
+        "x": 74,
+        "top": 680,
+        "width": 115,
+        "fontSize": 10
       },
       {
-        "source": "tecnicoComRotulo",
+        "source": "tecnico",
         "page": 0,
-        "x": 295,
-        "top": 684,
-        "width": 250,
-        "fontSize": 10,
-        "clear": true
+        "x": 350,
+        "top": 680,
+        "width": 190,
+        "fontSize": 10
       }
     ],
     "grupos": [
@@ -720,22 +715,20 @@ window.MULTIOS_CHECKLISTS = {
         "fontSize": 10
       },
       {
-        "source": "dataComRotulo",
+        "source": "dataChecklist",
         "page": 1,
-        "x": 38,
-        "top": 118.5,
-        "width": 190,
-        "fontSize": 10,
-        "clear": true
+        "x": 70,
+        "top": 121,
+        "width": 150,
+        "fontSize": 10
       },
       {
-        "source": "tecnicoComRotulo",
+        "source": "tecnico",
         "page": 1,
-        "x": 332,
-        "top": 118.5,
-        "width": 216,
-        "fontSize": 10,
-        "clear": true
+        "x": 360,
+        "top": 121,
+        "width": 130,
+        "fontSize": 10
       }
     ],
     "grupos": [
@@ -969,40 +962,36 @@ window.MULTIOS_CHECKLISTS = {
         "clear": true
       },
       {
-        "source": "acompanhadoComRotulo",
+        "source": "nomeClienteFinal",
         "page": 0,
-        "x": 42,
-        "top": 490.5,
-        "width": 240,
-        "fontSize": 10,
-        "clear": true
+        "x": 118,
+        "top": 486.5,
+        "width": 165,
+        "fontSize": 10
       },
       {
-        "source": "cargoComRotulo",
+        "source": "cargo",
         "page": 0,
-        "x": 295,
-        "top": 490.5,
-        "width": 250,
-        "fontSize": 10,
-        "clear": true
+        "x": 350,
+        "top": 486.5,
+        "width": 115,
+        "fontSize": 10
       },
       {
-        "source": "dataComRotulo",
+        "source": "dataChecklist",
         "page": 0,
-        "x": 42,
-        "top": 515.2,
-        "width": 240,
-        "fontSize": 10,
-        "clear": true
+        "x": 74,
+        "top": 511.2,
+        "width": 115,
+        "fontSize": 10
       },
       {
-        "source": "tecnicoComRotulo",
+        "source": "tecnico",
         "page": 0,
-        "x": 295,
-        "top": 515.2,
-        "width": 250,
-        "fontSize": 10,
-        "clear": true
+        "x": 350,
+        "top": 511.2,
+        "width": 190,
+        "fontSize": 10
       }
     ],
     "grupos": [
@@ -1178,40 +1167,36 @@ window.MULTIOS_CHECKLISTS = {
         "clear": true
       },
       {
-        "source": "acompanhadoComRotulo",
+        "source": "nomeClienteFinal",
         "page": 0,
-        "x": 42,
-        "top": 646.7,
-        "width": 240,
-        "fontSize": 10,
-        "clear": true
+        "x": 118,
+        "top": 642.7,
+        "width": 165,
+        "fontSize": 10
       },
       {
-        "source": "cargoComRotulo",
+        "source": "cargo",
         "page": 0,
-        "x": 295,
-        "top": 646.7,
-        "width": 250,
-        "fontSize": 10,
-        "clear": true
+        "x": 350,
+        "top": 642.7,
+        "width": 115,
+        "fontSize": 10
       },
       {
-        "source": "dataComRotulo",
+        "source": "dataChecklist",
         "page": 0,
-        "x": 42,
-        "top": 671.5,
-        "width": 240,
-        "fontSize": 10,
-        "clear": true
+        "x": 74,
+        "top": 667.5,
+        "width": 115,
+        "fontSize": 10
       },
       {
-        "source": "tecnicoComRotulo",
+        "source": "tecnico",
         "page": 0,
-        "x": 295,
-        "top": 671.5,
-        "width": 250,
-        "fontSize": 10,
-        "clear": true
+        "x": 350,
+        "top": 667.5,
+        "width": 190,
+        "fontSize": 10
       }
     ],
     "grupos": [
