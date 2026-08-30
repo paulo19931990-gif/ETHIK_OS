@@ -284,7 +284,8 @@ function resumoProgressoChecklist(checklist) {
     let completos = 0, comNok = 0;
     modelo.grupos.forEach(grupo => grupo.itens.forEach(item => {
         const r = checklist.respostas?.[item.key] || {};
-        if (r.verificado && r.substituido) completos++;
+        // v60: somente VERIFICADO é obrigatório. SUBSTITUÍDO é opcional.
+        if (r.verificado) completos++;
         if (r.verificado === 'NOK' || r.substituido === 'NOK') comNok++;
     }));
     const total = totalItensChecklist(modelo);
@@ -337,7 +338,7 @@ function alterarModeloChecklist(osId) {
         const modelo = obterModeloChecklist(novoModeloId);
         if (!modelo) { select.value = anteriorId; return; }
         const respostas = {};
-        modelo.grupos.forEach(grupo => grupo.itens.forEach(item => { respostas[item.key] = { verificado: '', substituido: '', obs: '' }; }));
+        modelo.grupos.forEach(grupo => grupo.itens.forEach(item => { respostas[item.key] = { verificado: 'OK', substituido: '', obs: '' }; }));
         const extras = {};
         (modelo.extrasInputs || []).forEach(c => { extras[c.key] = ''; });
         gravarChecklistNoCampo(osId, { modeloId: novoModeloId, respostas, extras });
@@ -408,7 +409,7 @@ function abrirChecklist(osId) {
                 <div class="font-bold text-gray-900 text-sm mb-3">${escapeHTML(item.label)}</div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Verificado</div><div class="flex gap-2 flex-wrap">${botoesStatusChecklist('verificado', r.verificado)}</div><input type="hidden" data-check-field="verificado" value="${escapeHTML(r.verificado)}"></div>
-                    <div><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Substituído</div><div class="flex gap-2 flex-wrap">${botoesStatusChecklist('substituido', r.substituido)}</div><input type="hidden" data-check-field="substituido" value="${escapeHTML(r.substituido)}"></div>
+                    <div><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Substituído <span class="font-medium normal-case tracking-normal">(opcional)</span></div><div class="flex gap-2 flex-wrap">${botoesStatusChecklist('substituido', r.substituido)}</div><input type="hidden" data-check-field="substituido" value="${escapeHTML(r.substituido)}"></div>
                 </div>
                 <label class="block mt-3"><span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Observação</span><input type="text" maxlength="300" data-check-obs value="${escapeHTML(r.obs || '')}" placeholder="Opcional" class="mt-1 w-full border border-gray-200 bg-gray-50 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"></label>
             </div>`;
@@ -481,7 +482,7 @@ function validarChecklistsAntesPDF() {
         selecionados++;
         pendentes += resumoProgressoChecklist(checklist).pendentes;
     });
-    if (selecionados > 0 && pendentes > 0) return confirm(`Existem ${pendentes} item(ns) de checklist sem preencher completamente. Deseja gerar o PDF mesmo assim?`);
+    if (selecionados > 0 && pendentes > 0) return confirm(`Existem ${pendentes} item(ns) do campo VERIFICADO sem preencher. Deseja gerar o PDF mesmo assim?`);
     return true;
 }
 
