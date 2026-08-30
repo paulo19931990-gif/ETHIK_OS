@@ -402,17 +402,15 @@ window.MULTIOS_CHECKLISTS = {
         "x": 145,
         "top": 143.2,
         "width": 48,
-        "fontSize": 10,
-        "clear": true
+        "fontSize": 10
       },
       {
         "source": "serie",
         "page": 0,
-        "x": 224,
+        "x": 238,
         "top": 143.2,
         "width": 161,
-        "fontSize": 10,
-        "clear": true
+        "fontSize": 10
       },
       {
         "source": "osNum",
@@ -420,8 +418,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 420,
         "top": 143.2,
         "width": 57,
-        "fontSize": 10,
-        "clear": true
+        "fontSize": 10
       },
       {
         "source": "nomeClienteFinal",
@@ -451,7 +448,7 @@ window.MULTIOS_CHECKLISTS = {
         "source": "tecnico",
         "page": 0,
         "x": 350,
-        "top": 682.4,
+        "top": 676.2,
         "width": 190,
         "fontSize": 10
       }
@@ -464,25 +461,25 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i1",
             "label": "Teste das funções",
             "page": 0,
-            "top": 182.4
+            "top": 178.6
           },
           {
             "key": "i2",
             "label": "Testes de sensibilidade do visor e/ou teclas",
             "page": 0,
-            "top": 197.1
+            "top": 193.1
           },
           {
             "key": "i3",
             "label": "Verificação dos parâmetros de configuração",
             "page": 0,
-            "top": 211.7
+            "top": 207.8
           },
           {
             "key": "i4",
             "label": "Verificação da saída de controle e retransmissão",
             "page": 0,
-            "top": 226.4
+            "top": 222.6
           }
         ]
       },
@@ -493,31 +490,31 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i5",
             "label": "Sistema mecânico horizontal",
             "page": 0,
-            "top": 255.7
+            "top": 251.8
           },
           {
             "key": "i6",
             "label": "Sistema mecânico vertical",
             "page": 0,
-            "top": 270.3
+            "top": 266.3
           },
           {
             "key": "i7",
             "label": "Rolamentos",
             "page": 0,
-            "top": 285
+            "top": 281.1
           },
           {
             "key": "i8",
             "label": "Polias",
             "page": 0,
-            "top": 299.6
+            "top": 295.8
           },
           {
             "key": "i9",
             "label": "Correias",
             "page": 0,
-            "top": 314.3
+            "top": 310.4
           }
         ]
       },
@@ -528,43 +525,43 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i10",
             "label": "Motor de passo",
             "page": 0,
-            "top": 343.6
+            "top": 339.7
           },
           {
             "key": "i11",
             "label": "Saídas placa fonte",
             "page": 0,
-            "top": 358.2
+            "top": 354.3
           },
           {
             "key": "i12",
             "label": "Saídas transformador",
             "page": 0,
-            "top": 372.9
+            "top": 369.1
           },
           {
             "key": "i13",
             "label": "Célula de carga",
             "page": 0,
-            "top": 387.5
+            "top": 383.8
           },
           {
             "key": "i14",
             "label": "Cabos de comunicação",
             "page": 0,
-            "top": 402.2
+            "top": 398.3
           },
           {
             "key": "i15",
             "label": "Fiação",
             "page": 0,
-            "top": 416.8
+            "top": 412.8
           },
           {
             "key": "i16",
             "label": "Conectores",
             "page": 0,
-            "top": 431.5
+            "top": 427.6
           }
         ]
       },
@@ -575,13 +572,13 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i17",
             "label": "Limpeza parte interna",
             "page": 0,
-            "top": 460.8
+            "top": 456.9
           },
           {
             "key": "i18",
             "label": "Limpeza parte externa",
             "page": 0,
-            "top": 475.4
+            "top": 471.5
           }
         ]
       },
@@ -592,31 +589,31 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i19",
             "label": "Realizou auto zero corretamente?",
             "page": 0,
-            "top": 504.7
+            "top": 500.8
           },
           {
             "key": "i20",
             "label": "Leituras estão de acordo?",
             "page": 0,
-            "top": 519.4
+            "top": 515.6
           },
           {
             "key": "i21",
             "label": "Parâmetros de fábrica?",
             "page": 0,
-            "top": 534
+            "top": 530.3
           },
           {
             "key": "i22",
             "label": "Valor AD está de acordo?",
             "page": 0,
-            "top": 548.7
+            "top": 544.8
           },
           {
             "key": "i23",
             "label": "Ruídos anormais?",
             "page": 0,
-            "top": 563.3
+            "top": 559.3
           }
         ]
       },
@@ -627,25 +624,25 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i24",
             "label": "Parte interna",
             "page": 0,
-            "top": 607.3
+            "top": 603.4
           },
           {
             "key": "i25",
             "label": "Parte externa",
             "page": 0,
-            "top": 621.9
+            "top": 617.9
           },
           {
             "key": "i26",
             "label": "Dreno",
             "page": 0,
-            "top": 636.6
+            "top": 632.6
           },
           {
             "key": "i27",
             "label": "Vidros",
             "page": 0,
-            "top": 651.2
+            "top": 647.4
           }
         ]
       }
@@ -735,61 +732,61 @@ window.MULTIOS_CHECKLISTS = {
       {
         "titulo": "Sistema de Circulação de Ar",
         "itens": [
-          {"key":"i1","label":"Funcionamento","page":0,"top":234.2},
-          {"key":"i2","label":"Limpeza","page":0,"top":249.0},
-          {"key":"i3","label":"Lubrificação","page":0,"top":263.6}
+          {"key":"i1","label":"Funcionamento","page":0,"top":228.1},
+          {"key":"i2","label":"Limpeza","page":0,"top":242.8},
+          {"key":"i3","label":"Lubrificação","page":0,"top":257.4}
         ]
       },
       {
         "titulo": "Sistema de Refrigeração",
         "itens": [
-          {"key":"i4","label":"Limpeza do condensador","page":0,"top":292.9},
-          {"key":"i5","label":"Micromotor c/ hélice","page":0,"top":307.5},
-          {"key":"i6","label":"Corrente compressor","page":0,"top":322.2},
-          {"key":"i7","label":"Eficiência","page":0,"top":336.8}
+          {"key":"i4","label":"Limpeza do condensador","page":0,"top":286.7},
+          {"key":"i5","label":"Micromotor c/ hélice","page":0,"top":301.3},
+          {"key":"i6","label":"Corrente compressor","page":0,"top":316.0},
+          {"key":"i7","label":"Eficiência","page":0,"top":330.7}
         ]
       },
       {
         "titulo": "Painel de Controle",
         "itens": [
-          {"key":"i8","label":"Testes das funções","page":0,"top":366.1},
-          {"key":"i9","label":"Testes de sensibilidade do visor ou teclas","page":0,"top":380.7},
-          {"key":"i10","label":"Verificação dos parâmetros de configuração","page":0,"top":395.4},
-          {"key":"i11","label":"Verificação da saída de controle e retransmissão","page":0,"top":410.0}
+          {"key":"i8","label":"Testes das funções","page":0,"top":359.9},
+          {"key":"i9","label":"Testes de sensibilidade do visor ou teclas","page":0,"top":374.6},
+          {"key":"i10","label":"Verificação dos parâmetros de configuração","page":0,"top":389.2},
+          {"key":"i11","label":"Verificação da saída de controle e retransmissão","page":0,"top":403.9}
         ]
       },
       {
         "titulo": "Sensores",
         "itens": [
-          {"key":"i12","label":"Verificação da integridade","page":0,"top":439.4},
-          {"key":"i13","label":"Substituição dos terminais","page":0,"top":454.1},
-          {"key":"i14","label":"Comparação com sensor calibrado","page":0,"top":468.7}
+          {"key":"i12","label":"Verificação da integridade","page":0,"top":433.3},
+          {"key":"i13","label":"Substituição dos terminais","page":0,"top":447.8},
+          {"key":"i14","label":"Comparação com sensor calibrado","page":0,"top":462.5}
         ]
       },
       {
         "titulo": "Vedações",
         "itens": [
-          {"key":"i15","label":"Integridade","page":0,"top":498.0},
-          {"key":"i16","label":"Regulagem da porta","page":0,"top":512.6},
-          {"key":"i17","label":"Dobradiças","page":0,"top":527.3},
-          {"key":"i18","label":"Maçanetas","page":0,"top":541.9}
+          {"key":"i15","label":"Integridade","page":0,"top":491.8},
+          {"key":"i16","label":"Regulagem da porta","page":0,"top":506.4},
+          {"key":"i17","label":"Dobradiças","page":0,"top":521.1},
+          {"key":"i18","label":"Maçanetas","page":0,"top":535.7}
         ]
       },
       {
         "titulo": "Limpeza",
         "itens": [
-          {"key":"i19","label":"Parte interna","page":0,"top":571.2},
-          {"key":"i20","label":"Parte externa","page":0,"top":585.8},
-          {"key":"i21","label":"Dreno","page":0,"top":600.6},
-          {"key":"i22","label":"Vidros","page":0,"top":615.2}
+          {"key":"i19","label":"Parte interna","page":0,"top":565.0},
+          {"key":"i20","label":"Parte externa","page":0,"top":579.7},
+          {"key":"i21","label":"Dreno","page":0,"top":594.4},
+          {"key":"i22","label":"Vidros","page":0,"top":609.0}
         ]
       },
       {
         "titulo": "Parte Elétrica",
         "itens": [
-          {"key":"i23","label":"Integridade dos fios","page":0,"top":644.5},
-          {"key":"i24","label":"Conexões","page":0,"top":659.1},
-          {"key":"i25","label":"Componentes","page":0,"top":668.4}
+          {"key":"i23","label":"Integridade dos fios","page":0,"top":638.3},
+          {"key":"i24","label":"Conexões","page":0,"top":652.9},
+          {"key":"i25","label":"Componentes","page":0,"top":667.6}
         ]
       }
     ]
@@ -815,8 +812,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 166,
         "top": 143.2,
         "width": 53,
-        "fontSize": 10,
-        "clear": true
+        "fontSize": 10
       },
       {
         "source": "serie",
@@ -824,8 +820,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 247,
         "top": 143.2,
         "width": 165,
-        "fontSize": 10,
-        "clear": true
+        "fontSize": 10
       },
       {
         "source": "osNum",
@@ -833,8 +828,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 442,
         "top": 143.2,
         "width": 60,
-        "fontSize": 10,
-        "clear": true
+        "fontSize": 10
       },
       {
         "source": "nomeClienteFinal",
@@ -848,7 +842,7 @@ window.MULTIOS_CHECKLISTS = {
         "source": "cargo",
         "page": 0,
         "x": 350,
-        "top": 486.5,
+        "top": 491.2,
         "width": 115,
         "fontSize": 10
       },
@@ -1020,17 +1014,15 @@ window.MULTIOS_CHECKLISTS = {
         "x": 186,
         "top": 143.2,
         "width": 55,
-        "fontSize": 10,
-        "clear": true
+        "fontSize": 10
       },
       {
         "source": "serie",
         "page": 0,
-        "x": 269,
+        "x": 278,
         "top": 143.2,
         "width": 165,
-        "fontSize": 10,
-        "clear": true
+        "fontSize": 10
       },
       {
         "source": "osNum",
@@ -1038,8 +1030,7 @@ window.MULTIOS_CHECKLISTS = {
         "x": 464,
         "top": 143.2,
         "width": 58,
-        "fontSize": 10,
-        "clear": true
+        "fontSize": 10
       },
       {
         "source": "nomeClienteFinal",
@@ -1053,7 +1044,7 @@ window.MULTIOS_CHECKLISTS = {
         "source": "cargo",
         "page": 0,
         "x": 350,
-        "top": 642.7,
+        "top": 647.5,
         "width": 115,
         "fontSize": 10
       },
