@@ -51,17 +51,17 @@ window.MULTIOS_CHECKLISTS = {
       {
         "source": "nomeClienteFinal",
         "page": 1,
-        "x": 106,
+        "x": 116,
         "top": 290.2,
-        "width": 290,
+        "width": 275,
         "fontSize": 10
       },
       {
         "source": "cargo",
         "page": 1,
-        "x": 462,
-        "top": 287.8,
-        "width": 82,
+        "x": 442,
+        "top": 290.2,
+        "width": 105,
         "fontSize": 10
       },
       {
@@ -101,31 +101,31 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i3",
             "label": "Teste sistema de proteção da resistência",
             "page": 0,
-            "top": 266.1
+            "top": 261.1
           },
           {
             "key": "i4",
             "label": "Verificação das mangueiras",
             "page": 0,
-            "top": 280.7
+            "top": 275.9
           },
           {
             "key": "i5",
             "label": "Válvula de entrada d'água",
             "page": 0,
-            "top": 295.4
+            "top": 290.5
           },
           {
             "key": "i6",
             "label": "Bico aspersor",
             "page": 0,
-            "top": 310
+            "top": 305.1
           },
           {
             "key": "i7",
             "label": "Tubulação / mangueiras",
             "page": 0,
-            "top": 324.7
+            "top": 319.6
           }
         ]
       },
@@ -136,25 +136,25 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i8",
             "label": "Verificação dos filtros",
             "page": 0,
-            "top": 354
+            "top": 349.0
           },
           {
             "key": "i9",
             "label": "Verificação do funcionamento",
             "page": 0,
-            "top": 368.6
+            "top": 363.7
           },
           {
             "key": "i10",
             "label": "Vazamentos",
             "page": 0,
-            "top": 383.3
+            "top": 378.3
           },
           {
             "key": "i11",
             "label": "Verificação da vazão",
             "page": 0,
-            "top": 397.9
+            "top": 392.9
           }
         ]
       },
@@ -165,25 +165,25 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i12",
             "label": "Funcionamento",
             "page": 0,
-            "top": 427.2
+            "top": 422.2
           },
           {
             "key": "i13",
             "label": "Limpeza",
             "page": 0,
-            "top": 441.9
+            "top": 436.8
           },
           {
             "key": "i14",
             "label": "Lubrificação",
             "page": 0,
-            "top": 456.5
+            "top": 451.6
           },
           {
             "key": "i15",
             "label": "Integridade",
             "page": 0,
-            "top": 471.2
+            "top": 466.2
           }
         ]
       },
@@ -194,31 +194,31 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i16",
             "label": "Limpeza condensador",
             "page": 0,
-            "top": 500.5
+            "top": 495.5
           },
           {
             "key": "i17",
             "label": "Microventilador",
             "page": 0,
-            "top": 515.1
+            "top": 510.3
           },
           {
             "key": "i18",
             "label": "Pressão do gás",
             "page": 0,
-            "top": 529.8
+            "top": 524.8
           },
           {
             "key": "i19",
             "label": "Corrente compressor",
             "page": 0,
-            "top": 544.4
+            "top": 539.4
           },
           {
             "key": "i20",
             "label": "Eficiência",
             "page": 0,
-            "top": 559.1
+            "top": 554.2
           }
         ]
       },
@@ -229,25 +229,25 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i21",
             "label": "Funcionamento",
             "page": 0,
-            "top": 588.4
+            "top": 583.3
           },
           {
             "key": "i22",
             "label": "Configuração",
             "page": 0,
-            "top": 603
+            "top": 598.1
           },
           {
             "key": "i23",
             "label": "Sensibilidade e funcionamento teclas",
             "page": 0,
-            "top": 617.7
+            "top": 612.7
           },
           {
             "key": "i24",
             "label": "Terminais",
             "page": 0,
-            "top": 632.3
+            "top": 627.3
           }
         ]
       },
@@ -258,19 +258,19 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i25",
             "label": "Integridade",
             "page": 0,
-            "top": 661.6
+            "top": 656.8
           },
           {
             "key": "i26",
             "label": "Terminais",
             "page": 0,
-            "top": 676.3
+            "top": 671.4
           },
           {
             "key": "i27",
             "label": "Desvios",
             "page": 0,
-            "top": 690.9
+            "top": 685.9
           }
         ]
       },
@@ -281,25 +281,25 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i28",
             "label": "Integridade",
             "page": 0,
-            "top": 720.2
+            "top": 715.3
           },
           {
             "key": "i29",
             "label": "Regulagem da porta",
             "page": 0,
-            "top": 734.9
+            "top": 729.9
           },
           {
             "key": "i30",
             "label": "Dobradiças",
             "page": 0,
-            "top": 749.5
+            "top": 744.6
           },
           {
             "key": "i31",
             "label": "Maçanetas",
             "page": 0,
-            "top": 764.2
+            "top": 759.2
           }
         ]
       },
@@ -310,25 +310,25 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i32",
             "label": "Parte interna",
             "page": 0,
-            "top": 788.0
+            "top": 788.5
           },
           {
             "key": "i33",
             "label": "Parte externa",
             "page": 1,
-            "top": 131.9
+            "top": 134.1
           },
           {
             "key": "i34",
             "label": "Dreno",
             "page": 1,
-            "top": 146.5
+            "top": 148.6
           },
           {
             "key": "i35",
             "label": "Vidros",
             "page": 1,
-            "top": 161.2
+            "top": 163.2
           }
         ]
       },
@@ -339,43 +339,43 @@ window.MULTIOS_CHECKLISTS = {
             "key": "i36",
             "label": "Resistências",
             "page": 1,
-            "top": 190.5
+            "top": 192.6
           },
           {
             "key": "i37",
             "label": "Disjuntores",
             "page": 1,
-            "top": 205.1
+            "top": 207.1
           },
           {
             "key": "i38",
             "label": "Corrente motor",
             "page": 1,
-            "top": 219.8
+            "top": 221.9
           },
           {
             "key": "i39",
             "label": "Contatoras",
             "page": 1,
-            "top": 234.4
+            "top": 236.7
           },
           {
             "key": "i40",
             "label": "Integridade dos fios",
             "page": 1,
-            "top": 249.1
+            "top": 251.2
           },
           {
             "key": "i41",
             "label": "Conexões",
             "page": 1,
-            "top": 263.7
+            "top": 265.8
           },
           {
             "key": "i42",
             "label": "Componentes",
             "page": 1,
-            "top": 278.4
+            "top": 280.6
           }
         ]
       }
