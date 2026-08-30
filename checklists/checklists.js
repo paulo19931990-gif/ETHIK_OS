@@ -614,6 +614,12 @@ window.MULTIOS_CHECKLISTS = {
             "label": "Ruídos anormais?",
             "page": 0,
             "top": 559.3
+          },
+          {
+            "key": "i28",
+            "label": "Célula de carga",
+            "page": 0,
+            "top": 573.9
           }
         ]
       },
@@ -654,10 +660,10 @@ window.MULTIOS_CHECKLISTS = {
     "pdf": "./checklists/FM-410-incubadora-estufa.pdf",
     "paginas": 1,
     "colunas": {
-      "verificadoX": 346.0,
-      "substituidoX": 408.5,
-      "obsX": 445.0,
-      "obsWidth": 112,
+      "verificadoX": 343.25,
+      "substituidoX": 407.05,
+      "obsX": 444.0,
+      "obsWidth": 112.0,
       "statusFontSize": 10,
       "obsFontSize": 10,
       "obsMinFontSize": 6
@@ -668,31 +674,31 @@ window.MULTIOS_CHECKLISTS = {
         "page": 0,
         "x": 177,
         "top": 181.2,
-        "width": 25,
+        "width": 52,
         "fontSize": 10
       },
       {
         "source": "serie",
         "page": 0,
-        "x": 233,
+        "x": 263,
         "top": 181.2,
-        "width": 26,
+        "width": 98,
         "fontSize": 10
       },
       {
         "source": "tag",
         "page": 0,
-        "x": 284,
+        "x": 391,
         "top": 181.2,
-        "width": 37,
+        "width": 73,
         "fontSize": 10
       },
       {
         "source": "osNum",
         "page": 0,
-        "x": 353,
+        "x": 500,
         "top": 181.2,
-        "width": 38,
+        "width": 55,
         "fontSize": 10
       },
       {
@@ -732,61 +738,61 @@ window.MULTIOS_CHECKLISTS = {
       {
         "titulo": "Sistema de Circulação de Ar",
         "itens": [
-          {"key":"i1","label":"Funcionamento","page":0,"top":228.1},
-          {"key":"i2","label":"Limpeza","page":0,"top":242.8},
-          {"key":"i3","label":"Lubrificação","page":0,"top":257.4}
+          {"key":"i1","label":"Funcionamento","page":0,"top":226.5},
+          {"key":"i2","label":"Limpeza","page":0,"top":241.2},
+          {"key":"i3","label":"Lubrificação","page":0,"top":255.8}
         ]
       },
       {
         "titulo": "Sistema de Refrigeração",
         "itens": [
-          {"key":"i4","label":"Limpeza do condensador","page":0,"top":286.7},
-          {"key":"i5","label":"Micromotor c/ hélice","page":0,"top":301.3},
-          {"key":"i6","label":"Corrente compressor","page":0,"top":316.0},
-          {"key":"i7","label":"Eficiência","page":0,"top":330.7}
+          {"key":"i4","label":"Limpeza do condensador","page":0,"top":285.1},
+          {"key":"i5","label":"Micromotor c/ hélice","page":0,"top":299.8},
+          {"key":"i6","label":"Corrente compressor","page":0,"top":314.4},
+          {"key":"i7","label":"Eficiência","page":0,"top":329.1}
         ]
       },
       {
         "titulo": "Painel de Controle",
         "itens": [
-          {"key":"i8","label":"Testes das funções","page":0,"top":359.9},
-          {"key":"i9","label":"Testes de sensibilidade do visor ou teclas","page":0,"top":374.6},
-          {"key":"i10","label":"Verificação dos parâmetros de configuração","page":0,"top":389.2},
-          {"key":"i11","label":"Verificação da saída de controle e retransmissão","page":0,"top":403.9}
+          {"key":"i8","label":"Testes das funções","page":0,"top":358.4},
+          {"key":"i9","label":"Testes de sensibilidade do visor ou teclas","page":0,"top":373.0},
+          {"key":"i10","label":"Verificação dos parâmetros de configuração","page":0,"top":387.7},
+          {"key":"i11","label":"Verificação da saída de controle e retransmissão","page":0,"top":402.3}
         ]
       },
       {
         "titulo": "Sensores",
         "itens": [
-          {"key":"i12","label":"Verificação da integridade","page":0,"top":433.3},
-          {"key":"i13","label":"Substituição dos terminais","page":0,"top":447.8},
-          {"key":"i14","label":"Comparação com sensor calibrado","page":0,"top":462.5}
+          {"key":"i12","label":"Verificação da integridade","page":0,"top":431.6},
+          {"key":"i13","label":"Substituição dos terminais","page":0,"top":446.3},
+          {"key":"i14","label":"Comparação com sensor calibrado","page":0,"top":460.9}
         ]
       },
       {
         "titulo": "Vedações",
         "itens": [
-          {"key":"i15","label":"Integridade","page":0,"top":491.8},
-          {"key":"i16","label":"Regulagem da porta","page":0,"top":506.4},
-          {"key":"i17","label":"Dobradiças","page":0,"top":521.1},
-          {"key":"i18","label":"Maçanetas","page":0,"top":535.7}
+          {"key":"i15","label":"Integridade","page":0,"top":490.2},
+          {"key":"i16","label":"Regulagem da porta","page":0,"top":504.9},
+          {"key":"i17","label":"Dobradiças","page":0,"top":519.5},
+          {"key":"i18","label":"Maçanetas","page":0,"top":534.2}
         ]
       },
       {
         "titulo": "Limpeza",
         "itens": [
-          {"key":"i19","label":"Parte interna","page":0,"top":565.0},
-          {"key":"i20","label":"Parte externa","page":0,"top":579.7},
-          {"key":"i21","label":"Dreno","page":0,"top":594.4},
-          {"key":"i22","label":"Vidros","page":0,"top":609.0}
+          {"key":"i19","label":"Parte interna","page":0,"top":563.5},
+          {"key":"i20","label":"Parte externa","page":0,"top":578.1},
+          {"key":"i21","label":"Dreno","page":0,"top":592.8},
+          {"key":"i22","label":"Vidros","page":0,"top":607.4}
         ]
       },
       {
         "titulo": "Parte Elétrica",
         "itens": [
-          {"key":"i23","label":"Integridade dos fios","page":0,"top":638.3},
-          {"key":"i24","label":"Conexões","page":0,"top":652.9},
-          {"key":"i25","label":"Componentes","page":0,"top":667.6}
+          {"key":"i23","label":"Integridade dos fios","page":0,"top":636.7},
+          {"key":"i24","label":"Conexões","page":0,"top":651.4},
+          {"key":"i25","label":"Componentes","page":0,"top":666.0}
         ]
       }
     ]
