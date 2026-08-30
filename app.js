@@ -250,8 +250,12 @@ function normalizarChecklistPersistido(checklist) {
     const respostasEntrada = checklist.respostas && typeof checklist.respostas === 'object' && !Array.isArray(checklist.respostas) ? checklist.respostas : {};
     const respostas = {};
     modelo.grupos.forEach(grupo => grupo.itens.forEach(item => {
+        const existeResposta = Object.prototype.hasOwnProperty.call(respostasEntrada, item.key);
         const r = respostasEntrada[item.key] || {};
-        const verificado = ['OK','NOK','NA'].includes(r.verificado) ? r.verificado : '';
+        // v63: se uma versão nova acrescentar um item ao mesmo formulário,
+        // o item recém-adicionado segue o padrão do app (VERIFICADO = OK).
+        // Um item que o técnico deixou vazio manualmente continua vazio.
+        const verificado = ['OK','NOK','NA'].includes(r.verificado) ? r.verificado : (existeResposta ? '' : 'OK');
         const substituido = ['OK','NOK','NA'].includes(r.substituido) ? r.substituido : '';
         const obs = String(r.obs || '').slice(0, 300);
         respostas[item.key] = { verificado, substituido, obs };
