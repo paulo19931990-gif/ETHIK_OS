@@ -13,7 +13,8 @@ window.MULTIOS_CHECKLISTS = {
       "obsWidth": 214,
       "statusFontSize": 10,
       "obsFontSize": 10,
-      "obsMinFontSize": 6
+      "obsMinFontSize": 6,
+      "obsMaxChars": 45
     },
     "campos": [
       {
@@ -393,7 +394,8 @@ window.MULTIOS_CHECKLISTS = {
       "obsWidth": 186,
       "statusFontSize": 10,
       "obsFontSize": 10,
-      "obsMinFontSize": 6
+      "obsMinFontSize": 6,
+      "obsMaxChars": 40
     },
     "campos": [
       {
@@ -666,7 +668,8 @@ window.MULTIOS_CHECKLISTS = {
       "obsWidth": 112.0,
       "statusFontSize": 10,
       "obsFontSize": 10,
-      "obsMinFontSize": 6
+      "obsMinFontSize": 6,
+      "obsMaxChars": 32
     },
     "campos": [
       {
@@ -809,7 +812,8 @@ window.MULTIOS_CHECKLISTS = {
       "obsWidth": 182,
       "statusFontSize": 10,
       "obsFontSize": 10,
-      "obsMinFontSize": 6
+      "obsMinFontSize": 6,
+      "obsMaxChars": 40
     },
     "campos": [
       {
@@ -1011,7 +1015,8 @@ window.MULTIOS_CHECKLISTS = {
       "obsWidth": 182,
       "statusFontSize": 10,
       "obsFontSize": 10,
-      "obsMinFontSize": 6
+      "obsMinFontSize": 6,
+      "obsMaxChars": 40
     },
     "campos": [
       {
