@@ -409,13 +409,14 @@ function abrirChecklist(osId) {
         html += `<section class="mb-5"><div class="sticky top-0 z-10 bg-gray-100 border border-gray-200 rounded-lg px-3 py-2 font-black text-gray-700 text-xs uppercase tracking-wide">${escapeHTML(grupo.titulo)}</div><div class="space-y-3 mt-3">`;
         grupo.itens.forEach(item => {
             const r = checklist.respostas?.[item.key] || {verificado:'',substituido:'',obs:''};
+            const limiteObs = limiteObservacaoChecklist(modelo);
             html += `<div class="check-item bg-white border border-gray-200 rounded-xl p-4 shadow-sm" data-check-item="${escapeHTML(item.key)}">
                 <div class="font-bold text-gray-900 text-sm mb-3">${escapeHTML(item.label)}</div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Verificado</div><div class="flex gap-2 flex-wrap">${botoesStatusChecklist('verificado', r.verificado)}</div><input type="hidden" data-check-field="verificado" value="${escapeHTML(r.verificado)}"></div>
                     <div><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Substituído <span class="font-medium normal-case tracking-normal">(opcional)</span></div><div class="flex gap-2 flex-wrap">${botoesStatusChecklist('substituido', r.substituido)}</div><input type="hidden" data-check-field="substituido" value="${escapeHTML(r.substituido)}"></div>
                 </div>
-                <label class="block mt-3"><span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Observação</span><input type="text" maxlength="300" data-check-obs value="${escapeHTML(r.obs || '')}" placeholder="Opcional" class="mt-1 w-full border border-gray-200 bg-gray-50 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"></label>
+                <label class="block mt-3"><span class="flex items-center justify-between gap-2"><span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Observação</span><span data-obs-counter class="text-[10px] font-semibold text-gray-400">${Math.min((r.obs || '').length, limiteObs)}/${limiteObs}</span></span><input type="text" maxlength="${limiteObs}" data-check-obs value="${escapeHTML((r.obs || '').slice(0, limiteObs))}" oninput="atualizarContadorObsChecklist(this)" placeholder="Opcional - máximo ${limiteObs} caracteres" class="mt-1 w-full border border-gray-200 bg-gray-50 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"></label>
             </div>`;
         });
         html += '</div></section>';
@@ -450,7 +451,7 @@ function coletarChecklistDoModal() {
         respostas[key] = {
             verificado: item.querySelector('[data-check-field="verificado"]')?.value || '',
             substituido: item.querySelector('[data-check-field="substituido"]')?.value || '',
-            obs: (item.querySelector('[data-check-obs]')?.value || '').trim().slice(0, 300)
+            obs: (item.querySelector('[data-check-obs]')?.value || '').trim().slice(0, limiteObservacaoChecklist(modelo))
         };
     });
     const extras = {};
@@ -534,6 +535,48 @@ function ajustarTextoChecklist(font, texto, maxWidth, fontSize, minSize = 4.3) {
     return { texto: t ? t + '...' : '', size };
 }
 
+// Evita ligaturas OpenType em nomes próprios (ex.: 'ti' em Cristian) que alguns
+// leitores PDF Android podem renderizar como espaço/glifo incorreto com fontes TTF.
+function larguraTextoChecklistSemLigaturas(font, texto, size) {
+    return Array.from(textoPdfChecklistSeguro(texto)).reduce((total, ch) => total + font.widthOfTextAtSize(ch, size), 0);
+}
+
+function ajustarTextoChecklistSemLigaturas(font, texto, maxWidth, fontSize, minSize = 6) {
+    let t = textoPdfChecklistSeguro(texto);
+    let size = fontSize;
+    while (size > minSize && larguraTextoChecklistSemLigaturas(font, t, size) > maxWidth) size -= 0.25;
+    if (larguraTextoChecklistSemLigaturas(font, t, size) <= maxWidth) return { texto: t, size };
+    while (t.length > 1 && larguraTextoChecklistSemLigaturas(font, t + '...', size) > maxWidth) t = t.slice(0, -1);
+    return { texto: t ? t + '...' : '', size };
+}
+
+function desenharTextoChecklistSemLigaturas(page, font, texto, x, y, size, color) {
+    const seguro = textoPdfChecklistSeguro(texto);
+    let cursorX = x;
+    for (const ch of Array.from(seguro)) {
+        // O texto já foi normalizado acima. Não normalizar caractere a caractere,
+        // pois isso removeria os espaços reais entre nome e sobrenome.
+        if (ch !== ' ') page.drawText(ch, { x: cursorX, y, size, font, color });
+        cursorX += font.widthOfTextAtSize(ch, size);
+    }
+}
+
+function limiteObservacaoChecklist(modelo) {
+    return Math.max(10, Number(modelo?.colunas?.obsMaxChars) || 40);
+}
+
+function atualizarContadorObsChecklist(input) {
+    if (!input) return;
+    const limite = Number(input.maxLength) > 0 ? Number(input.maxLength) : 40;
+    const contador = input.closest('label')?.querySelector('[data-obs-counter]');
+    if (!contador) return;
+    const atual = input.value.length;
+    contador.textContent = `${atual}/${limite}`;
+    contador.className = atual >= limite
+        ? 'text-[10px] font-bold text-amber-600'
+        : 'text-[10px] font-semibold text-gray-400';
+}
+
 let checklistFontBytesPromise = null;
 async function carregarFontesChecklistPersonalizadas() {
     if (checklistFontBytesPromise) return checklistFontBytesPromise;
@@ -589,6 +632,14 @@ function desenharCampoChecklist(page, font, texto, campo, rgbFn) {
     const fontSize = Math.min(campo.fontSize || 10, 10);
     const y = height - campo.top - fontSize + 1;
     if (campo.clear) page.drawRectangle({ x: campo.x - 1, y: y - 1.5, width: campo.width + 2, height: fontSize + 4, color: rgbFn(1,1,1) });
+
+    const nomePessoa = campo.source === 'tecnico' || campo.source === 'nomeClienteFinal';
+    if (nomePessoa) {
+        const fit = ajustarTextoChecklistSemLigaturas(font, texto, campo.width, fontSize, campo.minFontSize || 6);
+        desenharTextoChecklistSemLigaturas(page, font, fit.texto, campo.x, y, fit.size, rgbFn(0,0,0));
+        return;
+    }
+
     const fit = ajustarTextoChecklist(font, texto, campo.width, fontSize, campo.minFontSize || 6);
     page.drawText(fit.texto, { x: campo.x, y, size: fit.size, font, color: rgbFn(0,0,0) });
 }
