@@ -713,7 +713,7 @@ let timeoutRascunho = null;
 
 const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
 const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
-const signatureOptions = { minWidth: 1.5, maxWidth: 3, penColor: "rgb(15,23,42)", backgroundColor: "rgba(255,255,255,0)" };
+const signatureOptions = { minWidth: 0.8, maxWidth: 1.6, penColor: "rgb(15,23,42)", backgroundColor: "rgba(255,255,255,0)" };
 
 function escapeHTML(str) {
     if (str === null || str === undefined) return '';
@@ -1402,7 +1402,23 @@ function iniciarNovaOS() {
 }
 
 function adicionarBlocoOS(dados = null) {
-    contadorOS++; const id = contadorOS; const dataHoje = dataLocalISO(); const osManualValue = dados && dados.osNum ? dados.osNum : '';
+    contadorOS++;
+    const id = contadorOS;
+    const dataHoje = dataLocalISO();
+
+    // Ao adicionar manualmente uma nova O.S. ao mesmo documento, herda
+    // Cliente e Nº da O.S. da primeira folha. Na restauração de documentos
+    // salvos, os valores próprios de cada O.S. continuam sendo respeitados.
+    let clienteInicial = dados?.cliente ? String(dados.cliente) : '';
+    let osManualValue = dados?.osNum ? String(dados.osNum) : '';
+    if (!dados && id > 1) {
+        const primeiraOs = document.querySelector('.os-bloco');
+        if (primeiraOs) {
+            const origemId = primeiraOs.getAttribute('data-id');
+            clienteInicial = getVal('cliente', origemId);
+            osManualValue = getVal('osNum', origemId);
+        }
+    }
     const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco(); autoSalvarRascunho();" class="text-gray-400 hover:text-red-600 transition-colors p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
     const bloco = document.createElement('div'); bloco.className = "os-bloco bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden relative transition-all"; bloco.setAttribute('data-id', id);
     
@@ -1424,7 +1440,7 @@ function adicionarBlocoOS(dados = null) {
             <div>
                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">Dados Base</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label class="block text-xs font-bold text-gray-600 mb-1">Cliente / Empresa <span class="text-red-500">*</span></label><input type="text" id="cliente_${id}" required class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition font-medium"></div>
+                    <div><label class="block text-xs font-bold text-gray-600 mb-1">Cliente / Empresa <span class="text-red-500">*</span></label><input type="text" id="cliente_${id}" value="${escapeHTML(clienteInicial)}" required class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition font-medium"></div>
                     <div><label class="block text-xs font-bold text-gray-600 mb-1">OS Nº <span class="text-red-500">*</span></label><input type="text" id="osNum_${id}" value="${escapeHTML(osManualValue)}" required placeholder="Ex: 10293" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 transition font-mono font-bold text-blue-800"></div>
                 </div>
             </div>
