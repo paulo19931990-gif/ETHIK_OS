@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=67">
+    <link rel="manifest" href="./manifest.json?v=68">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -35,7 +35,7 @@
             navigator.serviceWorker.addEventListener('controllerchange', () => {
                 if (recarregandoPorSW) return; recarregandoPorSW = true; location.reload();
             });
-            navigator.serviceWorker.register('./sw.js?v=67').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=68').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller) return;
                     const controladorAtual = navigator.serviceWorker.controller.scriptURL || '';
@@ -58,13 +58,17 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=67">
+    <link rel="stylesheet" href="style.css?v=68">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
     <!-- DATALISTS PARA O BANCO DE PEÇAS INTELIGENTE -->
     <datalist id="dbCodigosPecas"></datalist>
     <datalist id="dbNomesPecas"></datalist>
+
+    <!-- Inputs persistentes: evitam depender de um elemento temporário ao voltar da câmera nativa -->
+    <input id="inputCameraNativa" type="file" accept="image/*" capture="environment" class="hidden" onchange="tratarRetornoFotoNativa(event, 'camera')" oncancel="tratarCancelamentoFotoNativa(event, 'camera')">
+    <input id="inputGaleriaFotos" type="file" accept="image/*" class="hidden" onchange="tratarRetornoFotoNativa(event, 'galeria')" oncancel="tratarCancelamentoFotoNativa(event, 'galeria')">
 
     <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 sm:translate-x-0 sm:left-auto sm:right-6 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-[200] flex items-center gap-3 font-semibold bg-gray-900">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -507,8 +511,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=67"></script>
-    <script src="bancoPecas.js?v=67"></script>
-    <script src="app.js?v=67"></script>
+    <script src="checklists/checklists.js?v=68"></script>
+    <script src="bancoPecas.js?v=68"></script>
+    <script src="app.js?v=68"></script>
 </body>
 </html>
