@@ -1,11 +1,15 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v65';
+const CACHE_NAME = 'multios-pro-v66';
 
 // Arquivos indispensáveis para abrir e usar o núcleo do app offline.
 const ASSETS_CRITICOS = [
   './index.html',
   './app.js',
-  './style.css',
+  './style.css'
+];
+
+// Recursos de funcionalidades. Uma falha isolada não derruba a atualização inteira.
+const ASSETS_OPCIONAIS = [
   './bancoPecas.js',
   './checklists/checklists.js',
   './checklists/FM-408-climatica.pdf',
@@ -14,17 +18,10 @@ const ASSETS_CRITICOS = [
   './checklists/FM-411-banho-maria.pdf',
   './checklists/FM-411-dissolutor-desintegrador.pdf',
   './fonts/Carlito-Regular.ttf',
-  './fonts/Carlito-Bold.ttf'
-];
-
-// A falha de um item opcional não impede a instalação do Service Worker.
-const ASSETS_OPCIONAIS = [
+  './fonts/Carlito-Bold.ttf',
   './manifest.json',
   './icon-192.png',
   './icon-512_3.png',
-
-  // Dependências externas usadas pelo app. Quando o CDN permitir,
-  // ficam disponíveis offline já a partir da instalação do SW.
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
@@ -65,8 +62,12 @@ self.addEventListener('install', event => {
       }
     });
 
-    await self.skipWaiting();
   })());
+});
+
+
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
@@ -106,7 +107,7 @@ self.addEventListener('fetch', event => {
 
         return networkResponse;
       } catch (error) {
-        // ignoreSearch permite que /index.html?v=65 use /index.html do pré-cache.
+        // ignoreSearch permite que /index.html?v=66 use /index.html do pré-cache.
         const cachedRequest = await caches.match(request, { ignoreSearch: true });
         if (cachedRequest) return cachedRequest;
 
@@ -122,12 +123,28 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // Arquivos locais com ?v= usam rede primeiro. Isso mantém index/app/css da mesma versão
+  // e evita misturar código antigo com uma interface nova durante futuras atualizações.
+  if (mesmaOrigem && url.searchParams.has('v')) {
+    event.respondWith((async () => {
+      try {
+        const resposta = await fetch(request);
+        if (respostaCacheavel(resposta)) { const cache = await caches.open(CACHE_NAME); await cache.put(request, resposta.clone()); }
+        return resposta;
+      } catch (error) {
+        const cacheado = await caches.match(request, { ignoreSearch: true });
+        return cacheado || new Response('', { status: 504, statusText: 'Gateway Timeout' });
+      }
+    })());
+    return;
+  }
+
   // Só fazemos cache de arquivos do próprio app e dos CDNs conhecidos.
   const podeUsarRuntimeCache = mesmaOrigem || HOSTS_RUNTIME_PERMITIDOS.has(url.hostname);
   if (!podeUsarRuntimeCache) return;
 
   event.respondWith((async () => {
-    // Nos arquivos locais, ignora apenas a query de versão (?v=65).
+    // Nos arquivos locais, ignora apenas a query de versão (?v=66).
     const cachedResponse = await caches.match(request, {
       ignoreSearch: mesmaOrigem
     });
