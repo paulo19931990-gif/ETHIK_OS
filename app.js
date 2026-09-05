@@ -718,11 +718,16 @@ let pdfPreviewPaginaAtual = 1;
 let pdfPreviewModoEconomico = false;
 let pdfPreviewRenderTask = null;
 
-const APP_VERSION = 66;
+const APP_VERSION = 67;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
 const MAX_LOG_ERROS = 50;
+const FOTO_MAX_DIM = 1600;
+const FOTO_JPEG_QUALIDADE = 0.72;
+const MEDIA_PHOTO_PREFIX = 'media_photo_';
+const MEDIA_PDF_PREFIX = 'media_pdf_';
+const midiasCriadasSessao = new Set();
 
 const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
 const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
@@ -754,6 +759,7 @@ function cancelarAutoSavePendente() {
 }
 
 function marcarFormularioAlterado() {
+    if (restaurandoDocumento) return;
     formularioSujo = true;
     cancelarAutoSavePendente();
     timeoutRascunho = setTimeout(autoSalvarRascunho, 3000);
@@ -768,10 +774,10 @@ async function solicitarPersistenciaArmazenamento() {
 async function registrarErroApp(origem, erro) {
     try {
         if (typeof localforage === 'undefined') return;
-        const atual = await localforage.getItem('diagnostico_erros_v66');
+        const atual = await localforage.getItem('diagnostico_erros_v67');
         const lista = Array.isArray(atual) ? atual : [];
         lista.unshift({ data: new Date().toISOString(), origem: String(origem || 'desconhecida').slice(0,120), mensagem: String(erro?.message || erro || 'Erro desconhecido').slice(0,500) });
-        await localforage.setItem('diagnostico_erros_v66', lista.slice(0, MAX_LOG_ERROS));
+        await localforage.setItem('diagnostico_erros_v67', lista.slice(0, MAX_LOG_ERROS));
     } catch (_) {}
 }
 
@@ -842,6 +848,99 @@ async function verificarRegistroPin(pin, registro) {
     const bits = new Uint8Array(await crypto.subtle.deriveBits({ name:'PBKDF2', salt, iterations:Number(registro.iteracoes)||120000, hash:'SHA-256' }, baseKey, 256));
     if (bits.length !== esperado.length) return false;
     let diff = 0; for (let i=0;i<bits.length;i++) diff |= bits[i] ^ esperado[i]; return diff === 0;
+}
+
+function blobParaDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        if (!(blob instanceof Blob)) return reject(new Error('Blob inválido'));
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Falha ao converter arquivo'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function salvarBlobMidia(prefixo, blob, rastrearSessao = true) {
+    if (typeof localforage === 'undefined' || !(blob instanceof Blob)) return null;
+    const mediaId = novoIdLocal();
+    const chave = `${prefixo}${mediaId}`;
+    try {
+        await localforage.setItem(chave, blob);
+        const teste = await localforage.getItem(chave);
+        if (!(teste instanceof Blob) || teste.size !== blob.size) throw new Error('Navegador não preservou o Blob corretamente');
+        if (rastrearSessao) midiasCriadasSessao.add(chave);
+        return mediaId;
+    } catch (e) {
+        try { await localforage.removeItem(chave); } catch (_) {}
+        console.warn('Blob não pôde ser guardado; será usado formato legado Base64.', e);
+        return null;
+    }
+}
+
+async function obterBlobMidia(prefixo, mediaId) {
+    if (!mediaId || typeof localforage === 'undefined') return null;
+    try {
+        const blob = await localforage.getItem(`${prefixo}${mediaId}`);
+        return blob instanceof Blob ? blob : null;
+    } catch (e) {
+        console.error('Falha ao ler mídia:', e);
+        return null;
+    }
+}
+
+function idsMidiaDocumento(doc) {
+    const refs = new Set();
+    if (!doc || !Array.isArray(doc.ordens)) return refs;
+    doc.ordens.forEach(ordem => {
+        if (ordem?.anexoMediaId) refs.add(`${MEDIA_PDF_PREFIX}${ordem.anexoMediaId}`);
+        if (Array.isArray(ordem?.fotos)) ordem.fotos.forEach(f => { if (f?.mediaId) refs.add(`${MEDIA_PHOTO_PREFIX}${f.mediaId}`); });
+    });
+    return refs;
+}
+
+async function limparMidiasRemovidasDoDocumento(documentoAnterior, documentoNovo) {
+    const antigas = idsMidiaDocumento(documentoAnterior);
+    const novas = idsMidiaDocumento(documentoNovo);
+    for (const chave of antigas) {
+        if (!novas.has(chave)) {
+            try { await localforage.removeItem(chave); } catch (e) { console.warn('Não foi possível limpar mídia antiga:', e); }
+        }
+    }
+    for (const chave of Array.from(midiasCriadasSessao)) {
+        if (novas.has(chave)) midiasCriadasSessao.delete(chave);
+        else {
+            try { await localforage.removeItem(chave); } catch (_) {}
+            midiasCriadasSessao.delete(chave);
+        }
+    }
+}
+
+async function prepararDocumentoParaBackup(doc) {
+    const copia = typeof structuredClone === 'function' ? structuredClone(doc) : JSON.parse(JSON.stringify(doc));
+    if (!Array.isArray(copia?.ordens)) return copia;
+    for (const ordem of copia.ordens) {
+        if (Array.isArray(ordem.fotos)) {
+            for (const foto of ordem.fotos) {
+                if (foto?.mediaId && !foto.b64) {
+                    const blob = await obterBlobMidia(MEDIA_PHOTO_PREFIX, foto.mediaId);
+                    if (!blob) throw new Error('Uma foto da O.S. não foi encontrada no armazenamento. Backup cancelado para evitar arquivo incompleto.');
+                    foto.b64 = await blobParaDataUrl(blob);
+                }
+                delete foto.mediaId;
+            }
+        }
+        if (ordem.anexoMediaId && !ordem.anexoBase64) {
+            const blob = await obterBlobMidia(MEDIA_PDF_PREFIX, ordem.anexoMediaId);
+            if (!blob) throw new Error('Um PDF anexo da O.S. não foi encontrado no armazenamento. Backup cancelado para evitar arquivo incompleto.');
+            ordem.anexoBase64 = await blobParaDataUrl(blob);
+        }
+        delete ordem.anexoMediaId;
+    }
+    if (copia.integridade?.hash) {
+        const hashBackup = await calcularHashDocumento(copia);
+        if (hashBackup) copia.integridade = { ...copia.integridade, algoritmo: 'SHA-256', hash: hashBackup };
+    }
+    return copia;
 }
 
 function dependenciasPdfDisponiveis(incluirPdfJs = false) {
@@ -1003,8 +1102,8 @@ async function confirmarExportacao() {
     try {
         let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${dataLocalISO()}`;
         const historicoMeta = await obterHistoricoSalvo();
-        const backupCompleto = { tipo: 'multi-os-backup', versaoFormato: 2, versaoApp: APP_VERSION, exportadoEm: new Date().toISOString(), historicoOS: [], bancoHoras: registosBancoHoras || [] };
-        for (const meta of historicoMeta) { const docFull = await localforage.getItem(`os_doc_${meta.id}`); if (docFull) backupCompleto.historicoOS.push(docFull); }
+        const backupCompleto = { tipo: 'multi-os-backup', versaoFormato: 3, versaoApp: APP_VERSION, exportadoEm: new Date().toISOString(), historicoOS: [], bancoHoras: registosBancoHoras || [] };
+        for (const meta of historicoMeta) { const docFull = await localforage.getItem(`os_doc_${meta.id}`); if (docFull) backupCompleto.historicoOS.push(await prepararDocumentoParaBackup(docFull)); }
         const blob = new Blob([JSON.stringify(backupCompleto, null, 2)], { type: 'application/json' });
         if (blob.size > 100 * 1024 * 1024 && !confirm(`O backup tem ${(blob.size/1024/1024).toFixed(1)} MB e pode demorar para abrir em celulares. Deseja baixar mesmo assim?`)) return;
         if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado); urlDownloadGerado = URL.createObjectURL(blob);
@@ -1021,7 +1120,8 @@ function validarDocumentoBackup(doc) {
         if (ordem.fotos !== undefined && !Array.isArray(ordem.fotos)) return false;
         if (ordem.pecas !== undefined && !Array.isArray(ordem.pecas)) return false;
         if (ordem.anexoBase64 && !dataUrlPdfSegura(ordem.anexoBase64)) return false;
-        if (Array.isArray(ordem.fotos) && !ordem.fotos.every(f => f && typeof f === 'object' && (!f.b64 || dataUrlImagemSegura(f.b64)))) return false;
+        if (ordem.anexoMediaId && !ordem.anexoBase64) return false;
+        if (Array.isArray(ordem.fotos) && !ordem.fotos.every(f => f && typeof f === 'object' && (!f.b64 || dataUrlImagemSegura(f.b64)) && (!f.mediaId || !!f.b64))) return false;
         return true;
     });
 }
@@ -1137,7 +1237,7 @@ async function apagarDocumentoDefinitivo(id) {
     const lix = await obterLixeiraOS();
     try {
         await localforage.setItem('lixeira_os', lix.filter(m => m.id !== id));
-        try { await localforage.removeItem(`trash_os_doc_${id}`); }
+        try { const docTrash = await localforage.getItem(`trash_os_doc_${id}`); if (docTrash) { for (const chave of idsMidiaDocumento(docTrash)) { try { await localforage.removeItem(chave); } catch (_) {} } } await localforage.removeItem(`trash_os_doc_${id}`); }
         catch(e) { await localforage.setItem('lixeira_os', lix); throw e; }
         await carregarLixeira(); mostrarToast('OS excluída definitivamente.');
     } catch(e) { console.error(e); mostrarToast('Falha ao excluir definitivamente. A entrada da lixeira foi preservada quando possível.', true); }
@@ -1456,51 +1556,112 @@ function gerarPdfBancoHoras() {
 }
 
 function adicionarFoto(id, source) {
+    osIdAtualFoto = id;
     const fotosAtuais = document.querySelectorAll(`#fotosContainer_${id} .foto-item`).length;
-    if (fotosAtuais >= 20) { mostrarToast('Limite atingido.', true); return; }
-    if (source === 'camera') { osIdAtualFoto = id; abrirCameraInterna(); } 
-    else {
-        const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; 
-        input.onchange = (e) => { const file = e.target.files[0]; if(!file) return; processarFicheiroImagem(id, file); e.target.value = ''; }; 
-        input.click();
+    if (fotosAtuais >= 20) { mostrarToast('Limite de 20 fotos por O.S. atingido.', true); return; }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    // Em celulares compatíveis, capture="environment" abre a câmera nativa traseira,
+    // preservando recursos do aparelho como foco, flash e processamento da câmera.
+    if (source === 'camera') input.setAttribute('capture', 'environment');
+    input.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await processarFicheiroImagem(id, file);
+        e.target.value = '';
+    };
+    input.click();
+}
+
+// Mantidas para compatibilidade com versões anteriores. A v67 usa a câmera nativa do celular.
+async function abrirCameraInterna() {
+    mostrarToast('A v67 usa a câmera nativa do celular.');
+    adicionarFoto(osIdAtualFoto || 1, 'camera');
+}
+function fecharCameraInterna() {
+    if (mediaStreamCamera) { mediaStreamCamera.getTracks().forEach(t => t.stop()); mediaStreamCamera = null; }
+    const modal = document.getElementById('modalCameraInterna'); if (modal) modal.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+function tirarFotoDoVideo() {
+    mostrarToast('Use o botão de câmera para abrir a câmera nativa do celular.');
+}
+
+function calcularDimensoesFoto(width, height) {
+    let w = Math.max(1, Number(width) || 1), h = Math.max(1, Number(height) || 1);
+    const fator = Math.min(1, FOTO_MAX_DIM / Math.max(w, h));
+    return { width: Math.max(1, Math.round(w * fator)), height: Math.max(1, Math.round(h * fator)) };
+}
+
+function canvasParaBlobJPEG(canvas, qualidade = FOTO_JPEG_QUALIDADE) {
+    return new Promise(resolve => {
+        if (canvas.toBlob) canvas.toBlob(blob => resolve(blob), 'image/jpeg', qualidade);
+        else {
+            try { fetch(canvas.toDataURL('image/jpeg', qualidade)).then(r => r.blob()).then(resolve).catch(() => resolve(null)); }
+            catch (_) { resolve(null); }
+        }
+    });
+}
+
+async function comprimirImagemParaBlob(file) {
+    if (!file?.type?.startsWith('image/')) throw new Error('Selecione um ficheiro de imagem válido.');
+    const objectUrl = URL.createObjectURL(file);
+    try {
+        const img = await new Promise((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+            el.src = objectUrl;
+        });
+        const { width, height } = calcularDimensoesFoto(img.naturalWidth || img.width, img.naturalHeight || img.height);
+        const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) throw new Error('Canvas indisponível.');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height);
+        const blob = await canvasParaBlobJPEG(canvas, FOTO_JPEG_QUALIDADE);
+        if (!blob) throw new Error('Não foi possível comprimir a imagem.');
+        return blob;
+    } finally { URL.revokeObjectURL(objectUrl); }
+}
+
+async function processarFicheiroImagem(id, file) {
+    try {
+        const blobComprimido = await comprimirImagemParaBlob(file);
+        const mediaId = await salvarBlobMidia(MEDIA_PHOTO_PREFIX, blobComprimido);
+        if (mediaId) {
+            renderFotoItem(id, { mediaId }, '');
+        } else {
+            // Fallback para navegadores que não conseguem persistir Blob no armazenamento local.
+            renderFotoItem(id, await blobParaDataUrl(blobComprimido), '');
+        }
+        mostrarToast(`Foto otimizada (${Math.max(1, Math.round(blobComprimido.size / 1024))} KB).`);
+    } catch (e) {
+        console.error('Erro ao processar foto:', e); registrarErroApp('processarFicheiroImagem', e);
+        mostrarToast(e.message || 'Não foi possível processar a imagem.', true);
     }
 }
-async function abrirCameraInterna() {
-    if (!navigator.mediaDevices?.getUserMedia) { mostrarToast('Câmara não suportada neste navegador ou fora de HTTPS.', true); return; }
-    const modal = document.getElementById('modalCameraInterna'); const video = document.getElementById('videoCamera'); modal.classList.remove('hidden'); document.body.style.overflow = 'hidden';
-    try { mediaStreamCamera = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); video.srcObject = mediaStreamCamera; }
-    catch (err) { console.error('Erro ao abrir câmara:', err); mostrarToast('Sem permissão de câmara ou câmara indisponível.', true); fecharCameraInterna(); }
+
+async function carregarPreviewFotoBlob(img, mediaId) {
+    const blob = await obterBlobMidia(MEDIA_PHOTO_PREFIX, mediaId);
+    if (!blob || !String(blob.type || '').startsWith('image/')) { img.alt = 'Foto indisponível'; return; }
+    const url = URL.createObjectURL(blob);
+    const anterior = img.dataset.objectUrl;
+    if (anterior) URL.revokeObjectURL(anterior);
+    img.dataset.objectUrl = url; img.src = url;
 }
-function fecharCameraInterna() { if (mediaStreamCamera) { mediaStreamCamera.getTracks().forEach(t => t.stop()); mediaStreamCamera = null; } document.getElementById('modalCameraInterna').classList.add('hidden'); document.body.style.overflow = ''; }
-function tirarFotoDoVideo() {
-    const video = document.getElementById('videoCamera'); if (!video.srcObject) return;
-    const origemW = video.videoWidth || 1280, origemH = video.videoHeight || 720;
-    const MAX_DIM = 900; let w = origemW, h = origemH;
-    if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
-    w = Math.max(1, Math.round(w)); h = Math.max(1, Math.round(h));
-    const finalCanvas = document.createElement('canvas'); finalCanvas.width = w; finalCanvas.height = h;
-    const finalCtx = finalCanvas.getContext('2d'); finalCtx.drawImage(video, 0, 0, w, h);
-    renderFotoItem(osIdAtualFoto, finalCanvas.toDataURL('image/jpeg', 0.65), ''); fecharCameraInterna(); mostrarToast('Capturada com sucesso!');
-}
-function processarFicheiroImagem(id, file) {
-    if (!file?.type?.startsWith('image/')) { mostrarToast('Selecione um ficheiro de imagem válido.', true); return; }
-    const objectUrl = URL.createObjectURL(file); const img = new Image();
-    img.onload = () => { URL.revokeObjectURL(objectUrl); const canvas = document.createElement('canvas'); const MAX_DIM = 900; let width = img.width; let height = img.height;
-        if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } } else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
-        width = Math.max(1, Math.round(width)); height = Math.max(1, Math.round(height));
-        canvas.width = width; canvas.height = height; const ctx = canvas.getContext("2d"); ctx.drawImage(img, 0, 0, width, height);
-        renderFotoItem(id, canvas.toDataURL("image/jpeg", 0.65), ''); };
-    img.onerror = () => { URL.revokeObjectURL(objectUrl); mostrarToast('Não foi possível ler a imagem.', true); };
-    img.src = objectUrl;
-}
-function renderFotoItem(id, base64, desc) {
-    if (!dataUrlImagemSegura(base64)) { console.warn('Imagem ignorada: formato inválido.'); return; }
-    const div = document.createElement('div'); div.className = "foto-item flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative group";
+
+function renderFotoItem(id, fonte, desc) {
+    const mediaId = fonte && typeof fonte === 'object' ? String(fonte.mediaId || '') : '';
+    const base64 = typeof fonte === 'string' ? fonte : String(fonte?.b64 || '');
+    if (!mediaId && !dataUrlImagemSegura(base64)) { console.warn('Imagem ignorada: formato inválido.'); return; }
+    const div = document.createElement('div'); div.className = 'foto-item flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative group';
     div.innerHTML = `
-        <input type="hidden" class="foto-b64" value="${base64}">
+        <input type="hidden" class="foto-media-id" value="${escapeHTML(mediaId)}">
+        <input type="hidden" class="foto-b64" value="${mediaId ? '' : base64}">
         <div class="relative w-full aspect-video bg-gray-100">
-            <img src="${base64}" class="w-full h-full object-cover">
-            <button type="button" onclick="this.closest('.foto-item').remove(); autoSalvarRascunho();" class="absolute top-2 right-2 bg-white/90 text-red-600 p-2 rounded-lg shadow backdrop-blur-sm hover:bg-red-50 transition-colors">
+            <img src="${mediaId ? '' : base64}" alt="Evidência fotográfica" class="w-full h-full object-cover">
+            <button type="button" onclick="removerFotoItem(this)" aria-label="Remover foto" title="Remover foto" class="absolute top-2 right-2 bg-white/90 text-red-600 p-2 rounded-lg shadow backdrop-blur-sm hover:bg-red-50 transition-colors">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
             </button>
         </div>
@@ -1508,30 +1669,53 @@ function renderFotoItem(id, base64, desc) {
             <textarea rows="2" placeholder="Descreva a foto (obrigatório para PDF)..." class="foto-desc w-full border-0 p-1 text-xs outline-none resize-none bg-transparent focus:ring-0 text-gray-700 font-medium">${escapeHTML(desc)}</textarea>
         </div>`;
     document.getElementById(`fotosContainer_${id}`).appendChild(div);
-    autoSalvarRascunho();
+    if (mediaId) carregarPreviewFotoBlob(div.querySelector('img'), mediaId).catch(e => console.warn('Preview de foto indisponível:', e));
+    marcarFormularioAlterado();
 }
 
-function processarAnexo(id, input) {
-    const file = input.files[0]; if (!file) { removerAnexo(id); return; }
+function removerFotoItem(botao) {
+    const item = botao?.closest('.foto-item');
+    if (!item) return;
+    const img = item.querySelector('img');
+    if (img?.dataset.objectUrl) URL.revokeObjectURL(img.dataset.objectUrl);
+    item.remove();
+    marcarFormularioAlterado();
+}
+
+async function processarAnexo(id, input) {
+    const file = input.files?.[0]; if (!file) { removerAnexo(id); return; }
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { mostrarToast('Selecione um PDF válido.', true); input.value = ''; return; }
     if (file.size > ANEXO_PDF_MAX_BYTES) { mostrarToast(`PDF anexo acima de ${Math.round(ANEXO_PDF_MAX_BYTES/1024/1024)} MB. Reduza o ficheiro antes de anexar.`, true); input.value = ''; return; }
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        if (!dataUrlPdfSegura(e.target.result)) { mostrarToast('O ficheiro selecionado não parece ser um PDF válido.', true); removerAnexo(id); return; }
-        const b64 = document.getElementById(`anexoBase64_${id}`); if (b64) { b64.value = e.target.result; b64.dataset.filename = file.name; }
+    try {
+        const cabecalho = await file.slice(0, 8).text();
+        if (!cabecalho.startsWith('%PDF-')) throw new Error('O ficheiro selecionado não parece ser um PDF válido.');
+        const mediaId = await salvarBlobMidia(MEDIA_PDF_PREFIX, file);
+        const mediaEl = document.getElementById(`anexoMediaId_${id}`);
+        const b64 = document.getElementById(`anexoBase64_${id}`);
+        if (mediaId) {
+            if (mediaEl) { mediaEl.value = mediaId; mediaEl.dataset.filename = file.name; }
+            if (b64) { b64.value = ''; b64.dataset.filename = file.name; }
+        } else {
+            const dataUrl = await blobParaDataUrl(file);
+            if (!dataUrlPdfSegura(dataUrl)) throw new Error('PDF inválido.');
+            if (b64) { b64.value = dataUrl; b64.dataset.filename = file.name; }
+            if (mediaEl) { mediaEl.value = ''; mediaEl.dataset.filename = file.name; }
+        }
         definirNomeAnexo(id, file.name);
-        const btn = document.getElementById(`btnRemoverAnexo_${id}`); if (btn) btn.classList.remove('hidden');
-        autoSalvarRascunho();
-    };
-    reader.onerror = () => mostrarToast('Não foi possível ler o PDF anexado.', true);
-    reader.readAsDataURL(file); input.value = '';
+        document.getElementById(`btnRemoverAnexo_${id}`)?.classList.remove('hidden');
+        marcarFormularioAlterado();
+    } catch (e) {
+        console.error('Erro ao anexar PDF:', e); registrarErroApp('processarAnexo', e);
+        mostrarToast(e.message || 'Não foi possível ler o PDF anexado.', true);
+    } finally { input.value = ''; }
 }
 function removerAnexo(id) {
     const input = document.getElementById(`anexoInput_${id}`); if (input) input.value = '';
+    const mediaEl = document.getElementById(`anexoMediaId_${id}`); if (mediaEl) { mediaEl.value = ''; delete mediaEl.dataset.filename; }
     const b64 = document.getElementById(`anexoBase64_${id}`); if (b64) { b64.value = ''; delete b64.dataset.filename; }
     const nome = document.getElementById(`anexoNome_${id}`); if (nome) { nome.replaceChildren(); nome.classList.add('hidden'); }
-    const btn = document.getElementById(`btnRemoverAnexo_${id}`); if (btn) btn.classList.add('hidden');
-    autoSalvarRascunho();
+    document.getElementById(`btnRemoverAnexo_${id}`)?.classList.add('hidden');
+    marcarFormularioAlterado();
 }
 
 function recolherDadosDoFormulario() {
@@ -1543,13 +1727,14 @@ function recolherDadosDoFormulario() {
             cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked,
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
             dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id), 
-            anexoBase64: document.getElementById(`anexoBase64_${id}`) ? document.getElementById(`anexoBase64_${id}`).value : null, 
-            anexoNome: document.getElementById(`anexoBase64_${id}`)?.dataset.filename || null, 
+            anexoMediaId: document.getElementById(`anexoMediaId_${id}`)?.value || null,
+            anexoBase64: document.getElementById(`anexoBase64_${id}`)?.value || null, 
+            anexoNome: document.getElementById(`anexoMediaId_${id}`)?.dataset.filename || document.getElementById(`anexoBase64_${id}`)?.dataset.filename || null, 
             checklist: obterChecklistDoCampo(id),
             fotos: []
         };
         b.querySelectorAll('.peca-row-item').forEach(row => { let q = row.querySelector('.q').value, n = row.querySelector('.n').value, c = row.querySelector('.c').value; if(q || n || c) ordem.pecas.push({ q, n, c }); });
-        b.querySelectorAll('.foto-item').forEach(fItem => { ordem.fotos.push({ b64: fItem.querySelector('.foto-b64').value, desc: fItem.querySelector('.foto-desc').value }); });
+        b.querySelectorAll('.foto-item').forEach(fItem => { const mediaId = fItem.querySelector('.foto-media-id')?.value || ''; const b64 = fItem.querySelector('.foto-b64')?.value || ''; ordem.fotos.push(mediaId ? { mediaId, desc: fItem.querySelector('.foto-desc').value } : { b64, desc: fItem.querySelector('.foto-desc').value }); });
         dados.ordens.push(ordem);
     }); return dados;
 }
@@ -1764,8 +1949,8 @@ function adicionarBlocoOS(dados = null) {
                 <div class="flex justify-between items-center mb-4">
                     <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> Evidências Visuais</h4>
                     <div class="flex gap-2">
-                        <button type="button" onclick="adicionarFoto(${id}, 'galeria')" class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors flex items-center gap-1">Galeria</button>
-                        <button type="button" onclick="adicionarFoto(${id}, 'camera')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors shadow flex items-center gap-1">Câmera</button>
+                        <button type="button" onclick="adicionarFoto(${id}, 'galeria')" aria-label="Adicionar foto da galeria" title="Galeria" class="w-10 h-10 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition-colors flex items-center justify-center border border-gray-200"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></button>
+                        <button type="button" onclick="adicionarFoto(${id}, 'camera')" aria-label="Tirar foto com a câmera" title="Câmera" class="w-10 h-10 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow flex items-center justify-center"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></button>
                     </div>
                 </div>
                 <div id="fotosContainer_${id}" class="grid grid-cols-2 sm:grid-cols-3 gap-4"></div>
@@ -1777,6 +1962,7 @@ function adicionarBlocoOS(dados = null) {
                         <input type="file" id="anexoInput_${id}" accept=".pdf" onchange="processarAnexo(${id}, this)" class="hidden">
                     </label>
                 </div>
+                <input type="hidden" id="anexoMediaId_${id}">
                 <input type="hidden" id="anexoBase64_${id}">
                 <div class="flex items-center justify-between mt-2">
                     <div id="anexoNome_${id}" class="text-xs text-blue-600 font-bold hidden"></div>
@@ -1797,7 +1983,7 @@ function adicionarBlocoOS(dados = null) {
         ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
         ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
         if(document.getElementById(`cbMontagemSala_${id}`)) document.getElementById(`cbMontagemSala_${id}`).checked = dados.cbMontagemSala !== undefined ? !!dados.cbMontagemSala : !!dados.cbSemGarantia;
-        if (dados.anexoBase64 && dataUrlPdfSegura(dados.anexoBase64)) { const b64 = document.getElementById(`anexoBase64_${id}`); b64.value = dados.anexoBase64; let nomeAnexo = dados.anexoNome ? String(dados.anexoNome).replace(/^Anexado:\s*/i, '').trim() : ''; if (/^Anexado$/i.test(nomeAnexo)) nomeAnexo = ''; if (nomeAnexo) b64.dataset.filename = nomeAnexo; definirNomeAnexo(id, nomeAnexo); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
+        if (dados.anexoMediaId || (dados.anexoBase64 && dataUrlPdfSegura(dados.anexoBase64))) { const mediaEl = document.getElementById(`anexoMediaId_${id}`); const b64 = document.getElementById(`anexoBase64_${id}`); let nomeAnexo = dados.anexoNome ? String(dados.anexoNome).replace(/^Anexado:\s*/i, '').trim() : ''; if (/^Anexado$/i.test(nomeAnexo)) nomeAnexo = ''; if (dados.anexoMediaId && mediaEl) { mediaEl.value = dados.anexoMediaId; if (nomeAnexo) mediaEl.dataset.filename = nomeAnexo; } else if (b64) { b64.value = dados.anexoBase64; if (nomeAnexo) b64.dataset.filename = nomeAnexo; } definirNomeAnexo(id, nomeAnexo); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
         if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { 
             const pContainer = document.getElementById(`pecasContainer_${id}`); 
             const row = document.createElement('div'); 
@@ -1809,7 +1995,7 @@ function adicionarBlocoOS(dados = null) {
             `; 
             pContainer.appendChild(row); 
         }); else { addPecaRow(id); addPecaRow(id); }
-        if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.b64, f.desc));
+        if(dados.fotos && dados.fotos.length > 0) dados.fotos.forEach(f => renderFotoItem(id, f.mediaId ? { mediaId: f.mediaId } : f.b64, f.desc));
     } else { addPecaRow(id); addPecaRow(id); }
     atualizarResumoChecklistOS(id);
     atualizarVisibilidadeCamposPorBloco();
@@ -1863,7 +2049,7 @@ async function salvarDocumento(silencioso = false) {
         const historicoMeta = [...historicoAnterior]; const meta = gerarMetadadosResumo(dados);
         const index = historicoMeta.findIndex(d => d.id === dados.id); if(index >= 0) historicoMeta[index] = meta; else historicoMeta.unshift(meta);
         if(!await gravarHistoricoSalvo(historicoMeta)) throw new Error('Falha ao atualizar índice do histórico.');
-        await localforage.removeItem('draft_os'); formularioSujo = false;
+        await localforage.removeItem('draft_os'); await limparMidiasRemovidasDoDocumento(documentoAnterior, dados); formularioSujo = false;
         if(document.getElementById('autoSaveIndicator')) document.getElementById('autoSaveIndicator').textContent = 'Salvo';
         if(!silencioso) { mostrarToast('Salvo com sucesso!'); await carregarHistorico(); }
         return true;
@@ -1978,16 +2164,24 @@ async function construirPDFBytes(onProgressCallback) {
             for(let f = 0; f < fotoItems.length; f++) {
                 let fotoPct = basePct + ((f / fotoItems.length) * (75 / blocosOS.length) * 0.7); await reportProgress(fotoPct, `Anexando foto ${f + 1} de ${fotoItems.length} (OS ${idx + 1})...`);
                 if (col === 0 && startY > 195) { docOS.addPage(); startY = margemTopoSegura; }
-                const fItem = fotoItems[f]; const base64 = fItem.querySelector('.foto-b64').value; const desc = fItem.querySelector('.foto-desc').value;
-                const imgProps = await new Promise((resolve) => { 
-                    const i = new Image(); 
-                    i.onload = () => resolve({ w: i.width, h: i.height }); 
-                    i.onerror = () => resolve({ w: 1, h: 1 });
-                    i.src = base64; 
+                const fItem = fotoItems[f]; const mediaId = fItem.querySelector('.foto-media-id')?.value || ''; const base64 = fItem.querySelector('.foto-b64')?.value || ''; const desc = fItem.querySelector('.foto-desc').value;
+                let fonteImagem = base64; let objectUrlTemporaria = null;
+                if (mediaId) {
+                    const blobFoto = await obterBlobMidia(MEDIA_PHOTO_PREFIX, mediaId);
+                    if (!blobFoto) { console.warn('Foto Blob não encontrada:', mediaId); continue; }
+                    objectUrlTemporaria = URL.createObjectURL(blobFoto); fonteImagem = objectUrlTemporaria;
+                }
+                const imagemCarregada = await new Promise((resolve) => {
+                    const i = new Image();
+                    i.onload = () => resolve(i);
+                    i.onerror = () => resolve(null);
+                    i.src = fonteImagem;
                 });
-                let renderW = 85; let renderH = (imgProps.h / imgProps.w) * 85; if (renderH > 65) { renderH = 65; renderW = (imgProps.w / imgProps.h) * 65; }
+                if (!imagemCarregada) { if (objectUrlTemporaria) URL.revokeObjectURL(objectUrlTemporaria); continue; }
+                let renderW = 85; let renderH = (imagemCarregada.height / imagemCarregada.width) * 85; if (renderH > 65) { renderH = 65; renderW = (imagemCarregada.width / imagemCarregada.height) * 65; }
                 let boxX = col === 0 ? 15 : 110; let imgX = boxX + (85 - renderW) / 2;
-                docOS.addImage(base64, base64.includes('image/png') ? 'PNG' : 'JPEG', imgX, startY, renderW, renderH);
+                docOS.addImage(imagemCarregada, 'JPEG', imgX, startY, renderW, renderH);
+                if (objectUrlTemporaria) URL.revokeObjectURL(objectUrlTemporaria);
                 docOS.setFont("helvetica", "normal"); docOS.setFontSize(8); const textLines = docOS.splitTextToSize(desc, 85); let textY = startY + renderH + 5; docOS.text(textLines, boxX, textY);
                 let totalElementH = renderH + 5 + (textLines.length * 3.5); if (totalElementH > maxRowH) maxRowH = totalElementH;
                 col++; if (col === 2 || f === fotoItems.length - 1) { col = 0; startY += maxRowH + 10; maxRowH = 0; }
@@ -2001,17 +2195,26 @@ async function construirPDFBytes(onProgressCallback) {
             await reportProgress(Math.min(basePct + 5, 86), `A incluir checklist da OS ${idx + 1}...`);
             await adicionarChecklistAoMaster(masterPdf, id, PDFDocument, StandardFonts, rgb);
         }
+        const anexoMediaId = getVal('anexoMediaId', id);
         const anexoB64 = getVal('anexoBase64', id);
-        if (anexoB64) { 
-            try { 
-                const respostaAnexo = await fetch(anexoB64);
-                const bytes = new Uint8Array(await respostaAnexo.arrayBuffer());
-                const anexoPdf = await PDFDocument.load(bytes); 
-                const anexoPages = await masterPdf.copyPages(anexoPdf, anexoPdf.getPageIndices()); 
-                anexoPages.forEach((p) => masterPdf.addPage(p)); 
+        if (anexoMediaId || anexoB64) {
+            try {
+                let bytes;
+                if (anexoMediaId) {
+                    const blobAnexo = await obterBlobMidia(MEDIA_PDF_PREFIX, anexoMediaId);
+                    if (!blobAnexo) throw new Error('PDF Blob não encontrado');
+                    bytes = new Uint8Array(await blobAnexo.arrayBuffer());
+                } else {
+                    const respostaAnexo = await fetch(anexoB64);
+                    bytes = new Uint8Array(await respostaAnexo.arrayBuffer());
+                }
+                const anexoPdf = await PDFDocument.load(bytes);
+                const anexoPages = await masterPdf.copyPages(anexoPdf, anexoPdf.getPageIndices());
+                anexoPages.forEach((p) => masterPdf.addPage(p));
             } catch (e) {
+                console.error('Falha ao incorporar PDF anexo:', e);
                 mostrarToast(`Aviso: O PDF Anexo da OS #${id} não pôde ser incorporado.`, true);
-            } 
+            }
         }
     }
     await reportProgress(88, "A gerar secção de assinaturas...");
