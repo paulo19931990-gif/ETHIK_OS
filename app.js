@@ -718,13 +718,15 @@ let pdfPreviewPaginaAtual = 1;
 let pdfPreviewModoEconomico = false;
 let pdfPreviewRenderTask = null;
 
-const APP_VERSION = 67;
+const APP_VERSION = 68;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
 const MAX_LOG_ERROS = 50;
 const FOTO_MAX_DIM = 1600;
 const FOTO_JPEG_QUALIDADE = 0.72;
+const CAMERA_PENDING_KEY = 'captura_camera_pendente_v68';
+const CAMERA_RESTORE_MAX_AGE_MS = 10 * 60 * 1000;
 const MEDIA_PHOTO_PREFIX = 'media_photo_';
 const MEDIA_PDF_PREFIX = 'media_pdf_';
 const midiasCriadasSessao = new Set();
@@ -774,10 +776,10 @@ async function solicitarPersistenciaArmazenamento() {
 async function registrarErroApp(origem, erro) {
     try {
         if (typeof localforage === 'undefined') return;
-        const atual = await localforage.getItem('diagnostico_erros_v67');
+        const atual = await localforage.getItem('diagnostico_erros_v68');
         const lista = Array.isArray(atual) ? atual : [];
         lista.unshift({ data: new Date().toISOString(), origem: String(origem || 'desconhecida').slice(0,120), mensagem: String(erro?.message || erro || 'Erro desconhecido').slice(0,500) });
-        await localforage.setItem('diagnostico_erros_v67', lista.slice(0, MAX_LOG_ERROS));
+        await localforage.setItem('diagnostico_erros_v68', lista.slice(0, MAX_LOG_ERROS));
     } catch (_) {}
 }
 
@@ -1364,7 +1366,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         pdfContainer.addEventListener('touchcancel', finalizarPinch, {passive: true});
     }
 
-    adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco(); verificarRascunhoPendente();
+    adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco();
+    const recuperouCamera = await verificarRetornoCapturaPendente();
+    if (!recuperouCamera) await verificarRascunhoPendente();
 
     const formOs = document.getElementById('osForm');
     if(formOs) {
@@ -1555,29 +1559,87 @@ function gerarPdfBancoHoras() {
     }
 }
 
-function adicionarFoto(id, source) {
+async function prepararCapturaCamera(id) {
+    osIdAtualFoto = id;
+    cancelarAutoSavePendente();
+    try {
+        if (typeof localforage !== 'undefined') {
+            // Salva o estado atual mesmo que Cliente/OS ainda estejam incompletos.
+            await localforage.setItem('draft_os', recolherDadosDoFormulario());
+            await localforage.setItem(CAMERA_PENDING_KEY, {
+                osId: String(id),
+                documentoId: String(documentoAtualId || ''),
+                iniciadoEm: Date.now()
+            });
+        }
+    } catch (e) {
+        console.error('Falha ao preparar captura:', e);
+        registrarErroApp('prepararCapturaCamera', e);
+    }
+    liberarPreviewsBlobTemporarios();
+}
+
+function liberarPreviewsBlobTemporarios() {
+    document.querySelectorAll('.foto-item img[data-object-url]').forEach(img => {
+        try { URL.revokeObjectURL(img.dataset.objectUrl); } catch (_) {}
+        delete img.dataset.objectUrl;
+        img.removeAttribute('src');
+    });
+}
+
+function recarregarPreviewsBlobVisiveis() {
+    document.querySelectorAll('.foto-item').forEach(item => {
+        const mediaId = item.querySelector('.foto-media-id')?.value || '';
+        const img = item.querySelector('img');
+        if (mediaId && img && !img.src) carregarPreviewFotoBlob(img, mediaId).catch(() => {});
+    });
+}
+
+async function limparMarcadorCapturaCamera() {
+    try { if (typeof localforage !== 'undefined') await localforage.removeItem(CAMERA_PENDING_KEY); } catch (_) {}
+}
+
+async function tratarCancelamentoFotoNativa(event, source) {
+    if (source === 'camera') await limparMarcadorCapturaCamera();
+    recarregarPreviewsBlobVisiveis();
+    if (event?.target) event.target.value = '';
+}
+
+async function tratarRetornoFotoNativa(event, source) {
+    const input = event?.target;
+    try {
+        let pending = null;
+        try { if (typeof localforage !== 'undefined') pending = await localforage.getItem(CAMERA_PENDING_KEY); } catch (_) {}
+        const destinoId = Number(osIdAtualFoto || pending?.osId || 1);
+        const file = input?.files?.[0];
+        if (!file) {
+            if (source === 'camera') await limparMarcadorCapturaCamera();
+            recarregarPreviewsBlobVisiveis();
+            return;
+        }
+        await processarFicheiroImagem(destinoId, file, source);
+        if (source === 'camera') await limparMarcadorCapturaCamera();
+        recarregarPreviewsBlobVisiveis();
+    } finally {
+        if (input) input.value = '';
+    }
+}
+
+async function adicionarFoto(id, source) {
     osIdAtualFoto = id;
     const fotosAtuais = document.querySelectorAll(`#fotosContainer_${id} .foto-item`).length;
     if (fotosAtuais >= 20) { mostrarToast('Limite de 20 fotos por O.S. atingido.', true); return; }
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    // Em celulares compatíveis, capture="environment" abre a câmera nativa traseira,
-    // preservando recursos do aparelho como foco, flash e processamento da câmera.
-    if (source === 'camera') input.setAttribute('capture', 'environment');
-    input.onchange = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        await processarFicheiroImagem(id, file);
-        e.target.value = '';
-    };
+    const input = document.getElementById(source === 'camera' ? 'inputCameraNativa' : 'inputGaleriaFotos');
+    if (!input) { mostrarToast('Seletor de imagem indisponível.', true); return; }
+    input.value = '';
+    if (source === 'camera') await prepararCapturaCamera(id);
     input.click();
 }
 
-// Mantidas para compatibilidade com versões anteriores. A v67 usa a câmera nativa do celular.
+// Mantidas para compatibilidade com versões anteriores. A v68 usa a câmera nativa do celular com retorno protegido.
 async function abrirCameraInterna() {
-    mostrarToast('A v67 usa a câmera nativa do celular.');
-    adicionarFoto(osIdAtualFoto || 1, 'camera');
+    mostrarToast('A v68 usa a câmera nativa do celular.');
+    await adicionarFoto(osIdAtualFoto || 1, 'camera');
 }
 function fecharCameraInterna() {
     if (mediaStreamCamera) { mediaStreamCamera.getTracks().forEach(t => t.stop()); mediaStreamCamera = null; }
@@ -1604,8 +1666,79 @@ function canvasParaBlobJPEG(canvas, qualidade = FOTO_JPEG_QUALIDADE) {
     });
 }
 
+async function lerDimensoesImagemCabecalho(file) {
+    try {
+        const tipo = String(file?.type || '').toLowerCase();
+        if (tipo === 'image/png') {
+            const b = new Uint8Array(await file.slice(0, 32).arrayBuffer());
+            if (b.length >= 24 && b[0]===0x89 && b[1]===0x50 && b[2]===0x4e && b[3]===0x47) {
+                const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+                return { width: dv.getUint32(16), height: dv.getUint32(20) };
+            }
+        }
+        // A câmera nativa do Android normalmente devolve JPEG. Lemos só o cabeçalho,
+        // sem decodificar a foto de 48/50 MP inteira na memória.
+        if (tipo.includes('jpeg') || tipo.includes('jpg') || !tipo) {
+            const b = new Uint8Array(await file.slice(0, Math.min(file.size, 512 * 1024)).arrayBuffer());
+            if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return null;
+            let i = 2;
+            while (i + 9 < b.length) {
+                if (b[i] !== 0xff) { i++; continue; }
+                const marker = b[i+1]; i += 2;
+                if (marker === 0xd8 || marker === 0xd9) continue;
+                if (i + 1 >= b.length) break;
+                const len = (b[i] << 8) | b[i+1];
+                if (len < 2 || i + len > b.length) break;
+                const sof = (marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf);
+                if (sof && len >= 7) {
+                    const h = (b[i+3] << 8) | b[i+4];
+                    const w = (b[i+5] << 8) | b[i+6];
+                    if (w && h) return { width: w, height: h };
+                }
+                i += len;
+            }
+        }
+    } catch (_) {}
+    return null;
+}
+
+async function comprimirComImageBitmap(file, dims) {
+    if (typeof createImageBitmap !== 'function' || !dims?.width || !dims?.height) return null;
+    const alvo = calcularDimensoesFoto(dims.width, dims.height);
+    let bitmap = null;
+    try {
+        bitmap = await createImageBitmap(file, {
+            resizeWidth: alvo.width,
+            resizeHeight: alvo.height,
+            resizeQuality: 'medium',
+            imageOrientation: 'from-image'
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = alvo.width; canvas.height = alvo.height;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) throw new Error('Canvas indisponível.');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, alvo.width, alvo.height);
+        ctx.drawImage(bitmap, 0, 0, alvo.width, alvo.height);
+        return await canvasParaBlobJPEG(canvas, FOTO_JPEG_QUALIDADE);
+    } catch (e) {
+        console.warn('Redução antecipada via ImageBitmap indisponível; usando fallback.', e);
+        return null;
+    } finally {
+        try { bitmap?.close?.(); } catch (_) {}
+    }
+}
+
 async function comprimirImagemParaBlob(file) {
     if (!file?.type?.startsWith('image/')) throw new Error('Selecione um ficheiro de imagem válido.');
+
+    // Caminho preferencial: descobre as dimensões no cabeçalho e pede ao navegador
+    // para devolver um bitmap já reduzido. Isso evita o pico de RAM causado por
+    // decodificar uma foto enorme e só depois diminuir no canvas.
+    const dims = await lerDimensoesImagemCabecalho(file);
+    const otimizado = await comprimirComImageBitmap(file, dims);
+    if (otimizado) return otimizado;
+
+    // Fallback compatível para navegadores que não suportam createImageBitmap com resize.
     const objectUrl = URL.createObjectURL(file);
     try {
         const img = await new Promise((resolve, reject) => {
@@ -1625,20 +1758,46 @@ async function comprimirImagemParaBlob(file) {
     } finally { URL.revokeObjectURL(objectUrl); }
 }
 
-async function processarFicheiroImagem(id, file) {
+async function processarFicheiroImagem(id, file, origem = 'galeria') {
     try {
         const blobComprimido = await comprimirImagemParaBlob(file);
         const mediaId = await salvarBlobMidia(MEDIA_PHOTO_PREFIX, blobComprimido);
         if (mediaId) {
             renderFotoItem(id, { mediaId }, '');
         } else {
-            // Fallback para navegadores que não conseguem persistir Blob no armazenamento local.
             renderFotoItem(id, await blobParaDataUrl(blobComprimido), '');
         }
+        // A foto já está segura no armazenamento; persiste também a referência no rascunho.
+        await autoSalvarRascunho(true);
         mostrarToast(`Foto otimizada (${Math.max(1, Math.round(blobComprimido.size / 1024))} KB).`);
     } catch (e) {
         console.error('Erro ao processar foto:', e); registrarErroApp('processarFicheiroImagem', e);
         mostrarToast(e.message || 'Não foi possível processar a imagem.', true);
+    } finally {
+        if (origem === 'camera') await limparMarcadorCapturaCamera();
+    }
+}
+
+async function verificarRetornoCapturaPendente() {
+    if (typeof localforage === 'undefined') return false;
+    try {
+        const pending = await localforage.getItem(CAMERA_PENDING_KEY);
+        if (!pending) return false;
+        osIdAtualFoto = Number(pending.osId || 1);
+        const idade = Date.now() - Number(pending.iniciadoEm || 0);
+        const draft = await localforage.getItem('draft_os');
+        let recuperado = false;
+        if (draft?.ordens?.length && idade >= 0 && idade <= CAMERA_RESTORE_MAX_AGE_MS) {
+            restaurarDadosParaFormulario(draft);
+            mostrarToast('O Android reiniciou o app ao voltar da câmera. Sua O.S. foi recuperada automaticamente.');
+            recuperado = true;
+        }
+        await localforage.removeItem(CAMERA_PENDING_KEY);
+        return recuperado;
+    } catch (e) {
+        console.error('Falha ao recuperar retorno da câmera:', e);
+        registrarErroApp('verificarRetornoCapturaPendente', e);
+        return false;
     }
 }
 
