@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v67';
+const CACHE_NAME = 'multios-pro-v68';
 
 // Arquivos indispensáveis para abrir e usar o núcleo do app offline.
 const ASSETS_CRITICOS = [
