@@ -119,7 +119,7 @@ async function exportarBancoPecas() {
         const payload = {
             tipo: 'multi-os-banco-pecas',
             versaoFormato: 1,
-            versaoApp: 53,
+            versaoApp: APP_VERSION,
             exportadoEm: new Date().toISOString(),
             total: pecasValidas.length,
             pecas: pecasValidas
@@ -696,7 +696,7 @@ async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, Stan
 
 }
 
-let documentoAtualId = Date.now().toString();
+let documentoAtualId = novoIdLocal();
 let logoImgData = null, logoImgFormat = 'PNG', imgObject = null;
 let urlDownloadGerado = null; 
 let objUrlPreview = null;
@@ -710,6 +710,19 @@ let contadorOS = 0;
 let mediaStreamCamera = null;
 let osIdAtualFoto = null;
 let timeoutRascunho = null;
+let formularioSujo = false;
+let salvamentoManualEmAndamento = false;
+let restaurandoDocumento = false;
+let pdfPreviewDoc = null;
+let pdfPreviewPaginaAtual = 1;
+let pdfPreviewModoEconomico = false;
+let pdfPreviewRenderTask = null;
+
+const APP_VERSION = 66;
+const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
+const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
+const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
+const MAX_LOG_ERROS = 50;
 
 const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
 const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
@@ -727,6 +740,108 @@ function dataLocalISO(data = new Date()) {
 
 function idLocalSeguro(valor) {
     return typeof valor === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(valor);
+}
+
+function novoIdLocal() {
+    if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+    const aleatorio = Math.random().toString(36).slice(2, 12);
+    return `${Date.now()}_${aleatorio}`;
+}
+
+function cancelarAutoSavePendente() {
+    if (timeoutRascunho) clearTimeout(timeoutRascunho);
+    timeoutRascunho = null;
+}
+
+function marcarFormularioAlterado() {
+    formularioSujo = true;
+    cancelarAutoSavePendente();
+    timeoutRascunho = setTimeout(autoSalvarRascunho, 3000);
+}
+
+async function solicitarPersistenciaArmazenamento() {
+    try {
+        if (navigator.storage?.persist) await navigator.storage.persist();
+    } catch (e) { console.warn('Persistência de armazenamento não pôde ser solicitada:', e); }
+}
+
+async function registrarErroApp(origem, erro) {
+    try {
+        if (typeof localforage === 'undefined') return;
+        const atual = await localforage.getItem('diagnostico_erros_v66');
+        const lista = Array.isArray(atual) ? atual : [];
+        lista.unshift({ data: new Date().toISOString(), origem: String(origem || 'desconhecida').slice(0,120), mensagem: String(erro?.message || erro || 'Erro desconhecido').slice(0,500) });
+        await localforage.setItem('diagnostico_erros_v66', lista.slice(0, MAX_LOG_ERROS));
+    } catch (_) {}
+}
+
+window.addEventListener('error', e => registrarErroApp('window.error', e.error || e.message));
+window.addEventListener('unhandledrejection', e => registrarErroApp('unhandledrejection', e.reason));
+
+function serializarCanonico(valor) {
+    if (Array.isArray(valor)) return '[' + valor.map(serializarCanonico).join(',') + ']';
+    if (valor && typeof valor === 'object') {
+        return '{' + Object.keys(valor).sort().map(k => JSON.stringify(k) + ':' + serializarCanonico(valor[k])).join(',') + '}';
+    }
+    return JSON.stringify(valor);
+}
+
+function dadosParaIntegridade(doc) {
+    const copia = { ...doc };
+    delete copia.integridade;
+    delete copia.dataAtualizacao;
+    return copia;
+}
+
+async function calcularHashDocumento(doc) {
+    if (!globalThis.crypto?.subtle || typeof TextEncoder === 'undefined') return null;
+    const bytes = new TextEncoder().encode(serializarCanonico(dadosParaIntegridade(doc)));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function aplicarIntegridadeDocumento(doc, integridadeAnterior = null) {
+    const assinado = !!doc.assinaturaCliente || (!!doc.assinaturaTecnico && Array.isArray(doc.ordens) && doc.ordens.length > 0 && doc.ordens.every(o => o.cbServInterno));
+    if (!assinado) { delete doc.integridade; return doc; }
+    const hash = await calcularHashDocumento(doc);
+    if (!hash) return doc;
+    doc.integridade = {
+        algoritmo: 'SHA-256', hash,
+        seladoEm: integridadeAnterior?.hash === hash && integridadeAnterior?.seladoEm ? integridadeAnterior.seladoEm : new Date().toISOString()
+    };
+    return doc;
+}
+
+async function verificarIntegridadeDocumento(doc) {
+    if (!doc?.integridade?.hash) return null; // documento antigo: compatível, ainda sem selo
+    const hashAtual = await calcularHashDocumento(doc);
+    if (!hashAtual) return null;
+    return hashAtual === doc.integridade.hash;
+}
+
+function bytesParaBase64(bytes) {
+    let bin = ''; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin);
+}
+function base64ParaBytes(str) {
+    const bin = atob(str); const out = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i); return out;
+}
+async function criarRegistroPin(pin) {
+    if (!globalThis.crypto?.subtle) return { v: 1, legado: String(pin) };
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iteracoes = 120000;
+    const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt, iterations:iteracoes, hash:'SHA-256' }, baseKey, 256);
+    return { v: 2, algoritmo:'PBKDF2-SHA256', iteracoes, salt:bytesParaBase64(salt), hash:bytesParaBase64(new Uint8Array(bits)) };
+}
+async function verificarRegistroPin(pin, registro) {
+    if (typeof registro === 'string') return pin === registro; // compatibilidade v65 e anteriores
+    if (registro?.v === 1 && typeof registro.legado === 'string') return pin === registro.legado;
+    if (!registro || registro.v !== 2 || !globalThis.crypto?.subtle) return false;
+    const salt = base64ParaBytes(registro.salt); const esperado = base64ParaBytes(registro.hash);
+    const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits({ name:'PBKDF2', salt, iterations:Number(registro.iteracoes)||120000, hash:'SHA-256' }, baseKey, 256));
+    if (bits.length !== esperado.length) return false;
+    let diff = 0; for (let i=0;i<bits.length;i++) diff |= bits[i] ^ esperado[i]; return diff === 0;
 }
 
 function dependenciasPdfDisponiveis(incluirPdfJs = false) {
@@ -801,6 +916,7 @@ async function lerLogotipo(event) {
     const file = event.target.files[0];
     if (file) {
         if (!file.type.startsWith('image/')) { mostrarToast('Selecione uma imagem válida para o logótipo.', true); event.target.value = ''; return; }
+        if (file.size > 5 * 1024 * 1024) { mostrarToast('O logótipo deve ter no máximo 5 MB.', true); event.target.value = ''; return; }
         const reader = new FileReader();
         reader.onload = async function(e) { try { if (!dataUrlImagemSegura(e.target.result)) throw new Error('Formato inválido'); await localforage.setItem('oficialLogoApp', e.target.result); await carregarLogoDoArmazenamento(); mostrarToast('Logótipo atualizado!'); } catch(err) { console.error(err); mostrarToast('Não foi possível guardar o logótipo.', true); } };
         reader.onerror = () => mostrarToast('Não foi possível ler o logótipo.', true);
@@ -818,20 +934,35 @@ function gerarMetadadosResumo(doc) {
 }
 
 async function obterHistoricoSalvo() {
-    try { 
-        let h = await localforage.getItem('historico_os') || []; 
-        if (h.length > 0 && h[0].ordens) {
-            let novoMeta = [];
-            for(let doc of h) { await localforage.setItem(`os_doc_${doc.id}`, doc); novoMeta.push(gerarMetadadosResumo(doc)); }
-            await localforage.setItem('historico_os', novoMeta); return novoMeta;
+    if (typeof localforage === 'undefined') throw new Error('Armazenamento local indisponível.');
+    let h = await localforage.getItem('historico_os');
+    if (h === null || h === undefined) return [];
+    if (!Array.isArray(h)) throw new Error('Índice do histórico possui formato inválido.');
+    if (h.length > 0 && h[0]?.ordens) {
+        // Migração antiga protegida: guarda uma cópia do índice antes de converter.
+        await localforage.setItem('historico_os_backup_pre_meta_v66', h);
+        const novoMeta = [];
+        for (const doc of h) {
+            if (!doc || !idLocalSeguro(String(doc.id || ''))) continue;
+            await localforage.setItem(`os_doc_${doc.id}`, doc);
+            novoMeta.push(gerarMetadadosResumo(doc));
         }
-        return h; 
-    } catch(e) { return []; }
+        await localforage.setItem('historico_os', novoMeta);
+        return novoMeta;
+    }
+    return h;
 }
 
-async function gravarHistoricoSalvo(historicoMeta) { 
-    try { await localforage.setItem('historico_os', historicoMeta); return true; } 
-    catch(e) { return false; } 
+async function gravarHistoricoSalvo(historicoMeta) {
+    try {
+        if (!Array.isArray(historicoMeta)) throw new Error('Índice inválido');
+        const anterior = await localforage.getItem('historico_os');
+        if (Array.isArray(anterior)) await localforage.setItem('historico_os_recovery_v66', anterior);
+        await localforage.setItem('historico_os', historicoMeta);
+        return true;
+    } catch(e) {
+        console.error('Falha ao gravar histórico:', e); registrarErroApp('gravarHistoricoSalvo', e); return false;
+    }
 }
 
 function mostrarToast(mensagem, isErro = false) {
@@ -848,29 +979,39 @@ async function abrirAbaHistoricoSegura() {
 }
 async function salvarNovoPin() {
     const novoPin = document.getElementById('inputNovoPin').value.trim();
-    if(/^\d{4,12}$/.test(novoPin)) { await localforage.setItem('app_pin', novoPin); document.getElementById('modalCriarPin').classList.add('hidden'); switchTab('historico'); mostrarToast("PIN registado!"); }
-    else mostrarToast("Use um PIN numérico de 4 a 12 dígitos.", true);
+    if(!/^\d{4,12}$/.test(novoPin)) { mostrarToast('Use um PIN numérico de 4 a 12 dígitos.', true); return; }
+    try {
+        await localforage.setItem('app_pin', await criarRegistroPin(novoPin));
+        document.getElementById('modalCriarPin').classList.add('hidden'); switchTab('historico'); mostrarToast('PIN registado com proteção reforçada!');
+    } catch(e) { console.error(e); mostrarToast('Não foi possível guardar o PIN.', true); }
 }
 async function validarPinAcesso() {
-    const digitado = document.getElementById('inputDigitarPin').value.trim(); const pinSalvo = await localforage.getItem('app_pin');
-    if (digitado === pinSalvo) { document.getElementById('modalDigitarPin').classList.add('hidden'); switchTab('historico'); }
-    else { mostrarToast("PIN incorreto!", true); document.getElementById('inputDigitarPin').value = ''; }
+    const digitado = document.getElementById('inputDigitarPin').value.trim();
+    try {
+        const pinSalvo = await localforage.getItem('app_pin');
+        if (await verificarRegistroPin(digitado, pinSalvo)) {
+            // Migra PIN em texto simples de versões antigas sem exigir redefinição.
+            if (typeof pinSalvo === 'string') await localforage.setItem('app_pin', await criarRegistroPin(digitado));
+            document.getElementById('modalDigitarPin').classList.add('hidden'); switchTab('historico');
+        } else { mostrarToast('PIN incorreto!', true); document.getElementById('inputDigitarPin').value = ''; }
+    } catch(e) { console.error(e); mostrarToast('Não foi possível validar o PIN.', true); }
 }
 
 function abrirModalExportar() { document.getElementById('inputNomeBackup').value = `Backup_MultiOS_${dataLocalISO()}`; document.getElementById('modalExportar').classList.remove('hidden'); }
 function fecharModalExportar() { document.getElementById('modalExportar').classList.add('hidden'); }
 async function confirmarExportacao() {
-    let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${dataLocalISO()}`;
-    let historicoMeta = await obterHistoricoSalvo();
-    let backupCompleto = { historicoOS: [], bancoHoras: registosBancoHoras || [] };
-    for (let meta of historicoMeta) { let docFull = await localforage.getItem(`os_doc_${meta.id}`); if (docFull) backupCompleto.historicoOS.push(docFull); }
-    const blob = new Blob([JSON.stringify(backupCompleto, null, 2)], { type: 'application/json' });
-    if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado);
-    urlDownloadGerado = URL.createObjectURL(blob);
-    inputNome = inputNome.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 100) || `Backup_${dataLocalISO()}`;
-    const a = document.createElement('a'); a.href = urlDownloadGerado; a.download = `${inputNome}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    fecharModalExportar(); mostrarToast('Backup Exportado!');
+    try {
+        let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${dataLocalISO()}`;
+        const historicoMeta = await obterHistoricoSalvo();
+        const backupCompleto = { tipo: 'multi-os-backup', versaoFormato: 2, versaoApp: APP_VERSION, exportadoEm: new Date().toISOString(), historicoOS: [], bancoHoras: registosBancoHoras || [] };
+        for (const meta of historicoMeta) { const docFull = await localforage.getItem(`os_doc_${meta.id}`); if (docFull) backupCompleto.historicoOS.push(docFull); }
+        const blob = new Blob([JSON.stringify(backupCompleto, null, 2)], { type: 'application/json' });
+        if (blob.size > 100 * 1024 * 1024 && !confirm(`O backup tem ${(blob.size/1024/1024).toFixed(1)} MB e pode demorar para abrir em celulares. Deseja baixar mesmo assim?`)) return;
+        if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado); urlDownloadGerado = URL.createObjectURL(blob);
+        inputNome = inputNome.replace(/[\/:*?"<>|]+/g, '_').slice(0, 100) || `Backup_${dataLocalISO()}`;
+        const a = document.createElement('a'); a.href = urlDownloadGerado; a.download = `${inputNome}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        fecharModalExportar(); mostrarToast('Backup Exportado!');
+    } catch(e) { console.error('Falha ao exportar backup:', e); registrarErroApp('confirmarExportacao', e); mostrarToast('Não foi possível exportar o backup. Nenhum dado foi apagado.', true); }
 }
 function validarDocumentoBackup(doc) {
     if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return false;
@@ -897,6 +1038,9 @@ function normalizarBackupImportado(importados) {
 
 function importarBackupJSON(event) {
     const file = event.target.files[0]; if(!file) return;
+    if (file.size > BACKUP_IMPORT_MAX_BYTES && !confirm(`Este backup tem ${(file.size/1024/1024).toFixed(1)} MB e pode consumir muita memória no celular. Deseja tentar importar mesmo assim?`)) {
+        event.target.value = ''; return;
+    }
     const reader = new FileReader();
     reader.onload = async function(e) {
         let rollbackDocs = new Map(); let historicoAnterior = null; let bancoHorasAnterior = null;
@@ -946,14 +1090,69 @@ function importarBackupJSON(event) {
     reader.onerror = () => mostrarToast('Não foi possível ler o ficheiro de backup.', true);
     reader.readAsText(file); event.target.value = '';
 }
+async function obterLixeiraOS() {
+    const l = await localforage.getItem('lixeira_os');
+    return Array.isArray(l) ? l : [];
+}
+
+async function moverDocumentoParaLixeira(id) {
+    if (!idLocalSeguro(String(id))) throw new Error('ID inválido');
+    const historicoMeta = await obterHistoricoSalvo();
+    const doc = await localforage.getItem(`os_doc_${id}`);
+    if (!doc) throw new Error('Documento não encontrado');
+    const lixeiraAnterior = await obterLixeiraOS();
+    const metaOriginal = historicoMeta.find(m => m.id === id) || gerarMetadadosResumo(doc);
+    const metaLixeira = { ...metaOriginal, excluidoEm: new Date().toISOString() };
+    const novaLixeira = [metaLixeira, ...lixeiraAnterior.filter(m => m.id !== id)];
+
+    // Primeiro cria as cópias recuperáveis; só depois retira do histórico ativo.
+    await localforage.setItem(`trash_os_doc_${id}`, doc);
+    await localforage.setItem('lixeira_os', novaLixeira);
+    if (!await gravarHistoricoSalvo(historicoMeta.filter(d => d.id !== id))) throw new Error('Falha ao atualizar histórico');
+    await localforage.removeItem(`os_doc_${id}`);
+}
+
+async function abrirLixeira() { document.getElementById('modalLixeira')?.classList.remove('hidden'); await carregarLixeira(); }
+function fecharLixeira() { document.getElementById('modalLixeira')?.classList.add('hidden'); }
+async function carregarLixeira() {
+    const list = document.getElementById('lixeiraList'); if (!list) return;
+    try {
+        const itens = (await obterLixeiraOS()).filter(m => m && idLocalSeguro(String(m.id || '')));
+        if (!itens.length) { list.innerHTML = '<div class="p-6 text-center text-gray-500">A lixeira está vazia.</div>'; return; }
+        list.innerHTML = itens.map(m => `<div class="p-4 border border-gray-200 rounded-xl bg-white flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between"><div><div class="font-black text-gray-900">${escapeHTML(m.clienteEmpresa || m.nomeClienteFinal || 'Desconhecido')}</div><div class="text-xs text-gray-500">OS #${escapeHTML(m.osNumResumo || 'N/A')} • excluída ${m.excluidoEm ? new Date(m.excluidoEm).toLocaleString('pt-BR') : ''}</div></div><div class="flex gap-2"><button onclick="restaurarDocumentoLixeira('${m.id}')" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold">Restaurar</button><button onclick="apagarDocumentoDefinitivo('${m.id}')" class="px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold">Excluir definitivamente</button></div></div>`).join('');
+    } catch(e) { console.error(e); list.innerHTML = '<div class="p-6 text-center text-red-600">Não foi possível abrir a lixeira.</div>'; }
+}
+async function restaurarDocumentoLixeira(id) {
+    try {
+        const doc = await localforage.getItem(`trash_os_doc_${id}`); if (!doc) throw new Error('Documento da lixeira não encontrado');
+        const hist = await obterHistoricoSalvo(); const meta = gerarMetadadosResumo(doc);
+        await localforage.setItem(`os_doc_${id}`, doc);
+        if (!await gravarHistoricoSalvo([meta, ...hist.filter(m => m.id !== id)])) throw new Error('Falha ao restaurar índice');
+        const lix = await obterLixeiraOS(); await localforage.setItem('lixeira_os', lix.filter(m => m.id !== id)); await localforage.removeItem(`trash_os_doc_${id}`);
+        await carregarLixeira(); await carregarHistorico(); mostrarToast('OS restaurada da lixeira.');
+    } catch(e) { console.error(e); mostrarToast('Não foi possível restaurar a OS.', true); }
+}
+async function apagarDocumentoDefinitivo(id) {
+    if (!idLocalSeguro(String(id)) || !confirm('Excluir definitivamente esta OS da lixeira? Esta ação não pode ser desfeita.')) return;
+    const lix = await obterLixeiraOS();
+    try {
+        await localforage.setItem('lixeira_os', lix.filter(m => m.id !== id));
+        try { await localforage.removeItem(`trash_os_doc_${id}`); }
+        catch(e) { await localforage.setItem('lixeira_os', lix); throw e; }
+        await carregarLixeira(); mostrarToast('OS excluída definitivamente.');
+    } catch(e) { console.error(e); mostrarToast('Falha ao excluir definitivamente. A entrada da lixeira foi preservada quando possível.', true); }
+}
+
 async function limparTodoHistorico() {
-    if(!confirm("Tem a certeza que deseja APAGAR TODO o histórico de O.S.? Esta ação não pode ser desfeita e os ficheiros não exportados serão perdidos.")) return;
-    let historicoMeta = await obterHistoricoSalvo();
-    for (let meta of historicoMeta) { await localforage.removeItem(`os_doc_${meta.id}`); }
-    await localforage.removeItem('historico_os');
-    if (documentoAtualId) iniciarNovaOS();
-    await carregarHistorico();
-    mostrarToast('Todo o histórico foi apagado.');
+    if(!confirm('Mover TODAS as O.S. para a Lixeira? Elas poderão ser restauradas depois.')) return;
+    try {
+        const historicoMeta = await obterHistoricoSalvo();
+        const idsMovidos = new Set(historicoMeta.map(meta => meta.id));
+        for (const meta of [...historicoMeta]) await moverDocumentoParaLixeira(meta.id);
+        // Não apaga um rascunho atual que ainda nem fazia parte do histórico.
+        if (idsMovidos.has(documentoAtualId)) await iniciarNovaOS();
+        await carregarHistorico(); mostrarToast('Histórico movido para a Lixeira.');
+    } catch(e) { console.error(e); registrarErroApp('limparTodoHistorico', e); mostrarToast('A operação foi interrompida para evitar perda de dados.', true); }
 }
 
 function atualizarZoomPdf() {
@@ -1003,10 +1202,12 @@ function bloquearMultiTouch(canvas) {
 }
 
 async function salvarNomeTecnicoBh() {
-    const val = document.getElementById('bh_nome_tecnico').value; await localforage.setItem('bh_nome_tecnico_salvo', val);
+    const val = document.getElementById('bh_nome_tecnico').value;
+    try { await localforage.setItem('bh_nome_tecnico_salvo', val); } catch(e) { console.error(e); mostrarToast('Não foi possível guardar o nome do técnico.', true); }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+    await solicitarPersistenciaArmazenamento();
     await iniciarBancoPecas(); // Inicializa o banco de dados e atualiza as HTML datalists
     
     if (typeof localforage !== 'undefined') await carregarLogoDoArmazenamento();
@@ -1068,8 +1269,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const formOs = document.getElementById('osForm');
     if(formOs) {
         formOs.addEventListener('input', () => {
-            clearTimeout(timeoutRascunho);
-            timeoutRascunho = setTimeout(autoSalvarRascunho, 3000);
+            if (!restaurandoDocumento && !salvamentoManualEmAndamento) marcarFormularioAlterado();
         });
     }
 
@@ -1077,26 +1277,43 @@ document.addEventListener("DOMContentLoaded", async () => {
     const mesAtual = hHoje.slice(0, 7); const bhMesInicio = document.getElementById('bh_mes_inicio'); if(bhMesInicio) bhMesInicio.value = mesAtual; const bhMesFim = document.getElementById('bh_mes_fim'); if(bhMesFim) bhMesFim.value = mesAtual;
     
     if (typeof localforage !== 'undefined') {
-        const nomeSalvo = await localforage.getItem('bh_nome_tecnico_salvo'); if (nomeSalvo && document.getElementById('bh_nome_tecnico')) document.getElementById('bh_nome_tecnico').value = nomeSalvo;
-        const horasSalvas = await localforage.getItem('banco_horas_data'); if (Array.isArray(horasSalvas)) registosBancoHoras = horasSalvas.filter(validarRegistoBancoHoras).map(r => ({...r, balancoFinal: Number(r.balancoFinal)}));
+        try {
+            const nomeSalvo = await localforage.getItem('bh_nome_tecnico_salvo'); if (nomeSalvo && document.getElementById('bh_nome_tecnico')) document.getElementById('bh_nome_tecnico').value = nomeSalvo;
+            const horasSalvas = await localforage.getItem('banco_horas_data'); if (Array.isArray(horasSalvas)) registosBancoHoras = horasSalvas.filter(validarRegistoBancoHoras).map(r => ({...r, balancoFinal: Number(r.balancoFinal)}));
+        } catch(e) { console.error('Falha ao carregar banco de horas:', e); registrarErroApp('carregarBancoHoras', e); mostrarToast('Falha ao ler o banco de horas. Nenhum dado foi substituído.', true); }
     } else {
         mostrarToast('Armazenamento local indisponível. Salvar e histórico não funcionarão nesta sessão.', true);
     }
 });
 
-async function autoSalvarRascunho() {
+async function autoSalvarRascunho(forcar = false) {
+    timeoutRascunho = null;
     const clientePreenchido = document.querySelector('[id^="cliente_"]')?.value.trim();
-    if (typeof localforage === 'undefined' || document.getElementById('novaOs').classList.contains('hidden') || document.getElementById('lockStatus').textContent.includes('BLOQUEADO') || !clientePreenchido) return;
-    try { await localforage.setItem('draft_os', recolherDadosDoFormulario()); document.getElementById('autoSaveIndicator').textContent = `Salvo: ${new Date().toLocaleTimeString('pt-PT')}`; }
-    catch(e) { console.error('Falha no auto-salvamento:', e); document.getElementById('autoSaveIndicator').textContent = 'Falha ao salvar rascunho'; }
+    if (typeof localforage === 'undefined' || restaurandoDocumento || salvamentoManualEmAndamento || document.getElementById('novaOs').classList.contains('hidden') || (!forcar && document.getElementById('lockStatus').textContent.includes('BLOQUEADO')) || !clientePreenchido) return;
+    try { await localforage.setItem('draft_os', recolherDadosDoFormulario()); document.getElementById('autoSaveIndicator').textContent = `Salvo: ${new Date().toLocaleTimeString('pt-BR')}`; }
+    catch(e) { console.error('Falha no auto-salvamento:', e); registrarErroApp('autoSalvarRascunho', e); document.getElementById('autoSaveIndicator').textContent = 'Falha ao salvar rascunho'; }
 }
 
 async function verificarRascunhoPendente() {
-    const draft = await localforage.getItem('draft_os');
-    if(draft && draft.ordens && draft.ordens.length > 0) {
-        if(confirm("⚠️ Recuperar trabalho não guardado da última sessão?")) restaurarDadosParaFormulario(draft);
-        else await localforage.removeItem('draft_os');
-    }
+    if (typeof localforage === 'undefined') return;
+    try {
+        const draft = await localforage.getItem('draft_os');
+        if(draft && draft.ordens && draft.ordens.length > 0) {
+            if(confirm('⚠️ Recuperar trabalho não guardado da última sessão?')) restaurarDadosParaFormulario(draft);
+            else await localforage.removeItem('draft_os');
+        }
+    } catch(e) { console.error('Falha ao verificar rascunho:', e); registrarErroApp('verificarRascunhoPendente', e); }
+}
+
+async function persistirBancoHorasSeguro(novosRegistos) {
+    try {
+        if (!Array.isArray(novosRegistos)) throw new Error('Banco de horas inválido');
+        const anterior = await localforage.getItem('banco_horas_data');
+        if (Array.isArray(anterior)) await localforage.setItem('banco_horas_recovery_v66', anterior);
+        await localforage.setItem('banco_horas_data', novosRegistos);
+        registosBancoHoras = novosRegistos;
+        return true;
+    } catch(e) { console.error('Falha ao salvar banco de horas:', e); registrarErroApp('bancoHoras', e); mostrarToast('Não foi possível salvar o banco de horas. Os dados anteriores foram mantidos.', true); return false; }
 }
 
 function formatarMins(minsTotais) {
@@ -1113,8 +1330,8 @@ async function adicionarRegistoBancoHoras() {
     const data = document.getElementById('bh_data').value; const cliente = document.getElementById('bh_cliente').value; const motivo = document.getElementById('bh_motivo').value; const local = document.getElementById('bh_local').value; const chegada = document.getElementById('bh_chegada').value; const saida = document.getElementById('bh_saida').value; const isCredito = document.getElementById('bh_tipo_credito').checked;
     if(!data || !chegada || !saida) { mostrarToast("Preencha Data e Horários!", true); return; }
     
-    const novoReg = { id: Date.now().toString(), data, cliente, motivo, local, chegada, saida, isCredito, balancoFinal: calcularMinsDesvio(chegada, saida, isCredito) };
-    registosBancoHoras.push(novoReg); registosBancoHoras.sort((a,b) => new Date(a.data) - new Date(b.data)); await localforage.setItem('banco_horas_data', registosBancoHoras);
+    const novoReg = { id: novoIdLocal(), data, cliente, motivo, local, chegada, saida, isCredito, balancoFinal: calcularMinsDesvio(chegada, saida, isCredito) };
+    const novosRegistos = [...registosBancoHoras, novoReg].sort((a,b) => new Date(a.data) - new Date(b.data)); if(!await persistirBancoHorasSeguro(novosRegistos)) return;
     
     document.getElementById('bh_cliente').value = ''; document.getElementById('bh_motivo').value = ''; document.getElementById('bh_local').value = '';
     const mesDoRegisto = data.slice(0, 7); document.getElementById('bh_mes_inicio').value = mesDoRegisto; document.getElementById('bh_mes_fim').value = mesDoRegisto;
@@ -1142,10 +1359,9 @@ async function adicionarDiaCompletoBancoHoras() {
     const balancoFinal = isCredito ? mins : -mins;
     const motivoFinal = motivoInput ? `${motivoInput} (Dia Completo)` : "Dia Completo";
     
-    const novoReg = { id: Date.now().toString(), data, cliente, motivo: motivoFinal, local, chegada, saida, isCredito, balancoFinal };
-    
-    registosBancoHoras.push(novoReg); registosBancoHoras.sort((a,b) => new Date(a.data) - new Date(b.data)); 
-    await localforage.setItem('banco_horas_data', registosBancoHoras);
+    const novoReg = { id: novoIdLocal(), data, cliente, motivo: motivoFinal, local, chegada, saida, isCredito, balancoFinal };
+    const novosRegistos = [...registosBancoHoras, novoReg].sort((a,b) => new Date(a.data) - new Date(b.data));
+    if(!await persistirBancoHorasSeguro(novosRegistos)) return;
     
     document.getElementById('bh_cliente').value = ''; document.getElementById('bh_motivo').value = ''; document.getElementById('bh_local').value = '';
     const mesDoRegisto = data.slice(0, 7); document.getElementById('bh_mes_inicio').value = mesDoRegisto; document.getElementById('bh_mes_fim').value = mesDoRegisto;
@@ -1153,14 +1369,14 @@ async function adicionarDiaCompletoBancoHoras() {
 }
 
 async function removerRegistoHora(id) {
-    if(!confirm("Apagar este registo?")) return; registosBancoHoras = registosBancoHoras.filter(r => r.id !== id); await localforage.setItem('banco_horas_data', registosBancoHoras); renderTabelaBancoHoras();
+    if(!confirm('Apagar este registo?')) return; const novosRegistos = registosBancoHoras.filter(r => r.id !== id); if(await persistirBancoHorasSeguro(novosRegistos)) renderTabelaBancoHoras();
 }
 
 async function limparTabelaHoras() {
     const inicioVal = document.getElementById('bh_mes_inicio').value; const fimVal = document.getElementById('bh_mes_fim').value; if(!inicioVal || !fimVal) return;
     if(confirm(`Apagar TODOS os registos do período?`)) {
-        registosBancoHoras = registosBancoHoras.filter(r => { const mes = r.data.slice(0, 7); return !(mes >= inicioVal && mes <= fimVal); });
-        await localforage.setItem('banco_horas_data', registosBancoHoras); renderTabelaBancoHoras(); mostrarToast("Dados apagados.");
+        const novosRegistos = registosBancoHoras.filter(r => { const mes = r.data.slice(0, 7); return !(mes >= inicioVal && mes <= fimVal); });
+        if(await persistirBancoHorasSeguro(novosRegistos)) { renderTabelaBancoHoras(); mostrarToast('Dados apagados.'); }
     }
 }
 
@@ -1258,12 +1474,12 @@ async function abrirCameraInterna() {
 function fecharCameraInterna() { if (mediaStreamCamera) { mediaStreamCamera.getTracks().forEach(t => t.stop()); mediaStreamCamera = null; } document.getElementById('modalCameraInterna').classList.add('hidden'); document.body.style.overflow = ''; }
 function tirarFotoDoVideo() {
     const video = document.getElementById('videoCamera'); if (!video.srcObject) return;
-    const canvas = document.createElement('canvas'); canvas.width = video.videoWidth || 1280; canvas.height = video.videoHeight || 720;
-    const ctx = canvas.getContext('2d'); ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const MAX_DIM = 900; let w = canvas.width; let h = canvas.height;
+    const origemW = video.videoWidth || 1280, origemH = video.videoHeight || 720;
+    const MAX_DIM = 900; let w = origemW, h = origemH;
     if (w > h && w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } else if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; }
+    w = Math.max(1, Math.round(w)); h = Math.max(1, Math.round(h));
     const finalCanvas = document.createElement('canvas'); finalCanvas.width = w; finalCanvas.height = h;
-    const finalCtx = finalCanvas.getContext('2d'); finalCtx.drawImage(canvas, 0, 0, w, h);
+    const finalCtx = finalCanvas.getContext('2d'); finalCtx.drawImage(video, 0, 0, w, h);
     renderFotoItem(osIdAtualFoto, finalCanvas.toDataURL('image/jpeg', 0.65), ''); fecharCameraInterna(); mostrarToast('Capturada com sucesso!');
 }
 function processarFicheiroImagem(id, file) {
@@ -1298,6 +1514,7 @@ function renderFotoItem(id, base64, desc) {
 function processarAnexo(id, input) {
     const file = input.files[0]; if (!file) { removerAnexo(id); return; }
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { mostrarToast('Selecione um PDF válido.', true); input.value = ''; return; }
+    if (file.size > ANEXO_PDF_MAX_BYTES) { mostrarToast(`PDF anexo acima de ${Math.round(ANEXO_PDF_MAX_BYTES/1024/1024)} MB. Reduza o ficheiro antes de anexar.`, true); input.value = ''; return; }
     const reader = new FileReader();
     reader.onload = function(e) {
         if (!dataUrlPdfSegura(e.target.result)) { mostrarToast('O ficheiro selecionado não parece ser um PDF válido.', true); removerAnexo(id); return; }
@@ -1322,7 +1539,7 @@ function recolherDadosDoFormulario() {
     document.querySelectorAll('.os-bloco').forEach(b => {
         const id = b.getAttribute('data-id');
         let ordem = {
-            cliente: getVal('cliente', id), osNum: getVal('osNum', id), equipamento: getVal('equipamento', id), modelo: getVal('modelo', id), serie: getVal('serie', id), tag: getVal('tag', id),
+            cliente: getVal('cliente', id), osNum: getVal('osNum', id), equipamento: getVal('equipamento', id), modelo: getVal('modelo', id), serie: getVal('serie', id), tag: getVal('tag', id), op: getVal('op', id),
             cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked,
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
             dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id), 
@@ -1338,11 +1555,16 @@ function recolherDadosDoFormulario() {
 }
 
 function restaurarDadosParaFormulario(doc) {
+    cancelarAutoSavePendente(); restaurandoDocumento = true; formularioSujo = false;
     desbloquearEdicao(); documentoAtualId = doc.id; document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
     if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
     if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o)); ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
-    switchTab('novaOs'); 
-    setTimeout(() => { if(document.getElementById('canvasTecnico') && padTecnico && dataUrlImagemSegura(doc.assinaturaTecnico)) padTecnico.fromDataURL(doc.assinaturaTecnico); if(document.getElementById('canvasCliente') && padCliente && dataUrlImagemSegura(doc.assinaturaCliente)) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); } atualizarVisibilidadeCamposPorBloco(); }, 100);
+    switchTab('novaOs');
+    setTimeout(() => {
+        if(document.getElementById('canvasTecnico') && padTecnico && dataUrlImagemSegura(doc.assinaturaTecnico)) padTecnico.fromDataURL(doc.assinaturaTecnico);
+        if(document.getElementById('canvasCliente') && padCliente && dataUrlImagemSegura(doc.assinaturaCliente)) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); }
+        atualizarVisibilidadeCamposPorBloco(); restaurandoDocumento = false; formularioSujo = false;
+    }, 100);
 }
 
 function verificarServicoInternoGlobal() { return Array.from(document.querySelectorAll('.os-bloco')).every(b => document.getElementById(`cbServInterno_${b.getAttribute('data-id')}`).checked); }
@@ -1370,7 +1592,7 @@ function limparPadExpandido() { if(padExpandido) padExpandido.clear(); }
 function confirmarAssinaturaExpandida() {
     const padDestino = alvoAssinaturaAtual === 'tecnico' ? padTecnico : padCliente; const canvasEl = alvoAssinaturaAtual === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
     if (padExpandido && padDestino) { resizeCanvasSeguro(canvasEl, padDestino, true); if (padExpandido.isEmpty()) { padDestino.clear(); if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao(); } else { padDestino.clear(); padDestino.fromDataURL(padExpandido.toDataURL()); if (alvoAssinaturaAtual === 'cliente') bloquearEdicao(); } } fecharModalAssinatura();
-    autoSalvarRascunho();
+    autoSalvarRascunho(true); // preserva também a assinatura que acabou de selar o formulário
 }
 
 function toggleLock(locked) {
@@ -1395,10 +1617,15 @@ async function switchTab(tabId) {
     window.scrollTo(0, 0);
 }
 
-function iniciarNovaOS() {
-    documentoAtualId = Date.now().toString(); document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0; 
-    if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
-    desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco(); localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
+async function iniciarNovaOS() {
+    cancelarAutoSavePendente(); salvamentoManualEmAndamento = true; restaurandoDocumento = true;
+    try {
+        documentoAtualId = novoIdLocal(); document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
+        if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
+        desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco(); if (typeof localforage !== 'undefined') await localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
+        formularioSujo = false; if(document.getElementById('autoSaveIndicator')) document.getElementById('autoSaveIndicator').textContent = '';
+    } catch(e) { console.error(e); mostrarToast('Não foi possível iniciar uma nova O.S. com segurança.', true); }
+    finally { restaurandoDocumento = false; salvamentoManualEmAndamento = false; }
 }
 
 function adicionarBlocoOS(dados = null) {
@@ -1452,6 +1679,7 @@ function adicionarBlocoOS(dados = null) {
                     <div class="col-span-1 md:col-span-2"><label class="block text-xs font-bold text-gray-600 mb-1">Modelo</label><input type="text" id="modelo_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
                     <div><label class="block text-xs font-bold text-gray-600 mb-1">Nº Série</label><input type="text" id="serie_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
                     <div><label class="block text-xs font-bold text-gray-600 mb-1">Tag</label><input type="text" id="tag_${id}" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"></div>
+                    <div class="col-span-1 md:col-span-2"><label class="block text-xs font-bold text-gray-600 mb-1">Número de OP <span class="text-gray-400 font-normal">(opcional)</span></label><input type="text" id="op_${id}" maxlength="60" placeholder="Ex: OP 123456" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500 font-mono"></div>
                 </div>
             </div>
 
@@ -1566,7 +1794,7 @@ function adicionarBlocoOS(dados = null) {
     atualizarResumoChecklistOS(id);
 
     if (dados) {
-        ['cliente','equipamento','modelo','serie','tag','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
+        ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
         ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
         if(document.getElementById(`cbMontagemSala_${id}`)) document.getElementById(`cbMontagemSala_${id}`).checked = dados.cbMontagemSala !== undefined ? !!dados.cbMontagemSala : !!dados.cbSemGarantia;
         if (dados.anexoBase64 && dataUrlPdfSegura(dados.anexoBase64)) { const b64 = document.getElementById(`anexoBase64_${id}`); b64.value = dados.anexoBase64; let nomeAnexo = dados.anexoNome ? String(dados.anexoNome).replace(/^Anexado:\s*/i, '').trim() : ''; if (/^Anexado$/i.test(nomeAnexo)) nomeAnexo = ''; if (nomeAnexo) b64.dataset.filename = nomeAnexo; definirNomeAnexo(id, nomeAnexo); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
@@ -1619,33 +1847,38 @@ function validarCamposObrigatorios() {
 }
 async function salvarDocumento(silencioso = false) {
     const btnSalvar = document.getElementById('btnSalvarOs');
-    if (!silencioso && btnSalvar && btnSalvar.disabled) return false; if (!silencioso && btnSalvar) btnSalvar.disabled = true;
-    if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos em vermelho.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
-    if (typeof localforage === 'undefined') { if(!silencioso) mostrarToast('Armazenamento local indisponível.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
+    if (!silencioso && btnSalvar && btnSalvar.disabled) return false;
+    cancelarAutoSavePendente(); salvamentoManualEmAndamento = true;
+    if (!silencioso && btnSalvar) btnSalvar.disabled = true;
+    if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos em vermelho.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
+    if (typeof localforage === 'undefined') { if(!silencioso) mostrarToast('Armazenamento local indisponível.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
     let dados = null; let documentoAnterior = null; let historicoAnterior = null;
     try {
         await aprenderPecasDaOS();
         dados = recolherDadosDoFormulario();
         documentoAnterior = await localforage.getItem(`os_doc_${dados.id}`);
-        historicoAnterior = await obterHistoricoSalvo();
+        historicoAnterior = await obterHistoricoSalvo(); // se falhar, NÃO substitui o histórico por []
+        await aplicarIntegridadeDocumento(dados, documentoAnterior?.integridade || null);
         await localforage.setItem(`os_doc_${dados.id}`, dados);
         const historicoMeta = [...historicoAnterior]; const meta = gerarMetadadosResumo(dados);
         const index = historicoMeta.findIndex(d => d.id === dados.id); if(index >= 0) historicoMeta[index] = meta; else historicoMeta.unshift(meta);
         if(!await gravarHistoricoSalvo(historicoMeta)) throw new Error('Falha ao atualizar índice do histórico.');
-        await localforage.removeItem('draft_os');
+        await localforage.removeItem('draft_os'); formularioSujo = false;
+        if(document.getElementById('autoSaveIndicator')) document.getElementById('autoSaveIndicator').textContent = 'Salvo';
         if(!silencioso) { mostrarToast('Salvo com sucesso!'); await carregarHistorico(); }
         return true;
     } catch(e) {
-        console.error('Erro ao salvar documento:', e);
+        console.error('Erro ao salvar documento:', e); registrarErroApp('salvarDocumento', e);
         if (dados && historicoAnterior) {
             try {
                 if (documentoAnterior === null || documentoAnterior === undefined) await localforage.removeItem(`os_doc_${dados.id}`); else await localforage.setItem(`os_doc_${dados.id}`, documentoAnterior);
                 await localforage.setItem('historico_os', historicoAnterior);
-            } catch (rollbackErr) { console.error('Falha no rollback do salvamento:', rollbackErr); }
+            } catch (rollbackErr) { console.error('Falha no rollback do salvamento:', rollbackErr); registrarErroApp('rollbackSalvarDocumento', rollbackErr); }
         }
         if(!silencioso) mostrarToast('Erro ao salvar. Os dados anteriores foram preservados quando possível.', true);
         return false;
     } finally {
+        salvamentoManualEmAndamento = false;
         if (!silencioso && btnSalvar) btnSalvar.disabled = false;
     }
 }
@@ -1653,6 +1886,7 @@ async function salvarDocumento(silencioso = false) {
 function filtrarHistorico() { const termo = document.getElementById('buscaHistorico').value.toLowerCase(); document.querySelectorAll('.historico-item').forEach(item => { item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none'; }); }
 
 async function carregarHistorico() {
+    try {
     const list = document.getElementById('historicoList'); let historicoMeta = await obterHistoricoSalvo();
     historicoMeta = Array.isArray(historicoMeta) ? historicoMeta.filter(doc => doc && idLocalSeguro(doc.id)) : [];
     if(historicoMeta.length === 0) return list.innerHTML = '<div class="bg-white p-8 rounded-xl border border-gray-200 text-center text-gray-500 font-medium">Nenhum documento salvo.</div>';
@@ -1673,17 +1907,30 @@ async function carregarHistorico() {
             <button onclick="carregarDocumentoParaEdicao('${doc.id}')" class="flex-1 md:w-32 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md transition-colors text-sm uppercase tracking-wide text-center">Abrir</button>
         </div>
     </div>`).join(''); filtrarHistorico();
+
+    } catch(e) { console.error('Falha ao carregar histórico:', e); registrarErroApp('carregarHistorico', e); const list = document.getElementById('historicoList'); if(list) list.innerHTML = '<div class="bg-red-50 p-6 rounded-xl border border-red-200 text-center text-red-700 font-medium">Falha ao ler o histórico. Nenhum índice foi apagado. Feche e abra o aplicativo novamente ou restaure um backup se o problema persistir.</div>'; mostrarToast('Falha ao ler o histórico. Os dados não foram substituídos.', true); }
 }
 
 async function carregarDocumentoParaEdicao(id) {
-    let doc = await localforage.getItem(`os_doc_${id}`); if(!doc) { let histAntigo = await localforage.getItem('historico_os') || []; doc = histAntigo.find(d => d.id === id); if (doc && !doc.ordens) doc = null; }
-    if(!doc) { mostrarToast('Erro: Não encontrado.', true); return; }
-    restaurarDadosParaFormulario(doc); mostrarToast('Carregado.');
+    try {
+        let doc = await localforage.getItem(`os_doc_${id}`); if(!doc) { const histAntigo = await localforage.getItem('historico_os') || []; doc = Array.isArray(histAntigo) ? histAntigo.find(d => d.id === id && d.ordens) : null; }
+        if(!doc) { mostrarToast('Erro: Não encontrado.', true); return; }
+        const integridadeOk = await verificarIntegridadeDocumento(doc);
+        if (integridadeOk === false) alert('⚠️ ATENÇÃO: esta O.S. foi alterada depois de ser selada/assinada. Confira os dados antes de utilizar o documento.');
+        restaurarDadosParaFormulario(doc); mostrarToast(integridadeOk === false ? 'Carregado com alerta de integridade.' : 'Carregado.');
+    } catch(e) { console.error(e); registrarErroApp('carregarDocumentoParaEdicao', e); mostrarToast('Não foi possível abrir esta O.S.', true); }
 }
-async function apagarDocumento(id) { if(!confirm("Apagar documento permanentemente?")) return; let historicoMeta = await obterHistoricoSalvo(); await gravarHistoricoSalvo(historicoMeta.filter(d => d.id !== id)); await localforage.removeItem(`os_doc_${id}`); if(id === documentoAtualId) iniciarNovaOS(); await carregarHistorico(); }
+async function apagarDocumento(id) {
+    if(!confirm('Mover esta O.S. para a Lixeira?')) return;
+    try { await moverDocumentoParaLixeira(id); if(id === documentoAtualId) await iniciarNovaOS(); await carregarHistorico(); mostrarToast('O.S. movida para a Lixeira.'); }
+    catch(e) { console.error(e); registrarErroApp('apagarDocumento', e); mostrarToast('Não foi possível mover a O.S. para a Lixeira.', true); }
+}
 
 function atualizarProgressoPDF(percentual, texto) {
-    const overlay = document.getElementById('pdfProgressOverlay'); const barra = document.getElementById('pdfProgressBar'); const txt = document.getElementById('pdfProgressText'); const percent = document.getElementById('pdfProgressPercent'); overlay.classList.remove('hidden'); barra.style.width = percentual + '%'; txt.textContent = texto; percent.textContent = Math.round(percentual) + '%'; if (percentual >= 100) setTimeout(() => overlay.classList.add('hidden'), 800);
+    const overlay = document.getElementById('pdfProgressOverlay'); const barra = document.getElementById('pdfProgressBar'); const txt = document.getElementById('pdfProgressText'); const percent = document.getElementById('pdfProgressPercent');
+    if (!overlay || !barra || !txt || !percent) return;
+    overlay.classList.remove('hidden'); barra.style.width = percentual + '%'; txt.textContent = texto; percent.textContent = Math.round(percentual) + '%';
+    if (percentual >= 100) setTimeout(() => overlay.classList.add('hidden'), 800);
 }
 
 async function construirPDFBytes(onProgressCallback) {
@@ -1705,6 +1952,7 @@ async function construirPDFBytes(onProgressCallback) {
         docOS.text(`CLIENTE: ${truncarStr(getVal('cliente', id), 45)}`, 15, cy); docOS.text(`OS Nº: ${truncarStr(getVal('osNum', id), 20)}`, 140, cy);
         cy += 6; docOS.text(`EQUIP: ${truncarStr(getVal('equipamento', id), 45)}`, 15, cy); docOS.text(`MODELO: ${truncarStr(getVal('modelo', id), 25)}`, 140, cy);
         cy += 6; docOS.text(`SÉRIE: ${truncarStr(getVal('serie', id), 45)}`, 15, cy); docOS.text(`TAG: ${truncarStr(getVal('tag', id), 25)}`, 140, cy);
+        const numeroOp = getVal('op', id).trim(); cy += 6; docOS.text(`NÚMERO DE OP: ${truncarStr(numeroOp, 55)}`, 15, cy);
         cy += 8; docOS.text(`${cb('cbOrcamento_'+id)} ORÇAMENTO`, 15, cy); docOS.text(`${cb('cbInstalacao_'+id)} INSTALAÇÃO`, 65, cy); docOS.text(`${cb('cbServInterno_'+id)} SERV INTERNO`, 115, cy);
         cy += 6; docOS.text(`${cb('cbGarantia_'+id)} GARANTIA`, 15, cy); docOS.text(`${cb('cbMontagemSala_'+id)} MONTAGEM SALA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
         cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal"); cy += 4; 
@@ -1756,9 +2004,8 @@ async function construirPDFBytes(onProgressCallback) {
         const anexoB64 = getVal('anexoBase64', id);
         if (anexoB64) { 
             try { 
-                const binaryStr = atob(anexoB64.split(',')[1]); 
-                const bytes = new Uint8Array(binaryStr.length); 
-                for (let i = 0; i < binaryStr.length; i++) { bytes[i] = binaryStr.charCodeAt(i); } 
+                const respostaAnexo = await fetch(anexoB64);
+                const bytes = new Uint8Array(await respostaAnexo.arrayBuffer());
                 const anexoPdf = await PDFDocument.load(bytes); 
                 const anexoPages = await masterPdf.copyPages(anexoPdf, anexoPdf.getPageIndices()); 
                 anexoPages.forEach((p) => masterPdf.addPage(p)); 
@@ -1794,27 +2041,66 @@ async function construirPDFBytes(onProgressCallback) {
     const finalPDF = await masterPdf.save(); await reportProgress(100, "Concluído!"); return finalPDF;
 }
 
+function atualizarControlesPreview() {
+    const controles = document.getElementById('previewPageControls'); const info = document.getElementById('previewModoInfo');
+    const texto = document.getElementById('previewPageText'); const ant = document.getElementById('previewPrev'); const prox = document.getElementById('previewNext');
+    if (!pdfPreviewDoc) { controles?.classList.add('hidden'); if(info) info.textContent=''; return; }
+    if (pdfPreviewModoEconomico) {
+        controles?.classList.remove('hidden'); if(info) info.textContent = 'Documento > 10 MB • modo econômico de memória';
+        if(texto) texto.textContent = `Página ${pdfPreviewPaginaAtual} de ${pdfPreviewDoc.numPages}`;
+        if(ant) ant.disabled = pdfPreviewPaginaAtual <= 1; if(prox) prox.disabled = pdfPreviewPaginaAtual >= pdfPreviewDoc.numPages;
+    } else { controles?.classList.add('hidden'); if(info) info.textContent = `${pdfPreviewDoc.numPages} página(s) • visualização completa`; }
+}
+
+function liberarCanvasesPreview() {
+    const wrapper = document.getElementById('pdfPagesWrapper'); if (!wrapper) return;
+    wrapper.querySelectorAll('canvas').forEach(c => { c.width = 0; c.height = 0; }); wrapper.replaceChildren();
+}
+
+async function renderizarPaginaPreview(numero) {
+    if (!pdfPreviewDoc) return;
+    const alvo = Math.max(1, Math.min(Number(numero)||1, pdfPreviewDoc.numPages));
+    if (pdfPreviewRenderTask) { try { pdfPreviewRenderTask.cancel(); } catch(_) {} pdfPreviewRenderTask = null; }
+    liberarCanvasesPreview(); pdfPreviewPaginaAtual = alvo;
+    const page = await pdfPreviewDoc.getPage(alvo); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.6});
+    const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { alpha: false }); canvas.height = viewport.height; canvas.width = viewport.width; canvas.className = 'pdf-page-canvas bg-white shadow-xl border border-gray-300';
+    document.getElementById('pdfPagesWrapper').appendChild(canvas); pdfPreviewRenderTask = page.render({canvasContext:ctx, viewport});
+    try { await pdfPreviewRenderTask.promise; } catch(e) { if(e?.name !== 'RenderingCancelledException') throw e; } finally { pdfPreviewRenderTask = null; }
+    atualizarZoomPdf(); atualizarControlesPreview(); const container = document.getElementById('pdfRenderContainer'); if(container){container.scrollLeft=0;container.scrollTop=0;}
+}
+
+async function navegarPreview(delta) { if (pdfPreviewModoEconomico && pdfPreviewDoc) await renderizarPaginaPreview(pdfPreviewPaginaAtual + Number(delta || 0)); }
+
 async function preVisualizarPDF() {
     const btn = document.getElementById('btnPreview'); if (btn.disabled) return;
     try {
         btn.disabled = true;
-        if (!dependenciasPdfDisponiveis(true)) throw new Error("Bibliotecas de pré-visualização indisponíveis. Verifique a ligação ou o cache offline.");
+        if (!dependenciasPdfDisponiveis(true)) throw new Error('Bibliotecas de pré-visualização indisponíveis. Verifique a ligação ou o cache offline.');
         const bytesPdf = await construirPDFBytes(atualizarProgressoPDF);
         if(objUrlPreview) URL.revokeObjectURL(objUrlPreview); const blob = new Blob([bytesPdf], { type: 'application/pdf' }); objUrlPreview = URL.createObjectURL(blob);
         const primeiraOs = document.querySelector('.os-bloco'); let pOs = 'Rascunho', pCliente = 'Cliente'; if(primeiraOs) { const pId = primeiraOs.getAttribute('data-id'); pOs = getVal('osNum', pId).trim() || 'Rascunho'; pCliente = getVal('cliente', pId).trim() || 'Cliente'; }
-        document.getElementById('linkPreviewExt').download = `Pre_Visualizacao_${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`; document.getElementById('linkPreviewExt').href = objUrlPreview; 
-        const pdf = await pdfjsLib.getDocument({data: bytesPdf}).promise; const wrapper = document.getElementById('pdfPagesWrapper'); const container = document.getElementById('pdfRenderContainer'); wrapper.replaceChildren(); currentZoom = 1;
-        for(let num = 1; num <= pdf.numPages; num++) { const page = await pdf.getPage(num); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); canvas.height = viewport.height; canvas.width = viewport.width; canvas.className = 'pdf-page-canvas bg-white shadow-xl border border-gray-300'; await page.render({canvasContext: ctx, viewport: viewport}).promise; wrapper.appendChild(canvas); }
-        atualizarZoomPdf(); if (container) { container.scrollLeft = 0; container.scrollTop = 0; } document.getElementById('modalPreviewPDF').classList.remove('hidden');
-    } catch (err) { mostrarToast(err.message || 'Erro ao pre-visualizar.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden'); } finally { btn.disabled = false; }
+        document.getElementById('linkPreviewExt').download = `Pre_Visualizacao_${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`; document.getElementById('linkPreviewExt').href = objUrlPreview;
+        liberarCanvasesPreview(); currentZoom = 1; pdfPreviewPaginaAtual = 1;
+        pdfPreviewDoc = await pdfjsLib.getDocument({data: bytesPdf}).promise;
+        pdfPreviewModoEconomico = blob.size > PDF_PREVIEW_ECONOMICO_BYTES;
+        if (pdfPreviewModoEconomico) {
+            await renderizarPaginaPreview(1);
+        } else {
+            const wrapper = document.getElementById('pdfPagesWrapper');
+            for(let num = 1; num <= pdfPreviewDoc.numPages; num++) { const page = await pdfPreviewDoc.getPage(num); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { alpha: false }); canvas.height = viewport.height; canvas.width = viewport.width; canvas.className = 'pdf-page-canvas bg-white shadow-xl border border-gray-300'; const task = page.render({canvasContext: ctx, viewport}); await task.promise; wrapper.appendChild(canvas); }
+            atualizarZoomPdf(); atualizarControlesPreview();
+        }
+        const container = document.getElementById('pdfRenderContainer'); if (container) { container.scrollLeft = 0; container.scrollTop = 0; } document.getElementById('modalPreviewPDF').classList.remove('hidden');
+    } catch (err) { console.error(err); registrarErroApp('preVisualizarPDF', err); mostrarToast(err.message || 'Erro ao pre-visualizar.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden'); } finally { btn.disabled = false; }
 }
 
 function fecharPreviewPDF() {
-    document.getElementById('modalPreviewPDF').classList.add('hidden');
-    const wrapper = document.getElementById('pdfPagesWrapper'); if (wrapper) wrapper.replaceChildren();
+    document.getElementById('modalPreviewPDF').classList.add('hidden'); liberarCanvasesPreview();
+    if (pdfPreviewRenderTask) { try { pdfPreviewRenderTask.cancel(); } catch(_) {} pdfPreviewRenderTask = null; }
+    if (pdfPreviewDoc) { try { pdfPreviewDoc.destroy(); } catch(_) {} pdfPreviewDoc = null; }
     if (objUrlPreview) { URL.revokeObjectURL(objUrlPreview); objUrlPreview = null; }
     const link = document.getElementById('linkPreviewExt'); if (link) link.removeAttribute('href');
-    currentZoom = 1; startDist = 0;
+    pdfPreviewModoEconomico = false; pdfPreviewPaginaAtual = 1; currentZoom = 1; startDist = 0; atualizarControlesPreview();
 }
 
 async function gerarPDFConsolidado() {
