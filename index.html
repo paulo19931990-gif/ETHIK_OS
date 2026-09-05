@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <title>Multi-OS Pro</title>
     
     <!-- Metatags Anti-Cache Poderosas -->
@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=65">
+    <link rel="manifest" href="./manifest.json?v=66">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -31,7 +31,24 @@
     
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js?v=65').catch(err => console.error('Falha ao registar Service Worker:', err));
+            let recarregandoPorSW = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (recarregandoPorSW) return; recarregandoPorSW = true; location.reload();
+            });
+            navigator.serviceWorker.register('./sw.js?v=66').then(reg => {
+                const oferecerAtualizacao = worker => {
+                    if (!worker || !navigator.serviceWorker.controller) return;
+                    const controladorAtual = navigator.serviceWorker.controller.scriptURL || '';
+                    // Na passagem v65 -> v66 ativamos logo para não misturar index v66 com app.js v65.
+                    if (!controladorAtual.includes('v=66')) { worker.postMessage({ type: 'SKIP_WAITING' }); return; }
+                    if (confirm('Nova versão do Multi-OS Pro disponível. Atualizar agora? Os dados salvos não serão apagados.')) worker.postMessage({ type: 'SKIP_WAITING' });
+                };
+                if (reg.waiting) oferecerAtualizacao(reg.waiting);
+                reg.addEventListener('updatefound', () => {
+                    const worker = reg.installing; if (!worker) return;
+                    worker.addEventListener('statechange', () => { if (worker.state === 'installed') oferecerAtualizacao(worker); });
+                });
+            }).catch(err => console.error('Falha ao registar Service Worker:', err));
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -41,7 +58,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=65">
+    <link rel="stylesheet" href="style.css?v=66">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -127,6 +144,14 @@
                 <span id="zoomText" class="text-xs font-bold w-12 text-center tracking-wider">100%</span>
                 <button onclick="zoomInPdf()" class="w-10 h-10 flex items-center justify-center hover:bg-gray-700 rounded-full text-xl font-bold transition-all">+</button>
             </div>
+            <div class="bg-white border-b border-gray-200 px-3 py-2 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+                <span id="previewModoInfo" class="text-[11px] font-semibold text-gray-500"></span>
+                <div id="previewPageControls" class="hidden flex items-center gap-2">
+                    <button id="previewPrev" type="button" onclick="navegarPreview(-1)" class="px-3 py-1.5 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-40">Anterior</button>
+                    <span id="previewPageText" class="text-xs font-black text-gray-700 min-w-[110px] text-center">Página 1</span>
+                    <button id="previewNext" type="button" onclick="navegarPreview(1)" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold disabled:opacity-40">Próxima</button>
+                </div>
+            </div>
             <div id="pdfRenderContainer" class="flex-1 w-full bg-gray-200 overflow-auto relative p-4 overscroll-contain">
                 <div id="pdfPagesWrapper" class="pdf-pages-wrapper pb-24 flex flex-col gap-4"></div>
             </div>
@@ -173,6 +198,17 @@
         </div>
     </div>
     
+
+    <!-- MODAL: Lixeira de O.S. -->
+    <div id="modalLixeira" class="hidden fixed inset-0 bg-gray-900/90 z-[125] backdrop-blur-sm p-3 sm:p-6">
+        <div class="max-w-3xl mx-auto bg-gray-50 rounded-2xl h-full sm:h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+                <div><h3 class="font-black text-gray-900 text-lg">Lixeira de O.S.</h3><p class="text-xs text-gray-500">As O.S. movidas para cá podem ser restauradas.</p></div>
+                <button type="button" onclick="fecharLixeira()" class="px-4 py-2 bg-gray-800 text-white rounded-lg text-xs font-bold">Fechar</button>
+            </div>
+            <div id="lixeiraList" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+        </div>
+    </div>
 
     <!-- MODAL: Checklist Preventiva -->
     <div id="modalChecklist" class="hidden fixed inset-0 bg-gray-900/90 z-[130] backdrop-blur-sm">
@@ -347,7 +383,8 @@
                         Importar Peças
                         <input type="file" accept=".json,application/json" onchange="importarBancoPecasJSON(event)" class="hidden">
                     </label>
-                    <button onclick="limparTodoHistorico()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-bold shadow-sm hover:bg-red-700 text-sm">Apagar Tudo</button>
+                    <button onclick="abrirLixeira()" class="px-4 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg font-bold shadow-sm hover:bg-amber-100 text-sm">Lixeira</button>
+                    <button onclick="limparTodoHistorico()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-bold shadow-sm hover:bg-red-700 text-sm">Mover Tudo p/ Lixeira</button>
                 </div>
             </div>
             
@@ -470,8 +507,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=65"></script>
-    <script src="bancoPecas.js?v=65"></script>
-    <script src="app.js?v=65"></script>
+    <script src="checklists/checklists.js?v=66"></script>
+    <script src="bancoPecas.js?v=66"></script>
+    <script src="app.js?v=66"></script>
 </body>
 </html>
