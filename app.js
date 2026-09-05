@@ -718,7 +718,7 @@ let pdfPreviewPaginaAtual = 1;
 let pdfPreviewModoEconomico = false;
 let pdfPreviewRenderTask = null;
 
-const APP_VERSION = 68;
+const APP_VERSION = 69;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -1580,18 +1580,31 @@ async function prepararCapturaCamera(id) {
 }
 
 function liberarPreviewsBlobTemporarios() {
-    document.querySelectorAll('.foto-item img[data-object-url]').forEach(img => {
-        try { URL.revokeObjectURL(img.dataset.objectUrl); } catch (_) {}
-        delete img.dataset.objectUrl;
-        img.removeAttribute('src');
+    // Libera os bitmaps já decodificados antes de abrir a câmera.
+    // Isso vale tanto para fotos novas em Blob quanto para fotos antigas em Base64.
+    document.querySelectorAll('.foto-item').forEach(item => {
+        const img = item.querySelector('img');
+        if (!img) return;
+        if (img.dataset.objectUrl) {
+            try { URL.revokeObjectURL(img.dataset.objectUrl); } catch (_) {}
+            delete img.dataset.objectUrl;
+        }
+        if (img.getAttribute('src')) {
+            img.dataset.previewPausado = '1';
+            img.removeAttribute('src');
+        }
     });
 }
 
 function recarregarPreviewsBlobVisiveis() {
     document.querySelectorAll('.foto-item').forEach(item => {
         const mediaId = item.querySelector('.foto-media-id')?.value || '';
+        const base64 = item.querySelector('.foto-b64')?.value || '';
         const img = item.querySelector('img');
-        if (mediaId && img && !img.src) carregarPreviewFotoBlob(img, mediaId).catch(() => {});
+        if (!img || img.getAttribute('src')) return;
+        delete img.dataset.previewPausado;
+        if (mediaId) carregarPreviewFotoBlob(img, mediaId).catch(() => {});
+        else if (base64 && dataUrlImagemSegura(base64)) img.src = base64;
     });
 }
 
@@ -1629,25 +1642,153 @@ async function adicionarFoto(id, source) {
     osIdAtualFoto = id;
     const fotosAtuais = document.querySelectorAll(`#fotosContainer_${id} .foto-item`).length;
     if (fotosAtuais >= 20) { mostrarToast('Limite de 20 fotos por O.S. atingido.', true); return; }
-    const input = document.getElementById(source === 'camera' ? 'inputCameraNativa' : 'inputGaleriaFotos');
-    if (!input) { mostrarToast('Seletor de imagem indisponível.', true); return; }
+
+    if (source === 'camera') {
+        await abrirCameraInterna(id);
+        return;
+    }
+
+    const input = document.getElementById('inputGaleriaFotos');
+    if (!input) { mostrarToast('Galeria indisponível.', true); return; }
     input.value = '';
-    if (source === 'camera') await prepararCapturaCamera(id);
     input.click();
 }
 
-// Mantidas para compatibilidade com versões anteriores. A v68 usa a câmera nativa do celular com retorno protegido.
-async function abrirCameraInterna() {
-    mostrarToast('A v68 usa a câmera nativa do celular.');
-    await adicionarFoto(osIdAtualFoto || 1, 'camera');
+async function aguardarVideoPronto(video, timeoutMs = 5000) {
+    if (!video) throw new Error('Visualização da câmera indisponível.');
+    if (video.readyState >= 2 && video.videoWidth > 0) return;
+    await new Promise((resolve, reject) => {
+        let finalizado = false;
+        const concluir = () => { if (finalizado) return; finalizado = true; limpar(); resolve(); };
+        const falhar = () => { if (finalizado) return; finalizado = true; limpar(); reject(new Error('A câmera não ficou pronta a tempo.')); };
+        const limpar = () => {
+            clearTimeout(timer);
+            video.removeEventListener('loadedmetadata', concluir);
+            video.removeEventListener('canplay', concluir);
+        };
+        const timer = setTimeout(falhar, timeoutMs);
+        video.addEventListener('loadedmetadata', concluir, { once: true });
+        video.addEventListener('canplay', concluir, { once: true });
+    });
 }
-function fecharCameraInterna() {
-    if (mediaStreamCamera) { mediaStreamCamera.getTracks().forEach(t => t.stop()); mediaStreamCamera = null; }
-    const modal = document.getElementById('modalCameraInterna'); if (modal) modal.classList.add('hidden');
+
+async function abrirCameraInterna(id = osIdAtualFoto || 1) {
+    osIdAtualFoto = Number(id || 1);
+    const fotosAtuais = document.querySelectorAll(`#fotosContainer_${osIdAtualFoto} .foto-item`).length;
+    if (fotosAtuais >= 20) { mostrarToast('Limite de 20 fotos por O.S. atingido.', true); return; }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+        mostrarToast('Câmera interna não suportada neste navegador. Use a galeria.', true);
+        return;
+    }
+
+    await prepararCapturaCamera(osIdAtualFoto);
+    // Encerra eventual stream anterior sem recarregar as fotos que acabámos de liberar da memória.
+    fecharCameraInterna(false, false);
+
+    const modal = document.getElementById('modalCameraInterna');
+    const video = document.getElementById('videoCamera');
+    if (!modal || !video) {
+        await limparMarcadorCapturaCamera();
+        recarregarPreviewsBlobVisiveis();
+        mostrarToast('Tela da câmera indisponível.', true);
+        return;
+    }
+
+    try {
+        // Mantém a câmera em resolução controlada para reduzir o uso de RAM.
+        // O navegador pode escolher uma resolução próxima, mas não precisamos carregar uma foto de 48/50 MP.
+        const constraints = {
+            audio: false,
+            video: {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1280, max: 1600 },
+                height: { ideal: 960, max: 1200 },
+                frameRate: { ideal: 24, max: 30 }
+            }
+        };
+        mediaStreamCamera = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = mediaStreamCamera;
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        await aguardarVideoPronto(video);
+        await video.play().catch(() => {});
+    } catch (err) {
+        console.error('Erro ao abrir câmera interna:', err);
+        registrarErroApp('abrirCameraInterna', err);
+        fecharCameraInterna(false);
+        await limparMarcadorCapturaCamera();
+        recarregarPreviewsBlobVisiveis();
+        const nome = String(err?.name || '');
+        if (nome === 'NotAllowedError' || nome === 'PermissionDeniedError') mostrarToast('Permissão da câmera negada. Autorize a câmera para o Multi-OS.', true);
+        else mostrarToast('Não foi possível abrir a câmera. Use a galeria se necessário.', true);
+    }
+}
+
+function fecharCameraInterna(limparMarcador = true, recarregarPreviews = true) {
+    const video = document.getElementById('videoCamera');
+    if (video) {
+        try { video.pause(); } catch (_) {}
+        try { video.srcObject = null; } catch (_) {}
+    }
+    if (mediaStreamCamera) {
+        try { mediaStreamCamera.getTracks().forEach(t => t.stop()); } catch (_) {}
+        mediaStreamCamera = null;
+    }
+    const modal = document.getElementById('modalCameraInterna');
+    if (modal) modal.classList.add('hidden');
     document.body.style.overflow = '';
+    if (limparMarcador) limparMarcadorCapturaCamera().catch(() => {});
+    if (recarregarPreviews) recarregarPreviewsBlobVisiveis();
 }
-function tirarFotoDoVideo() {
-    mostrarToast('Use o botão de câmera para abrir a câmera nativa do celular.');
+
+async function tirarFotoDoVideo() {
+    const video = document.getElementById('videoCamera');
+    const btn = document.getElementById('btnCapturarCameraInterna');
+    if (!video || !mediaStreamCamera || video.videoWidth <= 0 || video.videoHeight <= 0) {
+        mostrarToast('A câmera ainda não está pronta.', true);
+        return;
+    }
+    if (btn?.disabled) return;
+    if (btn) btn.disabled = true;
+
+    try {
+        // A captura nasce já em tamanho controlado; nunca criamos uma foto original de 48/50 MP.
+        const alvo = calcularDimensoesCamera(video.videoWidth, video.videoHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = alvo.width; canvas.height = alvo.height;
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+        if (!ctx) throw new Error('Canvas da câmera indisponível.');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, alvo.width, alvo.height);
+        ctx.drawImage(video, 0, 0, alvo.width, alvo.height);
+
+        const blob = await canvasParaBlobJPEG(canvas, FOTO_JPEG_QUALIDADE);
+        canvas.width = 1; canvas.height = 1;
+        if (!blob) throw new Error('Não foi possível comprimir a foto.');
+
+        const mediaId = await salvarBlobMidia(MEDIA_PHOTO_PREFIX, blob);
+        if (mediaId) renderFotoItem(osIdAtualFoto || 1, { mediaId }, '');
+        else renderFotoItem(osIdAtualFoto || 1, await blobParaDataUrl(blob), '');
+
+        fecharCameraInterna(false);
+        await limparMarcadorCapturaCamera();
+        await autoSalvarRascunho(true);
+        mostrarToast(`Foto capturada e otimizada (${Math.max(1, Math.round(blob.size / 1024))} KB).`);
+    } catch (err) {
+        console.error('Erro ao capturar foto interna:', err);
+        registrarErroApp('tirarFotoDoVideo', err);
+        mostrarToast(err.message || 'Não foi possível capturar a foto.', true);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function calcularDimensoesCamera(width, height) {
+    const CAMERA_MAX_DIM = 1280;
+    let w = Math.max(1, Number(width) || 1), h = Math.max(1, Number(height) || 1);
+    const fator = Math.min(1, CAMERA_MAX_DIM / Math.max(w, h));
+    return { width: Math.max(1, Math.round(w * fator)), height: Math.max(1, Math.round(h * fator)) };
 }
 
 function calcularDimensoesFoto(width, height) {
@@ -1789,7 +1930,7 @@ async function verificarRetornoCapturaPendente() {
         let recuperado = false;
         if (draft?.ordens?.length && idade >= 0 && idade <= CAMERA_RESTORE_MAX_AGE_MS) {
             restaurarDadosParaFormulario(draft);
-            mostrarToast('O Android reiniciou o app ao voltar da câmera. Sua O.S. foi recuperada automaticamente.');
+            mostrarToast('O Android reiniciou o app durante o uso da câmera. Sua O.S. foi recuperada automaticamente.');
             recuperado = true;
         }
         await localforage.removeItem(CAMERA_PENDING_KEY);
