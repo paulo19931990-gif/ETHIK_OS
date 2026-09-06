@@ -6,19 +6,106 @@ if (typeof localforage !== 'undefined') {
 }
 
 // === SISTEMA INTELIGENTE DE PEÇAS ===
+// v73: separa catálogo oficial (somente leitura), peças aprendidas e aliases locais.
+// A chave antiga banco_pecas_inteligente é mantida como espelho de compatibilidade e NÃO é apagada.
 let bancoPecas = [];
+let bancoPecasOficiais = [];
+let bancoPecasAprendidas = [];
+let bancoPecasAliases = [];
 let pecasPorCodigo = new Map();
 let pecasPorNome = new Map();
 
-async function iniciarBancoPecas() {
-    let salvo = null;
-    if (typeof localforage !== 'undefined') {
-        try { salvo = await localforage.getItem('banco_pecas_inteligente'); } catch (e) { console.warn('Falha ao carregar banco de peças local:', e); }
+const PECAS_APRENDIDAS_KEY = 'banco_pecas_aprendidas_v73';
+const PECAS_ALIASES_KEY = 'banco_pecas_alias_v73';
+const PECAS_MIGRACAO_KEY = 'migracao_pecas_v73';
+
+function normalizarListaPecasInterna(lista) {
+    if (!Array.isArray(lista)) return [];
+    const saida = [];
+    const vistos = new Set();
+    for (const item of lista) {
+        const p = sanitizarPecaCompartilhada(item);
+        if (!p) continue;
+        const chave = `${chaveComparacaoPeca(p.c)}|${chaveComparacaoPeca(p.n)}`;
+        if (vistos.has(chave)) continue;
+        vistos.add(chave);
+        saida.push(p);
     }
-    bancoPecas = Array.isArray(salvo) && salvo.length > 0 ? salvo : (typeof pecasDeFabrica !== 'undefined' ? [...pecasDeFabrica] : []);
-    pecasPorCodigo.clear(); pecasPorNome.clear();
-    bancoPecas.forEach(p => { if (p && typeof p.c === 'string' && typeof p.n === 'string') { pecasPorCodigo.set(p.c, p); pecasPorNome.set(p.n, p); } });
+    return saida;
+}
+
+function atualizarBancoPecasUnificado() {
+    bancoPecasOficiais = normalizarListaPecasInterna(typeof pecasDeFabrica !== 'undefined' ? pecasDeFabrica : []);
+    bancoPecasAprendidas = normalizarListaPecasInterna(bancoPecasAprendidas);
+    bancoPecasAliases = normalizarListaPecasInterna(bancoPecasAliases);
+    bancoPecas = [...bancoPecasOficiais, ...bancoPecasAprendidas];
+    reconstruirMapasBancoPecas();
     atualizarListasHTML();
+}
+
+async function persistirCamadasBancoPecas() {
+    if (typeof localforage === 'undefined') return;
+    await localforage.setItem(PECAS_APRENDIDAS_KEY, bancoPecasAprendidas);
+    await localforage.setItem(PECAS_ALIASES_KEY, bancoPecasAliases);
+    // Espelho para downgrade/recuperação: nenhuma versão antiga perde as peças aprendidas.
+    await localforage.setItem('banco_pecas_inteligente', [...bancoPecasOficiais, ...bancoPecasAprendidas, ...bancoPecasAliases]);
+}
+
+async function migrarBancoPecasV73() {
+    if (typeof localforage === 'undefined') return;
+    const oficiais = normalizarListaPecasInterna(typeof pecasDeFabrica !== 'undefined' ? pecasDeFabrica : []);
+    const oficiaisCodigo = new Map(oficiais.map(p => [chaveComparacaoPeca(p.c), p]));
+
+    const aprendidasNovas = normalizarListaPecasInterna(await localforage.getItem(PECAS_APRENDIDAS_KEY));
+    const aliasesNovos = normalizarListaPecasInterna(await localforage.getItem(PECAS_ALIASES_KEY));
+    let aprendidas = [...aprendidasNovas];
+    let aliases = [...aliasesNovos];
+
+    const migrado = await localforage.getItem(PECAS_MIGRACAO_KEY);
+    if (!migrado) {
+        const legadoOriginal = await localforage.getItem('banco_pecas_inteligente');
+        const legado = normalizarListaPecasInterna(legadoOriginal);
+        if (Array.isArray(legadoOriginal) && !await localforage.getItem('banco_pecas_inteligente_backup_pre_v73')) {
+            await localforage.setItem('banco_pecas_inteligente_backup_pre_v73', legadoOriginal);
+        }
+        const chavesAprendidas = new Set(aprendidas.map(p => `${chaveComparacaoPeca(p.c)}|${chaveComparacaoPeca(p.n)}`));
+        const chavesAlias = new Set(aliases.map(p => `${chaveComparacaoPeca(p.c)}|${chaveComparacaoPeca(p.n)}`));
+
+        for (const peca of legado) {
+            const kc = chaveComparacaoPeca(peca.c);
+            const kn = chaveComparacaoPeca(peca.n);
+            const oficial = oficiaisCodigo.get(kc);
+            if (oficial) {
+                if (chaveComparacaoPeca(oficial.n) !== kn) {
+                    const ka = `${kc}|${kn}`;
+                    if (!chavesAlias.has(ka)) { aliases.push(peca); chavesAlias.add(ka); }
+                }
+                continue;
+            }
+            const kp = `${kc}|${kn}`;
+            if (!chavesAprendidas.has(kp)) { aprendidas.push(peca); chavesAprendidas.add(kp); }
+        }
+
+        await localforage.setItem(PECAS_APRENDIDAS_KEY, aprendidas);
+        await localforage.setItem(PECAS_ALIASES_KEY, aliases);
+        await localforage.setItem(PECAS_MIGRACAO_KEY, { concluidaEm: new Date().toISOString(), legadoPreservado: true });
+    }
+
+    bancoPecasAprendidas = aprendidas;
+    bancoPecasAliases = aliases;
+}
+
+async function iniciarBancoPecas() {
+    try {
+        if (typeof localforage !== 'undefined') await migrarBancoPecasV73();
+    } catch (e) {
+        console.warn('Falha na migração do banco de peças; catálogo antigo foi preservado:', e);
+        try {
+            const legado = typeof localforage !== 'undefined' ? await localforage.getItem('banco_pecas_inteligente') : null;
+            bancoPecasAprendidas = normalizarListaPecasInterna(legado);
+        } catch (_) { bancoPecasAprendidas = []; }
+    }
+    atualizarBancoPecasUnificado();
 }
 
 function atualizarListasHTML() {
@@ -26,43 +113,78 @@ function atualizarListasHTML() {
     if(!dlCodigos || !dlNomes) return;
     dlCodigos.replaceChildren(); dlNomes.replaceChildren();
     const fragCodigos = document.createDocumentFragment(); const fragNomes = document.createDocumentFragment();
+    const codigosVistos = new Set(); const nomesVistos = new Set();
     bancoPecas.forEach(peca => {
-        const optCodigo = document.createElement('option'); optCodigo.value = String(peca.c || ''); optCodigo.textContent = String(peca.n || ''); fragCodigos.appendChild(optCodigo);
-        const optNome = document.createElement('option'); optNome.value = String(peca.n || ''); optNome.textContent = String(peca.c || ''); fragNomes.appendChild(optNome);
+        const kc = chaveComparacaoPeca(peca.c); const kn = chaveComparacaoPeca(peca.n);
+        if (!codigosVistos.has(kc)) {
+            const optCodigo = document.createElement('option'); optCodigo.value = String(peca.c || ''); optCodigo.textContent = String(peca.n || ''); fragCodigos.appendChild(optCodigo); codigosVistos.add(kc);
+        }
+        if (!nomesVistos.has(kn)) {
+            const optNome = document.createElement('option'); optNome.value = String(peca.n || ''); optNome.textContent = String(peca.c || ''); fragNomes.appendChild(optNome); nomesVistos.add(kn);
+        }
+    });
+    bancoPecasAliases.forEach(peca => {
+        const kn = chaveComparacaoPeca(peca.n);
+        if (!nomesVistos.has(kn)) {
+            const optNome = document.createElement('option'); optNome.value = String(peca.n || ''); optNome.textContent = String(peca.c || ''); fragNomes.appendChild(optNome); nomesVistos.add(kn);
+        }
     });
     dlCodigos.appendChild(fragCodigos); dlNomes.appendChild(fragNomes);
 }
 
 function autoPreencherPeca(input, tipo) {
-    const row = input.closest('.peca-row-item'); const inputNome = row.querySelector('.n'); const inputCod = row.querySelector('.c');
+    const row = input.closest('.peca-row-item'); if (!row) return;
+    const inputNome = row.querySelector('.n'); const inputCod = row.querySelector('.c');
     if (tipo === 'codigo' && input.value) {
-        const p = pecasPorCodigo.get(input.value);
+        const p = pecasPorCodigo.get(chaveComparacaoPeca(input.value));
         if (p && !inputNome.value) inputNome.value = p.n;
     } else if (tipo === 'nome' && input.value) {
-        const p = pecasPorNome.get(input.value);
+        const p = pecasPorNome.get(chaveComparacaoPeca(input.value));
         if (p && !inputCod.value) inputCod.value = p.c;
     }
 }
 
 async function aprenderPecasDaOS() {
-    let bancoAtualizado = false;
+    if (typeof localforage === 'undefined') return;
+    const oficiaisCodigo = new Map(bancoPecasOficiais.map(p => [chaveComparacaoPeca(p.c), p]));
+    const aprendidasCodigo = new Map(bancoPecasAprendidas.map((p, i) => [chaveComparacaoPeca(p.c), { p, i }]));
+    const nomesConhecidos = new Set([...bancoPecasOficiais, ...bancoPecasAprendidas].map(p => chaveComparacaoPeca(p.n)));
+    const aliasesChave = new Set(bancoPecasAliases.map(p => `${chaveComparacaoPeca(p.c)}|${chaveComparacaoPeca(p.n)}`));
+    let alterou = false;
+
     document.querySelectorAll('.peca-row-item').forEach(row => {
         const n = row.querySelector('.n')?.value.trim(); const c = row.querySelector('.c')?.value.trim();
         if (!n || !c) return;
-        const existenteCodigo = pecasPorCodigo.get(c);
-        if (existenteCodigo) {
-            if (existenteCodigo.n !== n && !pecasPorNome.has(n)) {
-                pecasPorNome.delete(existenteCodigo.n); existenteCodigo.n = n; pecasPorNome.set(n, existenteCodigo); bancoAtualizado = true;
+        const kc = chaveComparacaoPeca(c); const kn = chaveComparacaoPeca(n);
+        const oficial = oficiaisCodigo.get(kc);
+        if (oficial) {
+            if (chaveComparacaoPeca(oficial.n) !== kn) {
+                const ka = `${kc}|${kn}`;
+                if (!aliasesChave.has(ka)) { bancoPecasAliases.push({ c: oficial.c, n }); aliasesChave.add(ka); alterou = true; }
             }
             return;
         }
-        if (pecasPorNome.has(n)) return;
-        const novaPeca = { c, n };
-        bancoPecas.push(novaPeca); pecasPorCodigo.set(c, novaPeca); pecasPorNome.set(n, novaPeca); bancoAtualizado = true;
-    });
-    if (bancoAtualizado && typeof localforage !== 'undefined') { await localforage.setItem('banco_pecas_inteligente', bancoPecas); atualizarListasHTML(); }
-}
 
+        const aprendida = aprendidasCodigo.get(kc);
+        if (aprendida) {
+            if (chaveComparacaoPeca(aprendida.p.n) !== kn && !nomesConhecidos.has(kn)) {
+                nomesConhecidos.delete(chaveComparacaoPeca(aprendida.p.n));
+                bancoPecasAprendidas[aprendida.i] = { c, n };
+                nomesConhecidos.add(kn); alterou = true;
+            }
+            return;
+        }
+
+        if (nomesConhecidos.has(kn)) return;
+        const nova = { c, n };
+        bancoPecasAprendidas.push(nova); aprendidasCodigo.set(kc, { p: nova, i: bancoPecasAprendidas.length - 1 }); nomesConhecidos.add(kn); alterou = true;
+    });
+
+    if (alterou) {
+        atualizarBancoPecasUnificado();
+        await persistirCamadasBancoPecas();
+    }
+}
 
 // === COMPARTILHAMENTO DO BANCO DE PEÇAS (v52+) ===
 // Exporta/mescla apenas peças. Não altera histórico, O.S., banco de horas ou demais dados.
@@ -104,10 +226,20 @@ function normalizarArquivoBancoPecas(dados) {
 function reconstruirMapasBancoPecas() {
     pecasPorCodigo.clear();
     pecasPorNome.clear();
-    bancoPecas.forEach(p => {
-        if (p && typeof p.c === 'string' && typeof p.n === 'string') {
-            pecasPorCodigo.set(p.c, p);
-            pecasPorNome.set(p.n, p);
+    bancoPecasOficiais.forEach(p => {
+        pecasPorCodigo.set(chaveComparacaoPeca(p.c), p);
+        pecasPorNome.set(chaveComparacaoPeca(p.n), p);
+    });
+    bancoPecasAprendidas.forEach(p => {
+        const kc = chaveComparacaoPeca(p.c), kn = chaveComparacaoPeca(p.n);
+        if (!pecasPorCodigo.has(kc)) pecasPorCodigo.set(kc, p);
+        if (!pecasPorNome.has(kn)) pecasPorNome.set(kn, p);
+    });
+    bancoPecasAliases.forEach(p => {
+        const kn = chaveComparacaoPeca(p.n);
+        if (!pecasPorNome.has(kn)) {
+            const oficial = pecasPorCodigo.get(chaveComparacaoPeca(p.c));
+            pecasPorNome.set(kn, oficial || p);
         }
     });
 }
@@ -146,7 +278,6 @@ function importarBancoPecasJSON(event) {
     const file = input.files && input.files[0];
     if (!file) return;
 
-    // Um banco de peças normal é muito menor que isto. O limite protege contra ficheiros acidentais enormes.
     if (file.size > 5 * 1024 * 1024) {
         mostrarToast('O ficheiro do banco de peças é demasiado grande.', true);
         input.value = '';
@@ -160,52 +291,47 @@ function importarBancoPecasJSON(event) {
             if (!importadas || importadas.length === 0) throw new Error('Nenhuma peça válida');
             if (!Array.isArray(bancoPecas) || bancoPecas.length === 0) await iniciarBancoPecas();
 
-            // Compara sem diferenciar maiúsculas/minúsculas e sem remover nenhuma peça local.
-            const codigosLocais = new Map();
-            const nomesLocais = new Map();
-            bancoPecas.forEach(p => {
-                const atual = sanitizarPecaCompartilhada(p);
-                if (!atual) return;
-                codigosLocais.set(chaveComparacaoPeca(atual.c), atual);
-                nomesLocais.set(chaveComparacaoPeca(atual.n), atual);
-            });
+            const oficiaisCodigo = new Map(bancoPecasOficiais.map(p => [chaveComparacaoPeca(p.c), p]));
+            const aprendidasCodigo = new Map(bancoPecasAprendidas.map(p => [chaveComparacaoPeca(p.c), p]));
+            const nomesConhecidos = new Map([...bancoPecasOficiais, ...bancoPecasAprendidas].map(p => [chaveComparacaoPeca(p.n), p]));
+            const aliasChaves = new Set(bancoPecasAliases.map(p => `${chaveComparacaoPeca(p.c)}|${chaveComparacaoPeca(p.n)}`));
 
-            const novoBanco = bancoPecas.map(p => ({ ...p }));
-            let adicionadas = 0;
-            let duplicadas = 0;
-            let conflitos = 0;
-
+            let adicionadas = 0, duplicadas = 0, conflitos = 0, aliases = 0;
             for (const peca of importadas) {
-                const kc = chaveComparacaoPeca(peca.c);
-                const kn = chaveComparacaoPeca(peca.n);
-                const porCodigo = codigosLocais.get(kc);
-                const porNome = nomesLocais.get(kn);
+                const kc = chaveComparacaoPeca(peca.c), kn = chaveComparacaoPeca(peca.n);
+                const oficial = oficiaisCodigo.get(kc);
+                if (oficial) {
+                    if (chaveComparacaoPeca(oficial.n) === kn) duplicadas++;
+                    else {
+                        const ka = `${kc}|${kn}`;
+                        if (!aliasChaves.has(ka)) { bancoPecasAliases.push({ c: oficial.c, n: peca.n }); aliasChaves.add(ka); aliases++; }
+                        else duplicadas++;
+                    }
+                    continue;
+                }
 
+                const porCodigo = aprendidasCodigo.get(kc);
+                const porNome = nomesConhecidos.get(kn);
                 if (porCodigo || porNome) {
-                    const codigoBateComNome = porCodigo && chaveComparacaoPeca(porCodigo.n) === kn;
-                    const nomeBateComCodigo = porNome && chaveComparacaoPeca(porNome.c) === kc;
-                    if (codigoBateComNome && nomeBateComCodigo) duplicadas++;
-                    else conflitos++; // Segurança: cadastro local prevalece; nada é sobrescrito.
+                    const exato = porCodigo && chaveComparacaoPeca(porCodigo.n) === kn;
+                    if (exato) duplicadas++; else conflitos++;
                     continue;
                 }
 
                 const nova = { c: peca.c, n: peca.n };
-                novoBanco.push(nova);
-                codigosLocais.set(kc, nova);
-                nomesLocais.set(kn, nova);
-                adicionadas++;
+                bancoPecasAprendidas.push(nova);
+                aprendidasCodigo.set(kc, nova); nomesConhecidos.set(kn, nova); adicionadas++;
             }
 
-            if (adicionadas > 0) {
-                await localforage.setItem('banco_pecas_inteligente', novoBanco);
-                bancoPecas = novoBanco;
-                reconstruirMapasBancoPecas();
-                atualizarListasHTML();
+            if (adicionadas || aliases) {
+                atualizarBancoPecasUnificado();
+                await persistirCamadasBancoPecas();
             }
 
             const partes = [`${adicionadas} nova${adicionadas === 1 ? '' : 's'}`];
+            if (aliases) partes.push(`${aliases} alias${aliases === 1 ? '' : 'es'} preservado${aliases === 1 ? '' : 's'}`);
             if (duplicadas) partes.push(`${duplicadas} já existente${duplicadas === 1 ? '' : 's'}`);
-            if (conflitos) partes.push(`${conflitos} conflito${conflitos === 1 ? '' : 's'} mantido${conflitos === 1 ? '' : 's'} como estava`);
+            if (conflitos) partes.push(`${conflitos} conflito${conflitos === 1 ? '' : 's'} mantido${conflitos === 1 ? '' : 's'} sem sobrescrever o catálogo oficial`);
             mostrarToast(`Banco de peças mesclado: ${partes.join(', ')}.`);
         } catch (err) {
             console.error('Erro ao importar banco de peças:', err);
@@ -712,6 +838,7 @@ let cameraSessaoId = 0;
 let cameraPreviewsLiberados = false;
 let osIdAtualFoto = null;
 let timeoutRascunho = null;
+let filaRascunho = Promise.resolve();
 let formularioSujo = false;
 let salvamentoManualEmAndamento = false;
 let restaurandoDocumento = false;
@@ -723,19 +850,30 @@ let pdfPreviewHotspotsAssinatura = [];
 let assinaturaAbertaPeloPreview = false;
 let atualizandoPreviewAssinatura = false;
 let previewAssinaturaAtualizacaoPendente = false;
+let previewPdfSujoPorAssinatura = false;
+let toastTimeoutId = null;
+let limpezaMidiaEmAndamento = false;
+const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 72;
+const APP_VERSION = 73;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
 const MAX_LOG_ERROS = 50;
 const FOTO_MAX_DIM = 1600;
 const FOTO_JPEG_QUALIDADE = 0.72;
-const CAMERA_PREVIEW_KEEP_LIMIT = 8; // até 8 fotos: mantém previews na RAM para abrir/fechar a câmera mais rápido
+const FOTO_THUMB_MAX_DIM = 420;
+const FOTO_THUMB_JPEG_QUALIDADE = 0.62;
 const CAMERA_PENDING_KEY = 'captura_camera_pendente_v68';
 const CAMERA_RESTORE_MAX_AGE_MS = 10 * 60 * 1000;
 const MEDIA_PHOTO_PREFIX = 'media_photo_';
 const MEDIA_PDF_PREFIX = 'media_pdf_';
+const MEDIA_THUMB_PREFIX = 'media_thumb_';
+const MEDIA_META_PREFIX = 'media_meta_';
+const MEDIA_ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000;
+const DRAFT_PREFIX = 'draft_doc_';
+const DRAFT_INDEX_KEY = 'draft_index_v73';
+const DRAFT_MIGRATION_KEY = 'migracao_drafts_v73';
 const midiasCriadasSessao = new Set();
 
 const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
@@ -760,6 +898,270 @@ function novoIdLocal() {
     if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
     const aleatorio = Math.random().toString(36).slice(2, 12);
     return `${Date.now()}_${aleatorio}`;
+}
+
+
+// === RASCUNHOS POR DOCUMENTO (v73) ===
+function chaveRascunhoDocumento(id) {
+    const seguro = String(id || '');
+    return idLocalSeguro(seguro) ? `${DRAFT_PREFIX}${seguro}` : null;
+}
+
+async function obterIndiceRascunhos() {
+    if (typeof localforage === 'undefined') return [];
+    const idx = await localforage.getItem(DRAFT_INDEX_KEY);
+    if (!Array.isArray(idx)) return [];
+    return idx.filter(x => x && idLocalSeguro(String(x.id || ''))).map(x => ({ id: String(x.id), atualizadoEm: String(x.atualizadoEm || '') }));
+}
+
+async function salvarIndiceRascunhos(indice) {
+    if (typeof localforage === 'undefined') return;
+    const normalizado = Array.isArray(indice) ? indice.filter(x => x && idLocalSeguro(String(x.id || ''))).slice(0, 50) : [];
+    await localforage.setItem(DRAFT_INDEX_KEY, normalizado);
+}
+
+async function salvarRascunhoPersistente(doc, espelharLegado = true) {
+    if (typeof localforage === 'undefined' || !doc || !idLocalSeguro(String(doc.id || ''))) return false;
+    const chave = chaveRascunhoDocumento(doc.id);
+    if (!chave) return false;
+    const executar = async () => {
+        await localforage.setItem(chave, doc);
+        const idx = await obterIndiceRascunhos();
+        const atualizadoEm = String(doc.dataAtualizacao || new Date().toISOString());
+        await salvarIndiceRascunhos([{ id: String(doc.id), atualizadoEm }, ...idx.filter(x => x.id !== String(doc.id))]);
+        // Mantém a chave histórica como espelho durante a v73 para downgrade/recuperação.
+        if (espelharLegado) await localforage.setItem('draft_os', doc);
+        return true;
+    };
+    const operacao = filaRascunho.then(executar, executar);
+    filaRascunho = operacao.catch(() => {});
+    return operacao;
+}
+
+async function removerRascunhoPersistente(id) {
+    if (typeof localforage === 'undefined' || !idLocalSeguro(String(id || ''))) return;
+    try { await filaRascunho; } catch (_) {}
+    const chave = chaveRascunhoDocumento(id);
+    if (chave) await localforage.removeItem(chave);
+    const idx = await obterIndiceRascunhos();
+    await salvarIndiceRascunhos(idx.filter(x => x.id !== String(id)));
+    const legado = await localforage.getItem('draft_os');
+    if (legado?.id === id || String(legado?.id || '') === String(id)) await localforage.removeItem('draft_os');
+}
+
+async function migrarRascunhoLegadoV73() {
+    if (typeof localforage === 'undefined') return;
+    const legado = await localforage.getItem('draft_os');
+    if (legado && idLocalSeguro(String(legado.id || '')) && Array.isArray(legado.ordens)) {
+        const chave = chaveRascunhoDocumento(legado.id);
+        const existente = chave ? await localforage.getItem(chave) : null;
+        if (!existente) await salvarRascunhoPersistente(legado, false);
+    }
+    if (!await localforage.getItem(DRAFT_MIGRATION_KEY)) {
+        await localforage.setItem(DRAFT_MIGRATION_KEY, { concluidaEm: new Date().toISOString(), legadoPreservado: true });
+    }
+}
+
+async function obterRascunhoDocumento(id) {
+    if (typeof localforage === 'undefined' || !idLocalSeguro(String(id || ''))) return null;
+    const chave = chaveRascunhoDocumento(id);
+    const novo = chave ? await localforage.getItem(chave) : null;
+    if (novo?.id && Array.isArray(novo.ordens)) return novo;
+    const legado = await localforage.getItem('draft_os');
+    return String(legado?.id || '') === String(id) && Array.isArray(legado?.ordens) ? legado : null;
+}
+
+async function listarRascunhosPersistentes() {
+    if (typeof localforage === 'undefined') return [];
+    try { await filaRascunho; } catch (_) {}
+    await migrarRascunhoLegadoV73();
+    const idx = await obterIndiceRascunhos();
+    const resultado = [];
+    const vistos = new Set();
+    for (const meta of idx) {
+        const draft = await obterRascunhoDocumento(meta.id);
+        if (draft && !vistos.has(String(draft.id))) { resultado.push(draft); vistos.add(String(draft.id)); }
+    }
+    // Recupera também chaves específicas caso o índice tenha sido interrompido durante uma escrita.
+    const keys = await localforage.keys();
+    for (const key of keys.filter(k => k.startsWith(DRAFT_PREFIX))) {
+        const id = key.slice(DRAFT_PREFIX.length);
+        if (!idLocalSeguro(id) || vistos.has(id)) continue;
+        const draft = await localforage.getItem(key);
+        if (draft && Array.isArray(draft.ordens)) { resultado.push(draft); vistos.add(id); }
+    }
+    return resultado.sort((a,b) => String(b.dataAtualizacao || '').localeCompare(String(a.dataAtualizacao || '')));
+}
+
+async function confirmarSaidaComAlteracoes(destinoId = null) {
+    if (!formularioSujo || !documentoAtualId || String(destinoId || '') === String(documentoAtualId)) return true;
+    const guardar = confirm('Há alterações não salvas nesta O.S.\n\nOK = guardar um rascunho e continuar.\nCancelar = escolher se deseja descartar ou permanecer aqui.');
+    if (guardar) {
+        const ok = await autoSalvarRascunho(true);
+        if (!ok) { mostrarToast('Não foi possível guardar o rascunho. A navegação foi cancelada para proteger os dados.', true); return false; }
+        return true;
+    }
+    const descartar = confirm('Descartar as alterações não salvas e continuar?\n\nOK = descartar.\nCancelar = permanecer nesta O.S.');
+    if (!descartar) return false;
+    try { await removerRascunhoPersistente(documentoAtualId); } catch (_) {}
+    return true;
+}
+
+async function prepararAtualizacaoSegura() {
+    if (typeof localforage === 'undefined') {
+        if (formularioSujo) { mostrarToast('Atualização adiada: armazenamento indisponível para proteger o trabalho atual.', true); return false; }
+        return true;
+    }
+    try {
+        // Mesmo que o usuário esteja olhando Histórico/Banco de Horas, o formulário em memória
+        // pode conter alterações ainda não gravadas. Salva o snapshot diretamente antes do reload.
+        if (formularioSujo && document.querySelector('.os-bloco')) {
+            await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
+            return true;
+        }
+        const novaOs = document.getElementById('novaOs');
+        if (novaOs && !novaOs.classList.contains('hidden')) await autoSalvarRascunho(true);
+        return true;
+    } catch (e) {
+        console.error('Falha ao preparar atualização segura:', e);
+        registrarErroApp('prepararAtualizacaoSegura', e);
+        mostrarToast('Atualização adiada porque o rascunho não pôde ser salvo.', true);
+        return false;
+    }
+}
+window.prepararAtualizacaoSegura = prepararAtualizacaoSegura;
+
+// === MÍDIAS / THUMBNAILS / COLETA DE LIXO (v73) ===
+function chaveMetaMidia(chaveMidia) { return `${MEDIA_META_PREFIX}${chaveMidia}`; }
+function thumbKeyPorMediaId(mediaId) { return `${MEDIA_THUMB_PREFIX}${mediaId}`; }
+
+async function registrarMetaMidia(chaveMidia, extras = {}) {
+    if (typeof localforage === 'undefined' || !chaveMidia) return;
+    try {
+        const chaveMeta = chaveMetaMidia(chaveMidia);
+        const anterior = await localforage.getItem(chaveMeta);
+        const agora = Date.now();
+        await localforage.setItem(chaveMeta, {
+            criadoEm: Number(anterior?.criadoEm || extras.criadoEm || agora),
+            ultimaReferenciaEm: Number(extras.ultimaReferenciaEm || anterior?.ultimaReferenciaEm || agora),
+            documentoId: String(extras.documentoId || anterior?.documentoId || documentoAtualId || ''),
+            tipo: String(extras.tipo || anterior?.tipo || ''),
+            orfaoDesde: extras.orfaoDesde === null ? null : Number(extras.orfaoDesde || anterior?.orfaoDesde || 0) || null
+        });
+    } catch (_) {}
+}
+
+async function removerChaveMidiaComRelacionados(chave) {
+    if (typeof localforage === 'undefined' || !chave) return 0;
+    let bytes = 0;
+    const removerUma = async k => {
+        try {
+            const valor = await localforage.getItem(k);
+            if (valor instanceof Blob) bytes += valor.size;
+            await localforage.removeItem(k);
+            await localforage.removeItem(chaveMetaMidia(k));
+        } catch (_) {}
+        midiasCriadasSessao.delete(k);
+    };
+    await removerUma(chave);
+    if (chave.startsWith(MEDIA_PHOTO_PREFIX)) {
+        const mediaId = chave.slice(MEDIA_PHOTO_PREFIX.length);
+        await removerUma(thumbKeyPorMediaId(mediaId));
+    }
+    return bytes;
+}
+
+function idsMidiaDocumentoComThumbnails(doc) {
+    const refs = idsMidiaDocumento(doc);
+    const expandido = new Set(refs);
+    for (const chave of refs) {
+        if (chave.startsWith(MEDIA_PHOTO_PREFIX)) expandido.add(thumbKeyPorMediaId(chave.slice(MEDIA_PHOTO_PREFIX.length)));
+    }
+    return expandido;
+}
+
+async function coletarReferenciasMidiaSeguras() {
+    if (typeof localforage === 'undefined') throw new Error('Armazenamento indisponível');
+    const refs = new Set();
+    const adicionarDoc = doc => { for (const k of idsMidiaDocumentoComThumbnails(doc)) refs.add(k); };
+
+    const historico = await obterHistoricoSalvo();
+    for (const meta of historico) {
+        if (!idLocalSeguro(String(meta?.id || ''))) continue;
+        const doc = await localforage.getItem(`os_doc_${meta.id}`);
+        if (!doc) throw new Error(`Documento ativo ${meta.id} não pôde ser lido; limpeza cancelada.`);
+        adicionarDoc(doc);
+    }
+
+    const lixeira = await obterLixeiraOS();
+    for (const meta of lixeira) {
+        if (!idLocalSeguro(String(meta?.id || ''))) continue;
+        const doc = await localforage.getItem(`trash_os_doc_${meta.id}`);
+        if (!doc) throw new Error(`Documento da lixeira ${meta.id} não pôde ser lido; limpeza cancelada.`);
+        adicionarDoc(doc);
+    }
+
+    const drafts = await listarRascunhosPersistentes();
+    drafts.forEach(adicionarDoc);
+    const legado = await localforage.getItem('draft_os');
+    if (legado?.ordens) adicionarDoc(legado);
+
+    // Protege também o formulário que está aberto, mesmo antes do próximo autosave.
+    try {
+        if (document.querySelector('.os-bloco')) adicionarDoc(recolherDadosDoFormulario());
+    } catch (_) {}
+    return refs;
+}
+
+async function limparMidiasOrfasSeguro() {
+    if (limpezaMidiaEmAndamento || typeof localforage === 'undefined') return null;
+    limpezaMidiaEmAndamento = true;
+    const inicio = Date.now();
+    try {
+        const refs = await coletarReferenciasMidiaSeguras();
+        const keys = await localforage.keys();
+        const midias = keys.filter(k => k.startsWith(MEDIA_PHOTO_PREFIX) || k.startsWith(MEDIA_PDF_PREFIX) || k.startsWith(MEDIA_THUMB_PREFIX));
+        let removidos = 0, bytesLiberados = 0, protegidosGrace = 0;
+        const removidas = new Set();
+        const agora = Date.now();
+
+        for (const chave of midias) {
+            if (removidas.has(chave)) continue;
+            if (refs.has(chave)) {
+                await registrarMetaMidia(chave, { ultimaReferenciaEm: agora, orfaoDesde: null });
+                continue;
+            }
+
+            const metaKey = chaveMetaMidia(chave);
+            const meta = await localforage.getItem(metaKey);
+            if (!meta || !Number(meta.orfaoDesde)) {
+                await registrarMetaMidia(chave, { criadoEm: Number(meta?.criadoEm || agora), orfaoDesde: agora });
+                protegidosGrace++;
+                continue;
+            }
+            if (agora - Number(meta.orfaoDesde) < MEDIA_ORPHAN_GRACE_MS) { protegidosGrace++; continue; }
+
+            bytesLiberados += await removerChaveMidiaComRelacionados(chave);
+            removidos++;
+            removidas.add(chave);
+            if (chave.startsWith(MEDIA_PHOTO_PREFIX)) removidas.add(thumbKeyPorMediaId(chave.slice(MEDIA_PHOTO_PREFIX.length)));
+        }
+
+        const resultado = { executadaEm: new Date().toISOString(), removidos, bytesLiberados, protegidosGrace, duracaoMs: Date.now() - inicio };
+        await localforage.setItem('diagnostico_ultima_limpeza_midias_v73', resultado);
+        if (removidos) console.info(`Multi-OS: limpeza segura removeu ${removidos} mídia(s) órfã(s), liberando ${Math.round(bytesLiberados/1024)} KB.`);
+        return resultado;
+    } catch (e) {
+        console.warn('Limpeza de mídias cancelada por segurança:', e);
+        registrarErroApp('limparMidiasOrfasSeguro', e);
+        return null;
+    } finally { limpezaMidiaEmAndamento = false; }
+}
+
+function agendarLimpezaMidiasOrfas(atrasoMs = 2500) {
+    const executar = () => { void limparMidiasOrfasSeguro(); };
+    if (typeof requestIdleCallback === 'function') setTimeout(() => requestIdleCallback(executar, { timeout: 2500 }), Math.max(0, atrasoMs));
+    else setTimeout(executar, Math.max(0, atrasoMs));
 }
 
 function cancelarAutoSavePendente() {
@@ -877,10 +1279,11 @@ async function salvarBlobMidia(prefixo, blob, rastrearSessao = true) {
         await localforage.setItem(chave, blob);
         const teste = await localforage.getItem(chave);
         if (!(teste instanceof Blob) || teste.size !== blob.size) throw new Error('Navegador não preservou o Blob corretamente');
+        await registrarMetaMidia(chave, { tipo: prefixo === MEDIA_PHOTO_PREFIX ? 'foto' : (prefixo === MEDIA_PDF_PREFIX ? 'pdf' : 'midia'), documentoId: documentoAtualId, orfaoDesde: null });
         if (rastrearSessao) midiasCriadasSessao.add(chave);
         return mediaId;
     } catch (e) {
-        try { await localforage.removeItem(chave); } catch (_) {}
+        try { await localforage.removeItem(chave); await localforage.removeItem(chaveMetaMidia(chave)); } catch (_) {}
         console.warn('Blob não pôde ser guardado; será usado formato legado Base64.', e);
         return null;
     }
@@ -895,6 +1298,81 @@ async function obterBlobMidia(prefixo, mediaId) {
         console.error('Falha ao ler mídia:', e);
         return null;
     }
+}
+
+
+async function criarThumbnailBlob(blobFonte) {
+    if (!(blobFonte instanceof Blob) || !String(blobFonte.type || '').startsWith('image/')) return null;
+    let bitmap = null;
+    let objectUrl = null;
+    try {
+        let width = 0, height = 0, fonte = null;
+        if (typeof createImageBitmap === 'function') {
+            bitmap = await createImageBitmap(blobFonte);
+            width = bitmap.width; height = bitmap.height; fonte = bitmap;
+        } else {
+            objectUrl = URL.createObjectURL(blobFonte);
+            fonte = await new Promise((resolve, reject) => {
+                const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = objectUrl;
+            });
+            width = fonte.naturalWidth || fonte.width; height = fonte.naturalHeight || fonte.height;
+        }
+        if (!width || !height || !fonte) return null;
+        const fator = Math.min(1, FOTO_THUMB_MAX_DIM / Math.max(width, height));
+        const w = Math.max(1, Math.round(width * fator)), h = Math.max(1, Math.round(height * fator));
+        const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d', { alpha: false }); if (!ctx) return null;
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(fonte, 0, 0, w, h);
+        const thumb = await canvasParaBlobJPEG(canvas, FOTO_THUMB_JPEG_QUALIDADE);
+        canvas.width = 1; canvas.height = 1;
+        return thumb;
+    } catch (e) {
+        console.warn('Thumbnail não pôde ser criado:', e);
+        return null;
+    } finally {
+        try { bitmap?.close?.(); } catch (_) {}
+        if (objectUrl) try { URL.revokeObjectURL(objectUrl); } catch (_) {}
+    }
+}
+
+async function garantirThumbnailFoto(mediaId, blobFonte = null) {
+    if (!mediaId || typeof localforage === 'undefined') return null;
+    const chaveThumb = thumbKeyPorMediaId(mediaId);
+    try {
+        const existente = await localforage.getItem(chaveThumb);
+        if (existente instanceof Blob && existente.size > 0) return existente;
+    } catch (_) {}
+    if (thumbnailsEmCriacao.has(mediaId)) return null;
+    thumbnailsEmCriacao.add(mediaId);
+    try {
+        const fonte = blobFonte instanceof Blob ? blobFonte : await obterBlobMidia(MEDIA_PHOTO_PREFIX, mediaId);
+        if (!(fonte instanceof Blob)) return null;
+        const thumb = await criarThumbnailBlob(fonte);
+        if (!(thumb instanceof Blob)) return null;
+        await localforage.setItem(chaveThumb, thumb);
+        await registrarMetaMidia(chaveThumb, { tipo: 'thumbnail', documentoId: documentoAtualId, orfaoDesde: null });
+        return thumb;
+    } catch (e) {
+        console.warn('Falha ao guardar thumbnail:', e);
+        return null;
+    } finally { thumbnailsEmCriacao.delete(mediaId); }
+}
+
+function agendarThumbnailFoto(mediaId, blobFonte = null) {
+    if (!mediaId) return;
+    const executar = () => { void garantirThumbnailFoto(mediaId, blobFonte); };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(executar, { timeout: 1500 }); else setTimeout(executar, 100);
+}
+
+async function obterBlobPreviewFoto(mediaId) {
+    if (!mediaId || typeof localforage === 'undefined') return null;
+    try {
+        const thumb = await localforage.getItem(thumbKeyPorMediaId(mediaId));
+        if (thumb instanceof Blob && String(thumb.type || '').startsWith('image/')) return { blob: thumb, thumbnail: true };
+    } catch (_) {}
+    const principal = await obterBlobMidia(MEDIA_PHOTO_PREFIX, mediaId);
+    if (principal) agendarThumbnailFoto(mediaId, principal);
+    return principal ? { blob: principal, thumbnail: false } : null;
 }
 
 function idsMidiaDocumento(doc) {
@@ -912,15 +1390,12 @@ async function limparMidiasRemovidasDoDocumento(documentoAnterior, documentoNovo
     const novas = idsMidiaDocumento(documentoNovo);
     for (const chave of antigas) {
         if (!novas.has(chave)) {
-            try { await localforage.removeItem(chave); } catch (e) { console.warn('Não foi possível limpar mídia antiga:', e); }
+            try { await removerChaveMidiaComRelacionados(chave); } catch (e) { console.warn('Não foi possível limpar mídia antiga:', e); }
         }
     }
     for (const chave of Array.from(midiasCriadasSessao)) {
         if (novas.has(chave)) midiasCriadasSessao.delete(chave);
-        else {
-            try { await localforage.removeItem(chave); } catch (_) {}
-            midiasCriadasSessao.delete(chave);
-        }
+        else await removerChaveMidiaComRelacionados(chave);
     }
 }
 
@@ -1074,10 +1549,17 @@ async function gravarHistoricoSalvo(historicoMeta) {
 }
 
 function mostrarToast(mensagem, isErro = false) {
-    const toast = document.getElementById('toast'); document.getElementById('toastMsg').textContent = mensagem;
-    if(isErro) { toast.classList.remove('bg-gray-900'); toast.classList.add('bg-red-600'); } else { toast.classList.remove('bg-red-600'); toast.classList.add('bg-gray-900'); }
+    const toast = document.getElementById('toast'); const msg = document.getElementById('toastMsg');
+    if (!toast || !msg) return;
+    if (toastTimeoutId) { clearTimeout(toastTimeoutId); toastTimeoutId = null; }
+    msg.textContent = String(mensagem || '');
+    if(isErro) { toast.classList.remove('bg-gray-900'); toast.classList.add('bg-red-600'); }
+    else { toast.classList.remove('bg-red-600'); toast.classList.add('bg-gray-900'); }
     toast.classList.remove('opacity-0', 'translate-y-4');
-    setTimeout(() => toast.classList.add('opacity-0', 'translate-y-4'), 4000); 
+    toastTimeoutId = setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-4');
+        toastTimeoutId = null;
+    }, 4000);
 }
 
 async function abrirAbaHistoricoSegura() {
@@ -1135,8 +1617,27 @@ function validarDocumentoBackup(doc) {
     });
 }
 
+function horaValida(valor) {
+    return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(valor || ''));
+}
+
+function dataISOValida(valor) {
+    const s = String(valor || '');
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return false;
+    const ano = Number(m[1]), mes = Number(m[2]), dia = Number(m[3]);
+    const d = new Date(Date.UTC(ano, mes - 1, dia));
+    return d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+}
+
 function validarRegistoBancoHoras(reg) {
-    return !!(reg && typeof reg === 'object' && idLocalSeguro(reg.id) && /^\d{4}-\d{2}-\d{2}$/.test(String(reg.data || '')) && /^\d{2}:\d{2}$/.test(String(reg.chegada || '')) && /^\d{2}:\d{2}$/.test(String(reg.saida || '')) && Number.isFinite(Number(reg.balancoFinal)));
+    return !!(reg && typeof reg === 'object' && idLocalSeguro(String(reg.id || '')) && dataISOValida(reg.data) && horaValida(reg.chegada) && horaValida(reg.saida) && Number.isFinite(Number(reg.balancoFinal)));
+}
+
+function validarRegistoBancoHorasLegado(reg) {
+    // Somente para dados já existentes no aparelho: preserva exatamente a tolerância das versões antigas.
+    // Novas entradas e importações usam validarRegistoBancoHoras (estrito).
+    return !!(reg && typeof reg === 'object' && idLocalSeguro(String(reg.id || '')) && /^\d{4}-\d{2}-\d{2}$/.test(String(reg.data || '')) && /^\d{2}:\d{2}$/.test(String(reg.chegada || '')) && /^\d{2}:\d{2}$/.test(String(reg.saida || '')) && Number.isFinite(Number(reg.balancoFinal)));
 }
 
 function normalizarBackupImportado(importados) {
@@ -1246,9 +1747,9 @@ async function apagarDocumentoDefinitivo(id) {
     const lix = await obterLixeiraOS();
     try {
         await localforage.setItem('lixeira_os', lix.filter(m => m.id !== id));
-        try { const docTrash = await localforage.getItem(`trash_os_doc_${id}`); if (docTrash) { for (const chave of idsMidiaDocumento(docTrash)) { try { await localforage.removeItem(chave); } catch (_) {} } } await localforage.removeItem(`trash_os_doc_${id}`); }
+        try { const docTrash = await localforage.getItem(`trash_os_doc_${id}`); if (docTrash) { for (const chave of idsMidiaDocumento(docTrash)) { await removerChaveMidiaComRelacionados(chave); } } await localforage.removeItem(`trash_os_doc_${id}`); }
         catch(e) { await localforage.setItem('lixeira_os', lix); throw e; }
-        await carregarLixeira(); mostrarToast('OS excluída definitivamente.');
+        await carregarLixeira(); mostrarToast('OS excluída definitivamente.'); agendarLimpezaMidiasOrfas(800);
     } catch(e) { console.error(e); mostrarToast('Falha ao excluir definitivamente. A entrada da lixeira foi preservada quando possível.', true); }
 }
 
@@ -1259,7 +1760,7 @@ async function limparTodoHistorico() {
         const idsMovidos = new Set(historicoMeta.map(meta => meta.id));
         for (const meta of [...historicoMeta]) await moverDocumentoParaLixeira(meta.id);
         // Não apaga um rascunho atual que ainda nem fazia parte do histórico.
-        if (idsMovidos.has(documentoAtualId)) await iniciarNovaOS();
+        if (idsMovidos.has(documentoAtualId)) await iniciarNovaOS(true);
         await carregarHistorico(); mostrarToast('Histórico movido para a Lixeira.');
     } catch(e) { console.error(e); registrarErroApp('limparTodoHistorico', e); mostrarToast('A operação foi interrompida para evitar perda de dados.', true); }
 }
@@ -1391,28 +1892,49 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (typeof localforage !== 'undefined') {
         try {
             const nomeSalvo = await localforage.getItem('bh_nome_tecnico_salvo'); if (nomeSalvo && document.getElementById('bh_nome_tecnico')) document.getElementById('bh_nome_tecnico').value = nomeSalvo;
-            const horasSalvas = await localforage.getItem('banco_horas_data'); if (Array.isArray(horasSalvas)) registosBancoHoras = horasSalvas.filter(validarRegistoBancoHoras).map(r => ({...r, balancoFinal: Number(r.balancoFinal)}));
+            const horasSalvas = await localforage.getItem('banco_horas_data'); if (Array.isArray(horasSalvas)) registosBancoHoras = horasSalvas.filter(validarRegistoBancoHorasLegado).map(r => ({...r, balancoFinal: Number(r.balancoFinal)}));
         } catch(e) { console.error('Falha ao carregar banco de horas:', e); registrarErroApp('carregarBancoHoras', e); mostrarToast('Falha ao ler o banco de horas. Nenhum dado foi substituído.', true); }
     } else {
         mostrarToast('Armazenamento local indisponível. Salvar e histórico não funcionarão nesta sessão.', true);
+    }
+
+    if (typeof localforage !== 'undefined') agendarLimpezaMidiasOrfas(4500);
+});
+
+// Ao Android colocar a PWA em segundo plano, tenta preservar o estado atual sem interromper a interface.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && formularioSujo && typeof localforage !== 'undefined' && document.querySelector('.os-bloco')) {
+        try { void salvarRascunhoPersistente(recolherDadosDoFormulario(), true).catch(() => {}); } catch (_) {}
     }
 });
 
 async function autoSalvarRascunho(forcar = false) {
     timeoutRascunho = null;
     const clientePreenchido = document.querySelector('[id^="cliente_"]')?.value.trim();
-    if (typeof localforage === 'undefined' || restaurandoDocumento || salvamentoManualEmAndamento || document.getElementById('novaOs').classList.contains('hidden') || (!forcar && document.getElementById('lockStatus').textContent.includes('BLOQUEADO')) || !clientePreenchido) return;
-    try { await localforage.setItem('draft_os', recolherDadosDoFormulario()); document.getElementById('autoSaveIndicator').textContent = `Salvo: ${new Date().toLocaleTimeString('pt-BR')}`; }
-    catch(e) { console.error('Falha no auto-salvamento:', e); registrarErroApp('autoSalvarRascunho', e); document.getElementById('autoSaveIndicator').textContent = 'Falha ao salvar rascunho'; }
+    const novaOs = document.getElementById('novaOs');
+    const bloqueado = document.getElementById('lockStatus')?.textContent?.includes('BLOQUEADO');
+    if (typeof localforage === 'undefined' || restaurandoDocumento || salvamentoManualEmAndamento || !novaOs || novaOs.classList.contains('hidden') || (!forcar && bloqueado) || (!forcar && !clientePreenchido)) return false;
+    try {
+        const dados = recolherDadosDoFormulario();
+        await salvarRascunhoPersistente(dados, true);
+        const indicador = document.getElementById('autoSaveIndicator');
+        if (indicador) indicador.textContent = `Salvo: ${new Date().toLocaleTimeString('pt-BR')}`;
+        return true;
+    } catch(e) {
+        console.error('Falha no auto-salvamento:', e); registrarErroApp('autoSalvarRascunho', e);
+        const indicador = document.getElementById('autoSaveIndicator'); if (indicador) indicador.textContent = 'Falha ao salvar rascunho';
+        return false;
+    }
 }
 
 async function verificarRascunhoPendente() {
     if (typeof localforage === 'undefined') return;
     try {
-        const draft = await localforage.getItem('draft_os');
+        const drafts = await listarRascunhosPersistentes();
+        const draft = drafts[0] || null;
         if(draft && draft.ordens && draft.ordens.length > 0) {
-            if(confirm('⚠️ Recuperar trabalho não guardado da última sessão?')) restaurarDadosParaFormulario(draft);
-            else await localforage.removeItem('draft_os');
+            if(confirm('⚠️ Recuperar o trabalho não guardado mais recente da última sessão?')) restaurarDadosParaFormulario(draft);
+            else await removerRascunhoPersistente(draft.id);
         }
     } catch(e) { console.error('Falha ao verificar rascunho:', e); registrarErroApp('verificarRascunhoPendente', e); }
 }
@@ -1441,6 +1963,7 @@ function calcularMinsDesvio(horaEntrada, horaSaida, isCredito) {
 async function adicionarRegistoBancoHoras() {
     const data = document.getElementById('bh_data').value; const cliente = document.getElementById('bh_cliente').value; const motivo = document.getElementById('bh_motivo').value; const local = document.getElementById('bh_local').value; const chegada = document.getElementById('bh_chegada').value; const saida = document.getElementById('bh_saida').value; const isCredito = document.getElementById('bh_tipo_credito').checked;
     if(!data || !chegada || !saida) { mostrarToast("Preencha Data e Horários!", true); return; }
+    if(!dataISOValida(data) || !horaValida(chegada) || !horaValida(saida)) { mostrarToast("Data ou horário inválido.", true); return; }
     
     const novoReg = { id: novoIdLocal(), data, cliente, motivo, local, chegada, saida, isCredito, balancoFinal: calcularMinsDesvio(chegada, saida, isCredito) };
     const novosRegistos = [...registosBancoHoras, novoReg].sort((a,b) => new Date(a.data) - new Date(b.data)); if(!await persistirBancoHorasSeguro(novosRegistos)) return;
@@ -1458,6 +1981,7 @@ async function adicionarDiaCompletoBancoHoras() {
     const isCredito = document.getElementById('bh_tipo_credito').checked;
     
     if(!data) { mostrarToast("Selecione a Data!", true); return; }
+    if(!dataISOValida(data)) { mostrarToast("Data inválida.", true); return; }
     
     const dateObj = new Date(data + 'T00:00:00');
     const dayOfWeek = dateObj.getDay(); 
@@ -1573,7 +2097,7 @@ async function prepararCapturaCamera(id, sessaoEsperada = cameraSessaoId) {
     try {
         if (typeof localforage !== 'undefined') {
             // Salva o estado atual mesmo que Cliente/OS ainda estejam incompletos.
-            await localforage.setItem('draft_os', recolherDadosDoFormulario());
+            await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
             // Se a câmera já foi fechada/trocada enquanto o rascunho era salvo, não deixa marcador antigo.
             if (sessaoEsperada !== cameraSessaoId) return;
             await localforage.setItem(CAMERA_PENDING_KEY, {
@@ -1589,9 +2113,15 @@ async function prepararCapturaCamera(id, sessaoEsperada = cameraSessaoId) {
 }
 
 function deveLiberarPreviewsParaCamera() {
-    // No uso normal (poucas fotos), manter os previews evita trabalho extra e deixa a câmera
-    // tão responsiva quanto as versões antigas. Com muitas fotos, prioriza RAM para a câmera.
-    return document.querySelectorAll('.foto-item').length > CAMERA_PREVIEW_KEEP_LIMIT;
+    // v73: thumbnails pequenos podem permanecer na RAM mesmo com muitas fotos.
+    // Só libera previews quando ainda há imagem pesada (Base64 legado ou Blob principal sem thumbnail pronto).
+    return Array.from(document.querySelectorAll('.foto-item')).some(item => {
+        const base64 = item.querySelector('.foto-b64')?.value || '';
+        const mediaId = item.querySelector('.foto-media-id')?.value || '';
+        const img = item.querySelector('img');
+        if (base64) return true;
+        return Boolean(mediaId && img && img.dataset.previewThumbnail !== '1');
+    });
 }
 
 function liberarPreviewsBlobTemporarios() {
@@ -1892,7 +2422,7 @@ async function tirarFotoDoVideo() {
         if (!blob) throw new Error('Não foi possível comprimir a foto.');
 
         const mediaId = await salvarBlobMidia(MEDIA_PHOTO_PREFIX, blob);
-        if (mediaId) renderFotoItem(osIdAtualFoto || 1, { mediaId }, '');
+        if (mediaId) { renderFotoItem(osIdAtualFoto || 1, { mediaId }, ''); agendarThumbnailFoto(mediaId, blob); }
         else renderFotoItem(osIdAtualFoto || 1, await blobParaDataUrl(blob), '');
 
         // O Blob já está seguro. Fecha a câmera imediatamente e persiste o rascunho logo em seguida,
@@ -2030,6 +2560,7 @@ async function processarFicheiroImagem(id, file, origem = 'galeria') {
         const mediaId = await salvarBlobMidia(MEDIA_PHOTO_PREFIX, blobComprimido);
         if (mediaId) {
             renderFotoItem(id, { mediaId }, '');
+            agendarThumbnailFoto(mediaId, blobComprimido);
         } else {
             renderFotoItem(id, await blobParaDataUrl(blobComprimido), '');
         }
@@ -2051,7 +2582,7 @@ async function verificarRetornoCapturaPendente() {
         if (!pending) return false;
         osIdAtualFoto = Number(pending.osId || 1);
         const idade = Date.now() - Number(pending.iniciadoEm || 0);
-        const draft = await localforage.getItem('draft_os');
+        const draft = idLocalSeguro(String(pending.documentoId || '')) ? await obterRascunhoDocumento(String(pending.documentoId)) : await localforage.getItem('draft_os');
         let recuperado = false;
         if (draft?.ordens?.length && idade >= 0 && idade <= CAMERA_RESTORE_MAX_AGE_MS) {
             restaurarDadosParaFormulario(draft);
@@ -2068,12 +2599,15 @@ async function verificarRetornoCapturaPendente() {
 }
 
 async function carregarPreviewFotoBlob(img, mediaId) {
-    const blob = await obterBlobMidia(MEDIA_PHOTO_PREFIX, mediaId);
+    const resultado = await obterBlobPreviewFoto(mediaId);
+    const blob = resultado?.blob;
     if (!blob || !String(blob.type || '').startsWith('image/')) { img.alt = 'Foto indisponível'; return; }
     const url = URL.createObjectURL(blob);
     const anterior = img.dataset.objectUrl;
     if (anterior) URL.revokeObjectURL(anterior);
-    img.dataset.objectUrl = url; img.src = url;
+    img.dataset.objectUrl = url;
+    img.dataset.previewThumbnail = resultado.thumbnail ? '1' : '0';
+    img.src = url;
 }
 
 function renderFotoItem(id, fonte, desc) {
@@ -2259,14 +2793,21 @@ async function switchTab(tabId) {
     window.scrollTo(0, 0);
 }
 
-async function iniciarNovaOS() {
+async function iniciarNovaOS(forcarDescartarRascunho = false) {
+    if (!forcarDescartarRascunho && !await confirmarSaidaComAlteracoes(null)) return false;
+    const idAnterior = documentoAtualId;
     cancelarAutoSavePendente(); salvamentoManualEmAndamento = true; restaurandoDocumento = true;
     try {
         documentoAtualId = novoIdLocal(); document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
         if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
-        desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco(); if (typeof localforage !== 'undefined') await localforage.removeItem('draft_os'); if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
+        desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco();
+        // Em exclusões internas o rascunho antigo também deve sair. Ao iniciar manualmente uma nova O.S.,
+        // um rascunho salvo da anterior continua disponível pela sua chave própria.
+        if (forcarDescartarRascunho && typeof localforage !== 'undefined') await removerRascunhoPersistente(idAnterior);
+        if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
         formularioSujo = false; if(document.getElementById('autoSaveIndicator')) document.getElementById('autoSaveIndicator').textContent = '';
-    } catch(e) { console.error(e); mostrarToast('Não foi possível iniciar uma nova O.S. com segurança.', true); }
+        return true;
+    } catch(e) { console.error(e); mostrarToast('Não foi possível iniciar uma nova O.S. com segurança.', true); return false; }
     finally { restaurandoDocumento = false; salvamentoManualEmAndamento = false; }
 }
 
@@ -2506,9 +3047,10 @@ async function salvarDocumento(silencioso = false) {
         const historicoMeta = [...historicoAnterior]; const meta = gerarMetadadosResumo(dados);
         const index = historicoMeta.findIndex(d => d.id === dados.id); if(index >= 0) historicoMeta[index] = meta; else historicoMeta.unshift(meta);
         if(!await gravarHistoricoSalvo(historicoMeta)) throw new Error('Falha ao atualizar índice do histórico.');
-        await localforage.removeItem('draft_os'); await limparMidiasRemovidasDoDocumento(documentoAnterior, dados); formularioSujo = false;
+        await removerRascunhoPersistente(dados.id); await limparMidiasRemovidasDoDocumento(documentoAnterior, dados); formularioSujo = false;
         if(document.getElementById('autoSaveIndicator')) document.getElementById('autoSaveIndicator').textContent = 'Salvo';
         if(!silencioso) { mostrarToast('Salvo com sucesso!'); await carregarHistorico(); }
+        agendarLimpezaMidiasOrfas(1200);
         return true;
     } catch(e) {
         console.error('Erro ao salvar documento:', e); registrarErroApp('salvarDocumento', e);
@@ -2556,16 +3098,37 @@ async function carregarHistorico() {
 
 async function carregarDocumentoParaEdicao(id) {
     try {
-        let doc = await localforage.getItem(`os_doc_${id}`); if(!doc) { const histAntigo = await localforage.getItem('historico_os') || []; doc = Array.isArray(histAntigo) ? histAntigo.find(d => d.id === id && d.ordens) : null; }
-        if(!doc) { mostrarToast('Erro: Não encontrado.', true); return; }
-        const integridadeOk = await verificarIntegridadeDocumento(doc);
+        const alvoId = String(id || '');
+        if (!idLocalSeguro(alvoId)) { mostrarToast('ID da O.S. inválido.', true); return; }
+        if (alvoId === String(documentoAtualId) && formularioSujo) {
+            switchTab('novaOs');
+            mostrarToast('Esta O.S. já está aberta com alterações não salvas.');
+            return;
+        }
+        if (!await confirmarSaidaComAlteracoes(alvoId)) return;
+
+        let docSalvo = await localforage.getItem(`os_doc_${alvoId}`);
+        if(!docSalvo) { const histAntigo = await localforage.getItem('historico_os') || []; docSalvo = Array.isArray(histAntigo) ? histAntigo.find(d => d.id === alvoId && d.ordens) : null; }
+        if(!docSalvo) { mostrarToast('Erro: Não encontrado.', true); return; }
+
+        const integridadeOk = await verificarIntegridadeDocumento(docSalvo);
         if (integridadeOk === false) alert('⚠️ ATENÇÃO: esta O.S. foi alterada depois de ser selada/assinada. Confira os dados antes de utilizar o documento.');
-        restaurarDadosParaFormulario(doc); mostrarToast(integridadeOk === false ? 'Carregado com alerta de integridade.' : 'Carregado.');
+
+        let docAbrir = docSalvo;
+        const draft = await obterRascunhoDocumento(alvoId);
+        if (draft?.ordens?.length) {
+            const tDraft = Date.parse(draft.dataAtualizacao || '') || 0;
+            const tSalvo = Date.parse(docSalvo.dataAtualizacao || '') || 0;
+            if (tDraft > tSalvo && confirm('Existe um rascunho mais recente desta O.S.\n\nDeseja recuperar as alterações não salvas?')) docAbrir = draft;
+        }
+
+        restaurarDadosParaFormulario(docAbrir);
+        mostrarToast(docAbrir === draft ? 'Rascunho mais recente recuperado.' : (integridadeOk === false ? 'Carregado com alerta de integridade.' : 'Carregado.'));
     } catch(e) { console.error(e); registrarErroApp('carregarDocumentoParaEdicao', e); mostrarToast('Não foi possível abrir esta O.S.', true); }
 }
 async function apagarDocumento(id) {
     if(!confirm('Mover esta O.S. para a Lixeira?')) return;
-    try { await moverDocumentoParaLixeira(id); if(id === documentoAtualId) await iniciarNovaOS(); await carregarHistorico(); mostrarToast('O.S. movida para a Lixeira.'); }
+    try { await moverDocumentoParaLixeira(id); if(id === documentoAtualId) await iniciarNovaOS(true); await carregarHistorico(); mostrarToast('O.S. movida para a Lixeira.'); }
     catch(e) { console.error(e); registrarErroApp('apagarDocumento', e); mostrarToast('Não foi possível mover a O.S. para a Lixeira.', true); }
 }
 
@@ -2855,6 +3418,7 @@ async function renderizarPaginaPreview(numero) {
     pdfPreviewRenderTask = page.render({canvasContext:ctx, viewport});
     try { await pdfPreviewRenderTask.promise; } catch(e) { if(e?.name !== 'RenderingCancelledException') throw e; } finally { pdfPreviewRenderTask = null; }
     adicionarHotspotsAssinaturaPreview(paginaEl, alvo);
+    if (previewPdfSujoPorAssinatura) { aplicarAssinaturaVisualImediataPreview('tecnico'); aplicarAssinaturaVisualImediataPreview('cliente'); }
     atualizarZoomPdf(); atualizarControlesPreview();
     const container = document.getElementById('pdfRenderContainer'); if(container){container.scrollLeft=0;container.scrollTop=0;}
 }
@@ -2902,44 +3466,48 @@ async function carregarBytesNoPreview(bytesPdf, focarAssinatura = false) {
 async function atualizarPreviewAposAssinatura(alvo) {
     const modal = document.getElementById('modalPreviewPDF');
     if (!modal || modal.classList.contains('hidden')) return;
-
-    // Feedback instantâneo: a folha não recarrega, não muda de página e não perde a posição de leitura.
+    // v73: não recompila mais o relatório inteiro logo após a assinatura.
+    // A camada visual já mostra a assinatura instantaneamente e o PDF definitivo
+    // é reconstruído apenas quando o usuário solicitar Download/Compartilhar.
+    previewPdfSujoPorAssinatura = true;
     aplicarAssinaturaVisualImediataPreview(alvo);
+}
 
-    // Se uma atualização já estiver em curso, memoriza que precisamos gerar mais uma vez com o estado mais recente.
-    if (atualizandoPreviewAssinatura) {
-        previewAssinaturaAtualizacaoPendente = true;
-        return;
-    }
-
-    atualizandoPreviewAssinatura = true;
+async function baixarPreviewPDF(event) {
+    if (event?.preventDefault) event.preventDefault();
+    const link = document.getElementById('linkPreviewExt');
+    if (!link) return false;
+    const textoOriginal = link.textContent;
     try {
-        do {
-            previewAssinaturaAtualizacaoPendente = false;
+        link.classList.add('opacity-60', 'pointer-events-none');
+        link.textContent = previewPdfSujoPorAssinatura ? 'Preparando…' : 'Download';
+        if (previewPdfSujoPorAssinatura || !objUrlPreview) {
             const bytesPdf = await construirPDFBytes(null);
             atualizarLinkPreviewSemRecarregar(bytesPdf);
-
-            if (modal.classList.contains('hidden')) break;
-            const dadosPdf = bytesPdf instanceof Uint8Array ? bytesPdf.slice() : new Uint8Array(bytesPdf);
-            const novoPdfDoc = await pdfjsLib.getDocument({ data: dadosPdf }).promise;
-            const paginaAssinatura = pdfPreviewHotspotsAssinatura[0]?.pagina || novoPdfDoc.numPages;
-
-            // Renderiza somente a folha de assinatura fora da tela e substitui seus pixels de uma vez.
-            await substituirPaginaAssinaturaSemPiscar(novoPdfDoc, paginaAssinatura);
-
-            const docAnterior = pdfPreviewDoc;
-            pdfPreviewDoc = novoPdfDoc;
-            if (docAnterior && docAnterior !== novoPdfDoc) {
-                try { await docAnterior.destroy(); } catch (_) {}
+            // Só no momento do download atualiza também o documento interno do PDF.js.
+            // Assim, se o usuário continuar navegando depois de baixar, a assinatura permanece nas páginas renderizadas futuramente.
+            if (typeof pdfjsLib !== 'undefined') {
+                const dadosPdf = bytesPdf instanceof Uint8Array ? bytesPdf.slice() : new Uint8Array(bytesPdf);
+                const novoDoc = await pdfjsLib.getDocument({ data: dadosPdf }).promise;
+                const anterior = pdfPreviewDoc; pdfPreviewDoc = novoDoc;
+                if (anterior && anterior !== novoDoc) { try { await anterior.destroy(); } catch (_) {} }
             }
-            atualizarControlesPreview();
-        } while (previewAssinaturaAtualizacaoPendente && !modal.classList.contains('hidden'));
-    } catch (err) {
-        console.error('Falha ao sincronizar PDF após assinatura:', err);
-        registrarErroApp('atualizarPreviewAposAssinatura', err);
-        // A assinatura permanece salva no formulário. Ao reabrir/gerar o PDF, ela será aplicada normalmente.
+            previewPdfSujoPorAssinatura = false;
+        }
+        if (!objUrlPreview) throw new Error('PDF de pré-visualização indisponível.');
+        const a = document.createElement('a');
+        a.href = objUrlPreview;
+        a.download = link.download || `Relatorio_MultiOS_${Date.now()}.pdf`;
+        document.body.appendChild(a); a.click(); a.remove();
+        return false;
+    } catch (e) {
+        console.error('Falha ao preparar download da pré-visualização:', e);
+        registrarErroApp('baixarPreviewPDF', e);
+        mostrarToast('Não foi possível preparar o PDF para download.', true);
+        return false;
     } finally {
-        atualizandoPreviewAssinatura = false;
+        link.classList.remove('opacity-60', 'pointer-events-none');
+        link.textContent = textoOriginal || 'Download';
     }
 }
 
@@ -2954,6 +3522,7 @@ async function preVisualizarPDF() {
         document.getElementById('linkPreviewExt').download = `Pre_Visualizacao_${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`;
         currentZoom = 1; pdfPreviewPaginaAtual = 1;
         await carregarBytesNoPreview(bytesPdf, false);
+        previewPdfSujoPorAssinatura = false;
         const container = document.getElementById('pdfRenderContainer'); if (container) { container.scrollLeft = 0; container.scrollTop = 0; }
         document.getElementById('modalPreviewPDF').classList.remove('hidden');
         document.body.style.overflow = 'hidden';
@@ -2968,7 +3537,7 @@ function fecharPreviewPDF() {
     if (pdfPreviewDoc) { try { pdfPreviewDoc.destroy(); } catch(_) {} pdfPreviewDoc = null; }
     if (objUrlPreview) { URL.revokeObjectURL(objUrlPreview); objUrlPreview = null; }
     const link = document.getElementById('linkPreviewExt'); if (link) link.removeAttribute('href');
-    pdfPreviewModoEconomico = false; pdfPreviewPaginaAtual = 1; currentZoom = 1; startDist = 0; atualizarControlesPreview();
+    pdfPreviewModoEconomico = false; pdfPreviewPaginaAtual = 1; currentZoom = 1; startDist = 0; previewPdfSujoPorAssinatura = false; atualizarControlesPreview();
 }
 
 async function gerarPDFConsolidado() {
