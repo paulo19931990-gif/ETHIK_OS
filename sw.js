@@ -1,28 +1,15 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v73';
+const CACHE_NAME = 'multios-pro-v74';
 
-// Arquivos indispensáveis para abrir e usar o núcleo do app offline.
-// v73: as bibliotecas de armazenamento/PDF/assinatura deixam de ser opcionais.
-// Se uma delas não puder ser obtida durante a atualização, o SW antigo continua ativo.
+// v74: todos os recursos necessários ao funcionamento do Multi-OS ficam no próprio projeto.
+// A nova versão só instala se TODOS estes arquivos existirem. Isso evita instalar uma versão
+// "meio offline" ou misturar bibliotecas antigas/externas com o código atual.
 const ASSETS_CRITICOS = [
   './index.html',
   './app.js',
   './style.css',
   './bancoPecas.js',
   './checklists/checklists.js',
-  'https://cdn.tailwindcss.com',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
-  'https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js',
-  'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js',
-  'https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-];
-
-// Recursos úteis, mas cuja falha isolada não deve impedir o app principal de atualizar.
-const ASSETS_OPCIONAIS = [
   './checklists/FM-408-climatica.pdf',
   './checklists/FM-409-durometros.pdf',
   './checklists/FM-410-incubadora-estufa.pdf',
@@ -32,31 +19,24 @@ const ASSETS_OPCIONAIS = [
   './fonts/Carlito-Bold.ttf',
   './manifest.json',
   './icon-192.png',
-  './icon-512_3.png'
+  './icon-512_3.png',
+  './vendor/tailwindcss.js',
+  './vendor/jspdf.umd.min.js',
+  './vendor/jspdf.plugin.autotable.min.js',
+  './vendor/signature_pad.umd.min.js',
+  './vendor/pdf-lib.min.js',
+  './vendor/fontkit.umd.min.js',
+  './vendor/localforage.min.js',
+  './vendor/pdf.min.js',
+  './vendor/pdf.worker.min.js'
 ];
 
-const HOSTS_RUNTIME_PERMITIDOS = new Set([
-  'cdn.tailwindcss.com',
-  'cdnjs.cloudflare.com',
-  'cdn.jsdelivr.net',
-  'unpkg.com'
-]);
-
 function respostaCacheavel(response) {
-  return Boolean(response) && (response.ok || response.type === 'opaque');
+  return Boolean(response) && response.ok;
 }
 
 async function cachearAssetObrigatorio(cache, asset) {
-  let resposta = null;
-  try { resposta = await fetch(asset, { cache: 'no-cache' }); } catch (_) {}
-
-  // Para bibliotecas externas com URL/versionamento fixos, uma cópia já validada no cache
-  // da versão anterior é um fallback seguro quando a rede oscila durante a atualização.
-  // Arquivos locais da aplicação NÃO usam esse fallback para nunca misturar app v72 com v73.
-  if (!respostaCacheavel(resposta) && /^https:\/\//i.test(asset)) {
-    try { resposta = await caches.match(asset); } catch (_) {}
-  }
-
+  const resposta = await fetch(asset, { cache: 'no-store' });
   if (!respostaCacheavel(resposta)) throw new Error(`Asset crítico indisponível: ${asset}`);
   await cache.put(asset, resposta.clone());
 }
@@ -64,22 +44,7 @@ async function cachearAssetObrigatorio(cache, asset) {
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-
-    // Todos os recursos que sustentam armazenamento, assinatura e PDF precisam estar disponíveis
-    // antes de esta versão poder substituir a anterior.
     await Promise.all(ASSETS_CRITICOS.map(asset => cachearAssetObrigatorio(cache, asset)));
-
-    const resultados = await Promise.allSettled(
-      ASSETS_OPCIONAIS.map(async asset => {
-        const resposta = await fetch(asset, { cache: 'no-cache' });
-        if (respostaCacheavel(resposta)) await cache.put(asset, resposta.clone());
-        else throw new Error(`Resposta não cacheável: ${asset}`);
-      })
-    );
-
-    resultados.forEach((resultado, indice) => {
-      if (resultado.status === 'rejected') console.warn(`Falha ao cachear asset opcional ${ASSETS_OPCIONAIS[indice]}:`, resultado.reason);
-    });
   })());
 });
 
@@ -90,15 +55,11 @@ self.addEventListener('message', event => {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-
-    // Apaga somente caches antigos deste app, sem afetar outros projetos
-    // que eventualmente estejam publicados no mesmo domínio.
     await Promise.all(
       keys
         .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
         .map(key => caches.delete(key))
     );
-
     await self.clients.claim();
   })());
 });
@@ -111,28 +72,21 @@ self.addEventListener('fetch', event => {
   const mesmaOrigem = url.origin === self.location.origin;
   const navegacao = request.mode === 'navigate';
 
-  // HTML: rede primeiro para receber atualizações; cache como fallback offline.
+  // Navegação: tenta a rede para descobrir atualizações; se estiver offline, abre o index cacheado.
   if (navegacao) {
     event.respondWith((async () => {
       try {
-        const networkResponse = await fetch(request);
-
-        if (networkResponse && networkResponse.ok) {
+        const resposta = await fetch(request);
+        if (respostaCacheavel(resposta)) {
           const cache = await caches.open(CACHE_NAME);
-          await cache.put(request, networkResponse.clone());
+          await cache.put('./index.html', resposta.clone());
         }
-
-        return networkResponse;
-      } catch (error) {
-        // ignoreSearch permite que /index.html?v=73 use /index.html do pré-cache.
-        const cachedRequest = await caches.match(request, { ignoreSearch: true });
-        if (cachedRequest) return cachedRequest;
-
-        const cachedIndex = await caches.match('./index.html', { ignoreSearch: true });
-        if (cachedIndex) return cachedIndex;
-
+        return resposta;
+      } catch (_) {
+        const cacheado = await caches.match('./index.html', { ignoreSearch: true });
+        if (cacheado) return cacheado;
         return new Response(
-          '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multi-OS Pro</title><body><h1>Multi-OS Pro</h1><p>Sem conexão e o aplicativo ainda não está disponível no cache.</p></body></html>',
+          '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multi-OS Pro</title><body><h1>Multi-OS Pro</h1><p>Sem conexão e o aplicativo ainda não concluiu a instalação offline.</p></body></html>',
           { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         );
       }
@@ -140,15 +94,20 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Arquivos locais com ?v= usam rede primeiro. Isso mantém index/app/css da mesma versão
-  // e evita misturar código antigo com uma interface nova durante futuras atualizações.
-  if (mesmaOrigem && url.searchParams.has('v')) {
+  // v74 não usa bibliotecas de terceiros em tempo de execução. Só intercepta recursos do próprio app.
+  if (!mesmaOrigem) return;
+
+  // Arquivos com ?v=74: rede primeiro para não misturar versões; cache local como fallback offline.
+  if (url.searchParams.has('v')) {
     event.respondWith((async () => {
       try {
         const resposta = await fetch(request);
-        if (respostaCacheavel(resposta)) { const cache = await caches.open(CACHE_NAME); await cache.put(request, resposta.clone()); }
+        if (respostaCacheavel(resposta)) {
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put(request, resposta.clone());
+        }
         return resposta;
-      } catch (error) {
+      } catch (_) {
         const cacheado = await caches.match(request, { ignoreSearch: true });
         return cacheado || new Response('', { status: 504, statusText: 'Gateway Timeout' });
       }
@@ -156,38 +115,28 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Só fazemos cache de arquivos do próprio app e dos CDNs conhecidos.
-  const podeUsarRuntimeCache = mesmaOrigem || HOSTS_RUNTIME_PERMITIDOS.has(url.hostname);
-  if (!podeUsarRuntimeCache) return;
-
+  // Demais arquivos locais: cache-first + atualização silenciosa em segundo plano.
   event.respondWith((async () => {
-    // Nos arquivos locais, ignora apenas a query de versão (?v=73).
-    const cachedResponse = await caches.match(request, {
-      ignoreSearch: mesmaOrigem
-    });
+    const cacheado = await caches.match(request, { ignoreSearch: true });
 
-    const atualizarEmSegundoPlano = async () => {
+    const atualizar = async () => {
       try {
-        const networkResponse = await fetch(request);
-        if (!respostaCacheavel(networkResponse)) return null;
-
+        const resposta = await fetch(request);
+        if (!respostaCacheavel(resposta)) return null;
         const cache = await caches.open(CACHE_NAME);
-        await cache.put(request, networkResponse.clone());
-        return networkResponse;
-      } catch (error) {
+        await cache.put(request, resposta.clone());
+        return resposta;
+      } catch (_) {
         return null;
       }
     };
 
-    if (cachedResponse) {
-      // Atualiza sem bloquear a abertura do app e sem gerar rejeição não tratada.
-      event.waitUntil(atualizarEmSegundoPlano());
-      return cachedResponse;
+    if (cacheado) {
+      event.waitUntil(atualizar());
+      return cacheado;
     }
 
-    const networkResponse = await atualizarEmSegundoPlano();
-    if (networkResponse) return networkResponse;
-
-    return new Response('', { status: 504, statusText: 'Gateway Timeout' });
+    const rede = await atualizar();
+    return rede || new Response('', { status: 504, statusText: 'Gateway Timeout' });
   })());
 });
