@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=71">
+    <link rel="manifest" href="./manifest.json?v=72">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -35,7 +35,7 @@
             navigator.serviceWorker.addEventListener('controllerchange', () => {
                 if (recarregandoPorSW) return; recarregandoPorSW = true; location.reload();
             });
-            navigator.serviceWorker.register('./sw.js?v=71').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=72').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller) return;
                     const controladorAtual = navigator.serviceWorker.controller.scriptURL || '';
@@ -58,7 +58,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=71">
+    <link rel="stylesheet" href="style.css?v=72">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -515,8 +515,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=71"></script>
-    <script src="bancoPecas.js?v=71"></script>
-    <script src="app.js?v=71"></script>
+    <script src="checklists/checklists.js?v=72"></script>
+    <script src="bancoPecas.js?v=72"></script>
+    <script src="app.js?v=72"></script>
 </body>
 </html>
