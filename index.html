@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=72">
+    <link rel="manifest" href="./manifest.json?v=73">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,17 +32,40 @@
     <script>
         if ('serviceWorker' in navigator) {
             let recarregandoPorSW = false;
+            let ativacaoSWAutorizada = false;
+            let workerJaOferecido = null;
+
             navigator.serviceWorker.addEventListener('controllerchange', () => {
-                if (recarregandoPorSW) return; recarregandoPorSW = true; location.reload();
+                // Só recarrega quando esta própria página autorizou a atualização após salvar o rascunho.
+                if (!ativacaoSWAutorizada || recarregandoPorSW) return;
+                recarregandoPorSW = true;
+                location.reload();
             });
-            navigator.serviceWorker.register('./sw.js?v=72').then(reg => {
+
+            navigator.serviceWorker.register('./sw.js?v=73').then(reg => {
                 const oferecerAtualizacao = worker => {
-                    if (!worker || !navigator.serviceWorker.controller) return;
-                    const controladorAtual = navigator.serviceWorker.controller.scriptURL || '';
-                    // Na passagem v65 -> v66 ativamos logo para não misturar index v66 com app.js v65.
-                    if (!controladorAtual.includes('v=66')) { worker.postMessage({ type: 'SKIP_WAITING' }); return; }
-                    if (confirm('Nova versão do Multi-OS Pro disponível. Atualizar agora? Os dados salvos não serão apagados.')) worker.postMessage({ type: 'SKIP_WAITING' });
+                    if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
+                    workerJaOferecido = worker;
+
+                    const executarOferta = async () => {
+                        if (!confirm('Nova versão do Multi-OS Pro disponível. Atualizar agora? O trabalho atual será guardado antes da atualização.')) return;
+                        try {
+                            const seguro = typeof window.prepararAtualizacaoSegura === 'function' ? await window.prepararAtualizacaoSegura() : false;
+                            if (!seguro) return;
+                            ativacaoSWAutorizada = true;
+                            worker.postMessage({ type: 'SKIP_WAITING' });
+                        } catch (err) {
+                            console.error('Não foi possível preparar a atualização com segurança:', err);
+                            ativacaoSWAutorizada = false;
+                        }
+                    };
+
+                    // app.js fica no fim do HTML; espera o DOMContentLoaded para garantir que a rotina de
+                    // salvamento seguro já esteja disponível antes de oferecer a atualização.
+                    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', executarOferta, { once: true });
+                    else void executarOferta();
                 };
+
                 if (reg.waiting) oferecerAtualizacao(reg.waiting);
                 reg.addEventListener('updatefound', () => {
                     const worker = reg.installing; if (!worker) return;
@@ -58,7 +81,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=72">
+    <link rel="stylesheet" href="style.css?v=73">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -66,7 +89,7 @@
     <datalist id="dbCodigosPecas"></datalist>
     <datalist id="dbNomesPecas"></datalist>
 
-    <!-- Galeria persistente; a câmera principal da v71 funciona dentro do Multi-OS -->
+    <!-- Galeria persistente; a câmera principal da v73 funciona dentro do Multi-OS -->
     <input id="inputGaleriaFotos" type="file" accept="image/*" class="hidden" onchange="tratarRetornoFotoNativa(event, 'galeria')" oncancel="tratarCancelamentoFotoNativa(event, 'galeria')">
 
     <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 sm:translate-x-0 sm:left-auto sm:right-6 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-[200] flex items-center gap-3 font-semibold bg-gray-900">
@@ -143,7 +166,7 @@
             <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-white shrink-0 z-10 shadow-sm">
                 <h3 class="text-base font-bold text-gray-800">Visualização</h3>
                 <div class="flex gap-2">
-                    <a id="linkPreviewExt" target="_blank" class="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-blue-100 flex items-center gap-1 border border-blue-200">Download</a>
+                    <a id="linkPreviewExt" href="#" onclick="return baixarPreviewPDF(event)" class="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-blue-100 flex items-center gap-1 border border-blue-200">Download</a>
                     <button onclick="fecharPreviewPDF()" class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-gray-900">Fechar</button>
                 </div>
             </div>
@@ -515,8 +538,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=72"></script>
-    <script src="bancoPecas.js?v=72"></script>
-    <script src="app.js?v=72"></script>
+    <script src="checklists/checklists.js?v=73"></script>
+    <script src="bancoPecas.js?v=73"></script>
+    <script src="app.js?v=73"></script>
 </body>
 </html>
