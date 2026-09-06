@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=73">
+    <link rel="manifest" href="./manifest.json?v=74">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -20,14 +20,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="./vendor/tailwindcss.js?v=74"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=74"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=74"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=74"></script>
+    <script src="./vendor/pdf-lib.min.js?v=74"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=74"></script>
+    <script src="./vendor/localforage.min.js?v=74"></script>
+    <script src="./vendor/pdf.min.js?v=74"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -42,7 +42,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=73').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=74').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -76,12 +76,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=74';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=73">
+    <link rel="stylesheet" href="style.css?v=74">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -538,8 +538,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=73"></script>
-    <script src="bancoPecas.js?v=73"></script>
-    <script src="app.js?v=73"></script>
+    <script src="checklists/checklists.js?v=74"></script>
+    <script src="bancoPecas.js?v=74"></script>
+    <script src="app.js?v=74"></script>
 </body>
 </html>
