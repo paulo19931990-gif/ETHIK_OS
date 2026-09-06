@@ -722,8 +722,9 @@ let pdfPreviewRenderTask = null;
 let pdfPreviewHotspotsAssinatura = [];
 let assinaturaAbertaPeloPreview = false;
 let atualizandoPreviewAssinatura = false;
+let previewAssinaturaAtualizacaoPendente = false;
 
-const APP_VERSION = 71;
+const APP_VERSION = 72;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -2228,9 +2229,12 @@ async function confirmarAssinaturaExpandida() {
         }
     }
     fecharModalAssinatura(true);
-    try { await autoSalvarRascunho(true); } catch (_) {}
     assinaturaAbertaPeloPreview = false;
-    if (veioDoPreview) await atualizarPreviewAposAssinatura(alvoConfirmado);
+    // Na pré-visualização a assinatura aparece no mesmo instante em que o modal fecha.
+    // O salvamento e a sincronização do PDF continuam sem bloquear a leitura do cliente.
+    if (veioDoPreview) aplicarAssinaturaVisualImediataPreview(alvoConfirmado);
+    try { await autoSalvarRascunho(true); } catch (_) {}
+    if (veioDoPreview) void atualizarPreviewAposAssinatura(alvoConfirmado);
 }
 
 function toggleLock(locked) {
@@ -2693,11 +2697,13 @@ async function construirPDFBytes(onProgressCallback) {
     }
     const sigBuffer = docSig.output('arraybuffer'); const sigPdfLib = await PDFDocument.load(sigBuffer); const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices()); sigPages.forEach((p) => masterPdf.addPage(p));
     const paginaAssinatura = masterPdf.getPageCount();
+    // Áreas clicáveis invisíveis na pré-visualização. As coordenadas sig* correspondem
+    // exatamente à imagem da assinatura no PDF e permitem atualização visual sem recarregar a folha.
     pdfPreviewHotspotsAssinatura = isServicoInterno
-        ? [{ pagina: paginaAssinatura, alvo: 'tecnico', x: 55, y: assinaturaBaseY - 12, w: 100, h: 34 }]
+        ? [{ pagina: paginaAssinatura, alvo: 'tecnico', x: 55, y: assinaturaBaseY - 12, w: 100, h: 34, sigX: 75, sigY: assinaturaBaseY - 8, sigW: 60, sigH: 20 }]
         : [
-            { pagina: paginaAssinatura, alvo: 'tecnico', x: 12, y: assinaturaBaseY - 12, w: 88, h: 34 },
-            { pagina: paginaAssinatura, alvo: 'cliente', x: 107, y: assinaturaBaseY - 12, w: 90, h: 34 }
+            { pagina: paginaAssinatura, alvo: 'tecnico', x: 12, y: assinaturaBaseY - 12, w: 88, h: 34, sigX: 25, sigY: assinaturaBaseY - 8, sigW: 50, sigH: 20 },
+            { pagina: paginaAssinatura, alvo: 'cliente', x: 107, y: assinaturaBaseY - 12, w: 90, h: 34, sigX: 120, sigY: assinaturaBaseY - 8, sigW: 50, sigH: 20 }
           ];
     await reportProgress(95, "A finalizar compressão e empacotamento...");
     const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica); const todasAsPaginas = masterPdf.getPages();
@@ -2742,23 +2748,100 @@ function adicionarHotspotsAssinaturaPreview(paginaEl, numeroPagina) {
     pdfPreviewHotspotsAssinatura.filter(h => h.pagina === numeroPagina).forEach(h => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        const pad = h.alvo === 'cliente' ? padCliente : padTecnico;
-        const assinado = Boolean(pad && !pad.isEmpty());
-        btn.className = 'absolute z-10 rounded-lg border-2 border-dashed transition-all flex items-start justify-center cursor-pointer focus:outline-none focus:ring-4 ' +
-            (assinado ? 'border-emerald-500/55 bg-emerald-50/10 focus:ring-emerald-200/60' : 'border-blue-500/55 bg-blue-50/10 focus:ring-blue-200/60');
+        // v72: a folha deve parecer um PDF normal. A área é clicável, porém totalmente invisível.
+        btn.className = 'pdf-signature-hotspot absolute z-10 border-0 bg-transparent p-0 m-0 cursor-pointer outline-none';
         btn.style.left = `${(h.x / A4_W) * 100}%`;
         btn.style.top = `${(h.y / A4_H) * 100}%`;
         btn.style.width = `${(h.w / A4_W) * 100}%`;
         btn.style.height = `${(h.h / A4_H) * 100}%`;
+        btn.style.webkitTapHighlightColor = 'transparent';
+        btn.style.touchAction = 'manipulation';
+        btn.dataset.signatureTarget = h.alvo;
+        btn.dataset.signaturePage = String(numeroPagina);
+        btn.dataset.sigX = String(h.sigX ?? h.x);
+        btn.dataset.sigY = String(h.sigY ?? h.y);
+        btn.dataset.sigW = String(h.sigW ?? h.w);
+        btn.dataset.sigH = String(h.sigH ?? h.h);
+        const pad = h.alvo === 'cliente' ? padCliente : padTecnico;
+        const assinado = Boolean(pad && !pad.isEmpty());
         btn.setAttribute('aria-label', `${assinado ? 'Alterar' : 'Adicionar'} assinatura ${h.alvo === 'cliente' ? 'do cliente' : 'do técnico'}`);
-        const etiqueta = document.createElement('span');
-        etiqueta.className = 'mt-1 px-2 py-1 rounded-full text-[10px] sm:text-xs font-black shadow-sm pointer-events-none ' +
-            (assinado ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white');
-        etiqueta.textContent = assinado ? 'Assinado • toque para alterar' : `Toque para assinar (${h.alvo === 'cliente' ? 'cliente' : 'técnico'})`;
-        btn.appendChild(etiqueta);
         btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); abrirAssinaturaPeloPreview(h.alvo); });
         paginaEl.appendChild(btn);
     });
+}
+
+function aplicarAssinaturaVisualImediataPreview(alvo) {
+    const A4_W = 210, A4_H = 297;
+    const pad = alvo === 'cliente' ? padCliente : padTecnico;
+    const dataUrl = pad && !pad.isEmpty() ? pad.toDataURL() : '';
+    document.querySelectorAll(`.pdf-signature-hotspot[data-signature-target="${alvo}"]`).forEach(btn => {
+        const paginaEl = btn.closest('.pdf-preview-page');
+        if (!paginaEl) return;
+        paginaEl.querySelectorAll(`.pdf-signature-live-patch[data-signature-target="${alvo}"]`).forEach(el => el.remove());
+
+        const sigX = Number(btn.dataset.sigX || 0), sigY = Number(btn.dataset.sigY || 0);
+        const sigW = Number(btn.dataset.sigW || 0), sigH = Number(btn.dataset.sigH || 0);
+        if (!(sigW > 0 && sigH > 0)) return;
+
+        // A pequena placa branca cobre somente o desenho anterior da assinatura, sem tocar na linha do relatório.
+        // Assim alterar/remover também parece instantâneo enquanto o novo PDF é preparado fora da tela.
+        const patch = document.createElement('div');
+        patch.className = 'pdf-signature-live-patch absolute pointer-events-none bg-white overflow-hidden';
+        patch.dataset.signatureTarget = alvo;
+        patch.style.zIndex = '9';
+        patch.style.left = `${(sigX / A4_W) * 100}%`;
+        patch.style.top = `${(sigY / A4_H) * 100}%`;
+        patch.style.width = `${(sigW / A4_W) * 100}%`;
+        patch.style.height = `${(sigH / A4_H) * 100}%`;
+        if (dataUrl) {
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.alt = '';
+            img.className = 'w-full h-full object-contain block';
+            img.draggable = false;
+            patch.appendChild(img);
+        }
+        paginaEl.appendChild(patch);
+        btn.setAttribute('aria-label', `${dataUrl ? 'Alterar' : 'Adicionar'} assinatura ${alvo === 'cliente' ? 'do cliente' : 'do técnico'}`);
+    });
+}
+
+function atualizarLinkPreviewSemRecarregar(bytesPdf) {
+    const blob = new Blob([bytesPdf], { type: 'application/pdf' });
+    const novaUrl = URL.createObjectURL(blob);
+    const urlAnterior = objUrlPreview;
+    objUrlPreview = novaUrl;
+    const link = document.getElementById('linkPreviewExt');
+    if (link) link.href = novaUrl;
+    if (urlAnterior) setTimeout(() => { try { URL.revokeObjectURL(urlAnterior); } catch (_) {} }, 0);
+}
+
+async function substituirPaginaAssinaturaSemPiscar(novoPdfDoc, paginaNumero) {
+    const paginaEl = document.querySelector(`.pdf-preview-page[data-preview-page="${paginaNumero}"]`);
+    const canvasAtual = paginaEl?.querySelector('canvas');
+    if (!paginaEl || !canvasAtual || !novoPdfDoc) return;
+
+    const novaPagina = await novoPdfDoc.getPage(paginaNumero);
+    const baseViewport = novaPagina.getViewport({ scale: 1 });
+    const escala = canvasAtual.width > 0 && baseViewport.width > 0 ? canvasAtual.width / baseViewport.width : (window.innerWidth > 600 ? 2.0 : 1.8);
+    const viewport = novaPagina.getViewport({ scale: escala });
+    const temporario = document.createElement('canvas');
+    temporario.width = Math.max(1, Math.round(viewport.width));
+    temporario.height = Math.max(1, Math.round(viewport.height));
+    const ctxTmp = temporario.getContext('2d', { alpha: false });
+    if (!ctxTmp) return;
+    await novaPagina.render({ canvasContext: ctxTmp, viewport }).promise;
+
+    // Só troca os pixels quando a nova página inteira está pronta; não há tela branca, salto ou mudança de scroll.
+    const ctxAtual = canvasAtual.getContext('2d', { alpha: false });
+    if (!ctxAtual) return;
+    if (canvasAtual.width !== temporario.width || canvasAtual.height !== temporario.height) {
+        canvasAtual.width = temporario.width;
+        canvasAtual.height = temporario.height;
+    }
+    ctxAtual.drawImage(temporario, 0, 0, canvasAtual.width, canvasAtual.height);
+    temporario.width = 1; temporario.height = 1;
+    paginaEl.querySelectorAll('.pdf-signature-live-patch').forEach(el => el.remove());
 }
 
 async function renderizarPaginaPreview(numero) {
@@ -2816,24 +2899,47 @@ async function carregarBytesNoPreview(bytesPdf, focarAssinatura = false) {
     }
 }
 
-async function atualizarPreviewAposAssinatura() {
-    if (atualizandoPreviewAssinatura) return;
+async function atualizarPreviewAposAssinatura(alvo) {
     const modal = document.getElementById('modalPreviewPDF');
     if (!modal || modal.classList.contains('hidden')) return;
+
+    // Feedback instantâneo: a folha não recarrega, não muda de página e não perde a posição de leitura.
+    aplicarAssinaturaVisualImediataPreview(alvo);
+
+    // Se uma atualização já estiver em curso, memoriza que precisamos gerar mais uma vez com o estado mais recente.
+    if (atualizandoPreviewAssinatura) {
+        previewAssinaturaAtualizacaoPendente = true;
+        return;
+    }
+
     atualizandoPreviewAssinatura = true;
-    const info = document.getElementById('previewModoInfo');
-    if (info) info.textContent = 'Atualizando assinatura…';
     try {
-        const bytesPdf = await construirPDFBytes(null);
-        await carregarBytesNoPreview(bytesPdf, true);
-        mostrarToast('Assinatura aplicada à pré-visualização.');
+        do {
+            previewAssinaturaAtualizacaoPendente = false;
+            const bytesPdf = await construirPDFBytes(null);
+            atualizarLinkPreviewSemRecarregar(bytesPdf);
+
+            if (modal.classList.contains('hidden')) break;
+            const dadosPdf = bytesPdf instanceof Uint8Array ? bytesPdf.slice() : new Uint8Array(bytesPdf);
+            const novoPdfDoc = await pdfjsLib.getDocument({ data: dadosPdf }).promise;
+            const paginaAssinatura = pdfPreviewHotspotsAssinatura[0]?.pagina || novoPdfDoc.numPages;
+
+            // Renderiza somente a folha de assinatura fora da tela e substitui seus pixels de uma vez.
+            await substituirPaginaAssinaturaSemPiscar(novoPdfDoc, paginaAssinatura);
+
+            const docAnterior = pdfPreviewDoc;
+            pdfPreviewDoc = novoPdfDoc;
+            if (docAnterior && docAnterior !== novoPdfDoc) {
+                try { await docAnterior.destroy(); } catch (_) {}
+            }
+            atualizarControlesPreview();
+        } while (previewAssinaturaAtualizacaoPendente && !modal.classList.contains('hidden'));
     } catch (err) {
-        console.error('Falha ao atualizar pré-visualização após assinatura:', err);
+        console.error('Falha ao sincronizar PDF após assinatura:', err);
         registrarErroApp('atualizarPreviewAposAssinatura', err);
-        mostrarToast('A assinatura foi salva, mas não foi possível atualizar a pré-visualização agora.', true);
+        // A assinatura permanece salva no formulário. Ao reabrir/gerar o PDF, ela será aplicada normalmente.
     } finally {
         atualizandoPreviewAssinatura = false;
-        atualizarControlesPreview();
     }
 }
 
