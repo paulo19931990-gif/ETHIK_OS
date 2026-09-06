@@ -709,6 +709,7 @@ let contadorOS = 0;
 
 let mediaStreamCamera = null;
 let cameraSessaoId = 0;
+let cameraPreviewsLiberados = false;
 let osIdAtualFoto = null;
 let timeoutRascunho = null;
 let formularioSujo = false;
@@ -718,14 +719,18 @@ let pdfPreviewDoc = null;
 let pdfPreviewPaginaAtual = 1;
 let pdfPreviewModoEconomico = false;
 let pdfPreviewRenderTask = null;
+let pdfPreviewHotspotsAssinatura = [];
+let assinaturaAbertaPeloPreview = false;
+let atualizandoPreviewAssinatura = false;
 
-const APP_VERSION = 70;
+const APP_VERSION = 71;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
 const MAX_LOG_ERROS = 50;
 const FOTO_MAX_DIM = 1600;
 const FOTO_JPEG_QUALIDADE = 0.72;
+const CAMERA_PREVIEW_KEEP_LIMIT = 8; // até 8 fotos: mantém previews na RAM para abrir/fechar a câmera mais rápido
 const CAMERA_PENDING_KEY = 'captura_camera_pendente_v68';
 const CAMERA_RESTORE_MAX_AGE_MS = 10 * 60 * 1000;
 const MEDIA_PHOTO_PREFIX = 'media_photo_';
@@ -1264,6 +1269,7 @@ function atualizarZoomPdf() {
     const baseWidth = isDesktop ? Math.min(768, safeWidth) : safeWidth;
     const largura = Math.max(120, baseWidth * currentZoom);
     wrapper.style.setProperty('--pdf-page-width', `${largura}px`);
+    wrapper.querySelectorAll('.pdf-preview-page').forEach(p => { p.style.width = `${largura}px`; });
     wrapper.querySelectorAll('canvas').forEach(c => { c.style.height = 'auto'; c.style.display = 'block'; c.style.maxWidth = 'none'; c.style.width = `${largura}px`; });
     if(document.getElementById('zoomText')) document.getElementById('zoomText').innerText = Math.round(currentZoom * 100) + '%';
 }
@@ -1560,13 +1566,15 @@ function gerarPdfBancoHoras() {
     }
 }
 
-async function prepararCapturaCamera(id) {
+async function prepararCapturaCamera(id, sessaoEsperada = cameraSessaoId) {
     osIdAtualFoto = id;
     cancelarAutoSavePendente();
     try {
         if (typeof localforage !== 'undefined') {
             // Salva o estado atual mesmo que Cliente/OS ainda estejam incompletos.
             await localforage.setItem('draft_os', recolherDadosDoFormulario());
+            // Se a câmera já foi fechada/trocada enquanto o rascunho era salvo, não deixa marcador antigo.
+            if (sessaoEsperada !== cameraSessaoId) return;
             await localforage.setItem(CAMERA_PENDING_KEY, {
                 osId: String(id),
                 documentoId: String(documentoAtualId || ''),
@@ -1579,10 +1587,15 @@ async function prepararCapturaCamera(id) {
     }
 }
 
+function deveLiberarPreviewsParaCamera() {
+    // No uso normal (poucas fotos), manter os previews evita trabalho extra e deixa a câmera
+    // tão responsiva quanto as versões antigas. Com muitas fotos, prioriza RAM para a câmera.
+    return document.querySelectorAll('.foto-item').length > CAMERA_PREVIEW_KEEP_LIMIT;
+}
+
 function liberarPreviewsBlobTemporarios() {
-    // Libera os bitmaps decodificados para reduzir o uso de RAM enquanto a câmera está ativa.
-    // A v70 faz isso somente com o modal da câmera já cobrindo a interface e restaura
-    // todas as prévias antes de voltar à O.S., evitando o ícone de imagem quebrada.
+    if (cameraPreviewsLiberados) return;
+    let liberouAlgum = false;
     document.querySelectorAll('.foto-item').forEach(item => {
         const img = item.querySelector('img');
         if (!img) return;
@@ -1594,11 +1607,14 @@ function liberarPreviewsBlobTemporarios() {
             img.dataset.previewPausado = '1';
             img.style.visibility = 'hidden';
             img.removeAttribute('src');
+            liberouAlgum = true;
         }
     });
+    cameraPreviewsLiberados = liberouAlgum;
 }
 
 async function recarregarPreviewsBlobVisiveis(aguardarRender = false) {
+    if (!cameraPreviewsLiberados) return;
     const tarefas = [];
     document.querySelectorAll('.foto-item').forEach(item => {
         const mediaId = item.querySelector('.foto-media-id')?.value || '';
@@ -1634,9 +1650,8 @@ async function recarregarPreviewsBlobVisiveis(aguardarRender = false) {
     });
 
     if (tarefas.length) await Promise.allSettled(tarefas);
-    if (aguardarRender) {
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    }
+    if (aguardarRender) await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    cameraPreviewsLiberados = false;
 }
 
 function pararStreamCameraInterna() {
@@ -1692,7 +1707,6 @@ async function obterStreamCameraComFallback() {
             const nome = String(err?.name || '');
             // Permissão negada não melhora com novas tentativas e poderia gerar prompts repetidos.
             if (nome === 'NotAllowedError' || nome === 'PermissionDeniedError' || nome === 'SecurityError') break;
-            if (i < tentativas.length - 1) await new Promise(resolve => setTimeout(resolve, 250));
         }
     }
     throw ultimoErro || new Error('Não foi possível iniciar a câmera.');
@@ -1774,50 +1788,51 @@ async function abrirCameraInterna(id = osIdAtualFoto || 1) {
 
     const modal = document.getElementById('modalCameraInterna');
     const video = document.getElementById('videoCamera');
-    if (!modal || !video) {
-        mostrarToast('Tela da câmera indisponível.', true);
-        return;
-    }
+    if (!modal || !video) { mostrarToast('Tela da câmera indisponível.', true); return; }
 
     const sessao = ++cameraSessaoId;
     pararStreamCameraInterna();
+    cameraPreviewsLiberados = false;
 
-    // Cobre a O.S. antes de liberar os previews. Assim o Android nunca mostra as imagens
-    // temporariamente sem src enquanto a câmera está sendo preparada.
+    // Prioridade da v71: pedir a câmera ao Android imediatamente. O salvamento de proteção
+    // começa em paralelo e não bloqueia mais a abertura visual da câmera.
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     definirEstadoCameraInterna('Abrindo câmera…', true);
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    if (sessao !== cameraSessaoId) return;
 
-    await prepararCapturaCamera(osIdAtualFoto);
-    if (sessao !== cameraSessaoId) return;
-    liberarPreviewsBlobTemporarios();
+    const promessaStream = obterStreamCameraComFallback();
+    const promessaProtecao = prepararCapturaCamera(osIdAtualFoto, sessao);
 
     try {
-        mediaStreamCamera = await obterStreamCameraComFallback();
-        if (sessao !== cameraSessaoId) {
-            pararStreamCameraInterna();
-            return;
-        }
+        mediaStreamCamera = await promessaStream;
+        if (sessao !== cameraSessaoId) { pararStreamCameraInterna(); return; }
 
         video.srcObject = mediaStreamCamera;
-        await aguardarVideoPronto(video, 8000);
-        if (sessao !== cameraSessaoId) {
-            pararStreamCameraInterna();
-            return;
-        }
-        await video.play().catch(() => {});
-        definirEstadoCameraInterna('', false);
-    } catch (err) {
-        // Se o utilizador fechou a câmera durante a inicialização, não exibe erro tardio.
-        if (sessao !== cameraSessaoId) return;
+        try { await video.play(); } catch (_) {}
+        await aguardarVideoPronto(video, 3500);
+        if (sessao !== cameraSessaoId) { pararStreamCameraInterna(); return; }
 
+        definirEstadoCameraInterna('', false);
+
+        // Só libera previews quando realmente há muitas fotos e depois que a câmera já apareceu.
+        if (deveLiberarPreviewsParaCamera()) {
+            const liberarQuandoLivre = () => {
+                if (sessao === cameraSessaoId && mediaStreamCamera) liberarPreviewsBlobTemporarios();
+            };
+            if (typeof requestIdleCallback === 'function') requestIdleCallback(liberarQuandoLivre, { timeout: 500 });
+            else setTimeout(liberarQuandoLivre, 120);
+        }
+
+        // A proteção continua ativa, apenas deixou de ficar no caminho crítico da abertura.
+        promessaProtecao.catch(() => {});
+    } catch (err) {
+        if (sessao !== cameraSessaoId) return;
+        await promessaProtecao.catch(() => {});
         console.error('Erro ao abrir câmera interna:', err);
         registrarErroApp('abrirCameraInterna', err);
         pararStreamCameraInterna();
         await limparMarcadorCapturaCamera();
-        await recarregarPreviewsBlobVisiveis(true);
+        if (cameraPreviewsLiberados) await recarregarPreviewsBlobVisiveis(true);
         ocultarModalCameraInterna();
 
         const nome = String(err?.name || '');
@@ -1834,15 +1849,20 @@ async function abrirCameraInterna(id = osIdAtualFoto || 1) {
 }
 
 async function fecharCameraInterna(limparMarcador = true, recarregarPreviews = true) {
-    // Invalida qualquer abertura ainda pendente (por exemplo, se o utilizador tocar em X enquanto carrega).
     cameraSessaoId++;
-    definirEstadoCameraInterna('Fechando câmera…', true);
     pararStreamCameraInterna();
 
-    if (limparMarcador) await limparMarcadorCapturaCamera();
-    if (recarregarPreviews) await recarregarPreviewsBlobVisiveis(true);
+    // Fluxo rápido: com até 8 fotos não há previews para restaurar, então a câmera some na hora.
+    const precisaRestaurar = Boolean(recarregarPreviews && cameraPreviewsLiberados);
+    if (!precisaRestaurar) ocultarModalCameraInterna();
+    else definirEstadoCameraInterna('Voltando ao relatório…', true);
 
-    ocultarModalCameraInterna();
+    const tarefas = [];
+    if (limparMarcador) tarefas.push(limparMarcadorCapturaCamera());
+    if (precisaRestaurar) tarefas.push(recarregarPreviewsBlobVisiveis(true));
+    if (tarefas.length) await Promise.allSettled(tarefas);
+
+    if (precisaRestaurar) ocultarModalCameraInterna();
 }
 
 async function tirarFotoDoVideo() {
@@ -1874,10 +1894,11 @@ async function tirarFotoDoVideo() {
         if (mediaId) renderFotoItem(osIdAtualFoto || 1, { mediaId }, '');
         else renderFotoItem(osIdAtualFoto || 1, await blobParaDataUrl(blob), '');
 
-        await limparMarcadorCapturaCamera();
-        await autoSalvarRascunho(true);
+        // O Blob já está seguro. Fecha a câmera imediatamente e persiste o rascunho logo em seguida,
+        // sem obrigar o cliente a esperar o salvamento completo para voltar à O.S.
         await fecharCameraInterna(false, true);
         mostrarToast(`Foto capturada e otimizada (${Math.max(1, Math.round(blob.size / 1024))} KB).`);
+        Promise.allSettled([limparMarcadorCapturaCamera(), autoSalvarRascunho(true)]).catch(() => {});
     } catch (err) {
         console.error('Erro ao capturar foto interna:', err);
         registrarErroApp('tirarFotoDoVideo', err);
@@ -2171,16 +2192,45 @@ function atualizarVisibilidadeClienteGeral() {
 }
 
 function abrirModalAssinatura(alvo) {
-    alvoAssinaturaAtual = alvo; document.getElementById('tituloModalAssinatura').textContent = alvo === 'tecnico' ? 'Assinatura (Técnico)' : 'Assinatura (Cliente)';
+    alvoAssinaturaAtual = alvo;
+    document.getElementById('tituloModalAssinatura').textContent = alvo === 'tecnico' ? 'Assinatura (Técnico)' : 'Assinatura (Cliente)';
     document.getElementById('modalAssinaturaExpandida').classList.remove('hidden'); document.body.style.overflow = 'hidden';
     setTimeout(() => { if(padExpandido) padExpandido.clear(); resizeCanvasSeguro(document.getElementById('canvasExpandido'), padExpandido, true); const padFonte = alvo === 'tecnico' ? padTecnico : padCliente; if (padExpandido && padFonte && !padFonte.isEmpty()) padExpandido.fromDataURL(padFonte.toDataURL()); }, 50);
 }
-function fecharModalAssinatura() { document.getElementById('modalAssinaturaExpandida').classList.add('hidden'); document.body.style.overflow = ''; }
+
+function abrirAssinaturaPeloPreview(alvo) {
+    assinaturaAbertaPeloPreview = true;
+    abrirModalAssinatura(alvo);
+}
+
+function fecharModalAssinatura(manterOrigemPreview = false) {
+    document.getElementById('modalAssinaturaExpandida').classList.add('hidden');
+    const previewAberto = !document.getElementById('modalPreviewPDF')?.classList.contains('hidden');
+    document.body.style.overflow = previewAberto ? 'hidden' : '';
+    if (!manterOrigemPreview) assinaturaAbertaPeloPreview = false;
+}
 function limparPadExpandido() { if(padExpandido) padExpandido.clear(); }
-function confirmarAssinaturaExpandida() {
-    const padDestino = alvoAssinaturaAtual === 'tecnico' ? padTecnico : padCliente; const canvasEl = alvoAssinaturaAtual === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
-    if (padExpandido && padDestino) { resizeCanvasSeguro(canvasEl, padDestino, true); if (padExpandido.isEmpty()) { padDestino.clear(); if (alvoAssinaturaAtual === 'cliente') desbloquearEdicao(); } else { padDestino.clear(); padDestino.fromDataURL(padExpandido.toDataURL()); if (alvoAssinaturaAtual === 'cliente') bloquearEdicao(); } } fecharModalAssinatura();
-    autoSalvarRascunho(true); // preserva também a assinatura que acabou de selar o formulário
+
+async function confirmarAssinaturaExpandida() {
+    const veioDoPreview = assinaturaAbertaPeloPreview;
+    const alvoConfirmado = alvoAssinaturaAtual;
+    const padDestino = alvoConfirmado === 'tecnico' ? padTecnico : padCliente;
+    const canvasEl = alvoConfirmado === 'tecnico' ? document.getElementById('canvasTecnico') : document.getElementById('canvasCliente');
+    if (padExpandido && padDestino) {
+        resizeCanvasSeguro(canvasEl, padDestino, true);
+        if (padExpandido.isEmpty()) {
+            padDestino.clear();
+            if (alvoConfirmado === 'cliente') desbloquearEdicao();
+        } else {
+            padDestino.clear();
+            padDestino.fromDataURL(padExpandido.toDataURL());
+            if (alvoConfirmado === 'cliente') bloquearEdicao();
+        }
+    }
+    fecharModalAssinatura(true);
+    try { await autoSalvarRascunho(true); } catch (_) {}
+    assinaturaAbertaPeloPreview = false;
+    if (veioDoPreview) await atualizarPreviewAposAssinatura(alvoConfirmado);
 }
 
 function toggleLock(locked) {
@@ -2527,6 +2577,7 @@ async function construirPDFBytes(onProgressCallback) {
     if (!validarChecklistsAntesPDF()) throw new Error("Geração cancelada para revisão do checklist.");
     if (!dependenciasPdfDisponiveis(false)) throw new Error("Bibliotecas de PDF indisponíveis. Verifique a ligação ou o cache offline.");
     const reportProgress = async (pct, txt) => { if(onProgressCallback) { onProgressCallback(pct, txt); await new Promise(r => setTimeout(r, 15)); } };
+    pdfPreviewHotspotsAssinatura = [];
     await reportProgress(5, "A iniciar motor PDF...");
     const blocosOS = document.querySelectorAll('.os-bloco'); const isServicoInterno = verificarServicoInternoGlobal(); const cb = (eid) => document.getElementById(eid).checked ? "[X]" : "[ ]";
     const { jsPDF } = window.jspdf; const { PDFDocument, rgb, StandardFonts } = window.PDFLib; const masterPdf = await PDFDocument.create();
@@ -2624,7 +2675,8 @@ async function construirPDFBytes(onProgressCallback) {
     const docSig = new jsPDF();
     if (imgObject && logoImgData) docSig.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH); let fy = Math.max(35, 10 + finalH + 10);
     docSig.setFont("helvetica", "bold"); docSig.setFontSize(12); docSig.text(isServicoInterno ? "ASSINATURA DO TÉCNICO" : "ASSINATURAS GERAIS", 105, 20, {align:"center"});
-    docSig.setFontSize(9); docSig.setFont("helvetica", "normal"); docSig.text("Este documento consolida as OS, as evidências visuais e aprova os serviços executados.", 15, fy); fy+=25; 
+    docSig.setFontSize(9); docSig.setFont("helvetica", "normal"); docSig.text("Este documento consolida as OS, as evidências visuais e aprova os serviços executados.", 15, fy); fy+=25;
+    const assinaturaBaseY = fy;
     if (isServicoInterno) {
         docSig.line(60, fy+15, 150, fy+15); if(padTecnico && !padTecnico.isEmpty()) docSig.addImage(padTecnico.toDataURL(), 'PNG', 75, fy-8, 60, 20);
         fy+=18; docSig.text("TÉCNICO RESPONSÁVEL", 105, fy, {align:"center"}); fy+=8; docSig.text(`Nome: ${document.getElementById('tecnico').value || 'Não preenchido'}`, 60, fy);
@@ -2640,6 +2692,13 @@ async function construirPDFBytes(onProgressCallback) {
         fy+=20; docSig.setFontSize(8); docSig.setFont("helvetica", "italic"); docSig.text("Obs: a assinatura deste relatório implica na aceitação dos serviços executados e posterior cobrança.", 105, fy, {align: "center"});
     }
     const sigBuffer = docSig.output('arraybuffer'); const sigPdfLib = await PDFDocument.load(sigBuffer); const sigPages = await masterPdf.copyPages(sigPdfLib, sigPdfLib.getPageIndices()); sigPages.forEach((p) => masterPdf.addPage(p));
+    const paginaAssinatura = masterPdf.getPageCount();
+    pdfPreviewHotspotsAssinatura = isServicoInterno
+        ? [{ pagina: paginaAssinatura, alvo: 'tecnico', x: 55, y: assinaturaBaseY - 12, w: 100, h: 34 }]
+        : [
+            { pagina: paginaAssinatura, alvo: 'tecnico', x: 12, y: assinaturaBaseY - 12, w: 88, h: 34 },
+            { pagina: paginaAssinatura, alvo: 'cliente', x: 107, y: assinaturaBaseY - 12, w: 90, h: 34 }
+          ];
     await reportProgress(95, "A finalizar compressão e empacotamento...");
     const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica); const todasAsPaginas = masterPdf.getPages();
     const textoAuditoria = `Documento gerado eletronicamente por ${document.getElementById('tecnico').value || "Não Identificado"} em ${new Date().toLocaleDateString('pt-PT')}.`;
@@ -2660,7 +2719,46 @@ function atualizarControlesPreview() {
 
 function liberarCanvasesPreview() {
     const wrapper = document.getElementById('pdfPagesWrapper'); if (!wrapper) return;
-    wrapper.querySelectorAll('canvas').forEach(c => { c.width = 0; c.height = 0; }); wrapper.replaceChildren();
+    wrapper.querySelectorAll('canvas').forEach(c => { c.width = 0; c.height = 0; });
+    wrapper.replaceChildren();
+}
+
+function criarEstruturaPaginaPreview(numero, viewport) {
+    const paginaEl = document.createElement('div');
+    paginaEl.className = 'pdf-preview-page relative bg-white shadow-xl border border-gray-300 shrink-0';
+    paginaEl.dataset.previewPage = String(numero);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    canvas.height = viewport.height; canvas.width = viewport.width;
+    canvas.className = 'pdf-page-canvas bg-white block w-full h-auto';
+    paginaEl.appendChild(canvas);
+    document.getElementById('pdfPagesWrapper').appendChild(paginaEl);
+    return { paginaEl, canvas, ctx };
+}
+
+function adicionarHotspotsAssinaturaPreview(paginaEl, numeroPagina) {
+    if (!paginaEl || !Array.isArray(pdfPreviewHotspotsAssinatura)) return;
+    const A4_W = 210, A4_H = 297;
+    pdfPreviewHotspotsAssinatura.filter(h => h.pagina === numeroPagina).forEach(h => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const pad = h.alvo === 'cliente' ? padCliente : padTecnico;
+        const assinado = Boolean(pad && !pad.isEmpty());
+        btn.className = 'absolute z-10 rounded-lg border-2 border-dashed transition-all flex items-start justify-center cursor-pointer focus:outline-none focus:ring-4 ' +
+            (assinado ? 'border-emerald-500/55 bg-emerald-50/10 focus:ring-emerald-200/60' : 'border-blue-500/55 bg-blue-50/10 focus:ring-blue-200/60');
+        btn.style.left = `${(h.x / A4_W) * 100}%`;
+        btn.style.top = `${(h.y / A4_H) * 100}%`;
+        btn.style.width = `${(h.w / A4_W) * 100}%`;
+        btn.style.height = `${(h.h / A4_H) * 100}%`;
+        btn.setAttribute('aria-label', `${assinado ? 'Alterar' : 'Adicionar'} assinatura ${h.alvo === 'cliente' ? 'do cliente' : 'do técnico'}`);
+        const etiqueta = document.createElement('span');
+        etiqueta.className = 'mt-1 px-2 py-1 rounded-full text-[10px] sm:text-xs font-black shadow-sm pointer-events-none ' +
+            (assinado ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white');
+        etiqueta.textContent = assinado ? 'Assinado • toque para alterar' : `Toque para assinar (${h.alvo === 'cliente' ? 'cliente' : 'técnico'})`;
+        btn.appendChild(etiqueta);
+        btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); abrirAssinaturaPeloPreview(h.alvo); });
+        paginaEl.appendChild(btn);
+    });
 }
 
 async function renderizarPaginaPreview(numero) {
@@ -2668,14 +2766,76 @@ async function renderizarPaginaPreview(numero) {
     const alvo = Math.max(1, Math.min(Number(numero)||1, pdfPreviewDoc.numPages));
     if (pdfPreviewRenderTask) { try { pdfPreviewRenderTask.cancel(); } catch(_) {} pdfPreviewRenderTask = null; }
     liberarCanvasesPreview(); pdfPreviewPaginaAtual = alvo;
-    const page = await pdfPreviewDoc.getPage(alvo); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.6});
-    const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { alpha: false }); canvas.height = viewport.height; canvas.width = viewport.width; canvas.className = 'pdf-page-canvas bg-white shadow-xl border border-gray-300';
-    document.getElementById('pdfPagesWrapper').appendChild(canvas); pdfPreviewRenderTask = page.render({canvasContext:ctx, viewport});
+    const page = await pdfPreviewDoc.getPage(alvo);
+    const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.6});
+    const { paginaEl, canvas, ctx } = criarEstruturaPaginaPreview(alvo, viewport);
+    pdfPreviewRenderTask = page.render({canvasContext:ctx, viewport});
     try { await pdfPreviewRenderTask.promise; } catch(e) { if(e?.name !== 'RenderingCancelledException') throw e; } finally { pdfPreviewRenderTask = null; }
-    atualizarZoomPdf(); atualizarControlesPreview(); const container = document.getElementById('pdfRenderContainer'); if(container){container.scrollLeft=0;container.scrollTop=0;}
+    adicionarHotspotsAssinaturaPreview(paginaEl, alvo);
+    atualizarZoomPdf(); atualizarControlesPreview();
+    const container = document.getElementById('pdfRenderContainer'); if(container){container.scrollLeft=0;container.scrollTop=0;}
 }
 
 async function navegarPreview(delta) { if (pdfPreviewModoEconomico && pdfPreviewDoc) await renderizarPaginaPreview(pdfPreviewPaginaAtual + Number(delta || 0)); }
+
+async function carregarBytesNoPreview(bytesPdf, focarAssinatura = false) {
+    if(objUrlPreview) URL.revokeObjectURL(objUrlPreview);
+    const blob = new Blob([bytesPdf], { type: 'application/pdf' });
+    objUrlPreview = URL.createObjectURL(blob);
+    const link = document.getElementById('linkPreviewExt'); if (link) link.href = objUrlPreview;
+
+    liberarCanvasesPreview();
+    if (pdfPreviewRenderTask) { try { pdfPreviewRenderTask.cancel(); } catch(_) {} pdfPreviewRenderTask = null; }
+    if (pdfPreviewDoc) { try { pdfPreviewDoc.destroy(); } catch(_) {} pdfPreviewDoc = null; }
+
+    pdfPreviewDoc = await pdfjsLib.getDocument({data: bytesPdf}).promise;
+    pdfPreviewModoEconomico = blob.size > PDF_PREVIEW_ECONOMICO_BYTES;
+    const paginaAssinatura = pdfPreviewHotspotsAssinatura[0]?.pagina || pdfPreviewDoc.numPages;
+
+    if (pdfPreviewModoEconomico) {
+        await renderizarPaginaPreview(focarAssinatura ? paginaAssinatura : 1);
+    } else {
+        const wrapper = document.getElementById('pdfPagesWrapper');
+        for(let num = 1; num <= pdfPreviewDoc.numPages; num++) {
+            const page = await pdfPreviewDoc.getPage(num);
+            const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8});
+            const { paginaEl, canvas, ctx } = criarEstruturaPaginaPreview(num, viewport);
+            const task = page.render({canvasContext: ctx, viewport});
+            await task.promise;
+            adicionarHotspotsAssinaturaPreview(paginaEl, num);
+        }
+        atualizarZoomPdf(); atualizarControlesPreview();
+        const container = document.getElementById('pdfRenderContainer');
+        if (container) {
+            container.scrollLeft = 0;
+            if (focarAssinatura) {
+                const alvo = wrapper.querySelector(`[data-preview-page="${paginaAssinatura}"]`);
+                container.scrollTop = alvo ? Math.max(0, alvo.offsetTop - 12) : container.scrollHeight;
+            } else container.scrollTop = 0;
+        }
+    }
+}
+
+async function atualizarPreviewAposAssinatura() {
+    if (atualizandoPreviewAssinatura) return;
+    const modal = document.getElementById('modalPreviewPDF');
+    if (!modal || modal.classList.contains('hidden')) return;
+    atualizandoPreviewAssinatura = true;
+    const info = document.getElementById('previewModoInfo');
+    if (info) info.textContent = 'Atualizando assinatura…';
+    try {
+        const bytesPdf = await construirPDFBytes(null);
+        await carregarBytesNoPreview(bytesPdf, true);
+        mostrarToast('Assinatura aplicada à pré-visualização.');
+    } catch (err) {
+        console.error('Falha ao atualizar pré-visualização após assinatura:', err);
+        registrarErroApp('atualizarPreviewAposAssinatura', err);
+        mostrarToast('A assinatura foi salva, mas não foi possível atualizar a pré-visualização agora.', true);
+    } finally {
+        atualizandoPreviewAssinatura = false;
+        atualizarControlesPreview();
+    }
+}
 
 async function preVisualizarPDF() {
     const btn = document.getElementById('btnPreview'); if (btn.disabled) return;
@@ -2683,25 +2843,21 @@ async function preVisualizarPDF() {
         btn.disabled = true;
         if (!dependenciasPdfDisponiveis(true)) throw new Error('Bibliotecas de pré-visualização indisponíveis. Verifique a ligação ou o cache offline.');
         const bytesPdf = await construirPDFBytes(atualizarProgressoPDF);
-        if(objUrlPreview) URL.revokeObjectURL(objUrlPreview); const blob = new Blob([bytesPdf], { type: 'application/pdf' }); objUrlPreview = URL.createObjectURL(blob);
-        const primeiraOs = document.querySelector('.os-bloco'); let pOs = 'Rascunho', pCliente = 'Cliente'; if(primeiraOs) { const pId = primeiraOs.getAttribute('data-id'); pOs = getVal('osNum', pId).trim() || 'Rascunho'; pCliente = getVal('cliente', pId).trim() || 'Cliente'; }
-        document.getElementById('linkPreviewExt').download = `Pre_Visualizacao_${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`; document.getElementById('linkPreviewExt').href = objUrlPreview;
-        liberarCanvasesPreview(); currentZoom = 1; pdfPreviewPaginaAtual = 1;
-        pdfPreviewDoc = await pdfjsLib.getDocument({data: bytesPdf}).promise;
-        pdfPreviewModoEconomico = blob.size > PDF_PREVIEW_ECONOMICO_BYTES;
-        if (pdfPreviewModoEconomico) {
-            await renderizarPaginaPreview(1);
-        } else {
-            const wrapper = document.getElementById('pdfPagesWrapper');
-            for(let num = 1; num <= pdfPreviewDoc.numPages; num++) { const page = await pdfPreviewDoc.getPage(num); const viewport = page.getViewport({scale: window.innerWidth > 600 ? 2.0 : 1.8}); const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { alpha: false }); canvas.height = viewport.height; canvas.width = viewport.width; canvas.className = 'pdf-page-canvas bg-white shadow-xl border border-gray-300'; const task = page.render({canvasContext: ctx, viewport}); await task.promise; wrapper.appendChild(canvas); }
-            atualizarZoomPdf(); atualizarControlesPreview();
-        }
-        const container = document.getElementById('pdfRenderContainer'); if (container) { container.scrollLeft = 0; container.scrollTop = 0; } document.getElementById('modalPreviewPDF').classList.remove('hidden');
-    } catch (err) { console.error(err); registrarErroApp('preVisualizarPDF', err); mostrarToast(err.message || 'Erro ao pre-visualizar.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden'); } finally { btn.disabled = false; }
+        const primeiraOs = document.querySelector('.os-bloco'); let pOs = 'Rascunho', pCliente = 'Cliente';
+        if(primeiraOs) { const pId = primeiraOs.getAttribute('data-id'); pOs = getVal('osNum', pId).trim() || 'Rascunho'; pCliente = getVal('cliente', pId).trim() || 'Cliente'; }
+        document.getElementById('linkPreviewExt').download = `Pre_Visualizacao_${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+        currentZoom = 1; pdfPreviewPaginaAtual = 1;
+        await carregarBytesNoPreview(bytesPdf, false);
+        const container = document.getElementById('pdfRenderContainer'); if (container) { container.scrollLeft = 0; container.scrollTop = 0; }
+        document.getElementById('modalPreviewPDF').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    } catch (err) {
+        console.error(err); registrarErroApp('preVisualizarPDF', err); mostrarToast(err.message || 'Erro ao pre-visualizar.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden');
+    } finally { btn.disabled = false; }
 }
 
 function fecharPreviewPDF() {
-    document.getElementById('modalPreviewPDF').classList.add('hidden'); liberarCanvasesPreview();
+    document.getElementById('modalPreviewPDF').classList.add('hidden'); document.body.style.overflow = ''; assinaturaAbertaPeloPreview = false; liberarCanvasesPreview();
     if (pdfPreviewRenderTask) { try { pdfPreviewRenderTask.cancel(); } catch(_) {} pdfPreviewRenderTask = null; }
     if (pdfPreviewDoc) { try { pdfPreviewDoc.destroy(); } catch(_) {} pdfPreviewDoc = null; }
     if (objUrlPreview) { URL.revokeObjectURL(objUrlPreview); objUrlPreview = null; }
