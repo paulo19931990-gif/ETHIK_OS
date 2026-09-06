@@ -1,27 +1,15 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v72';
+const CACHE_NAME = 'multios-pro-v73';
 
 // Arquivos indispensáveis para abrir e usar o núcleo do app offline.
+// v73: as bibliotecas de armazenamento/PDF/assinatura deixam de ser opcionais.
+// Se uma delas não puder ser obtida durante a atualização, o SW antigo continua ativo.
 const ASSETS_CRITICOS = [
   './index.html',
   './app.js',
-  './style.css'
-];
-
-// Recursos de funcionalidades. Uma falha isolada não derruba a atualização inteira.
-const ASSETS_OPCIONAIS = [
+  './style.css',
   './bancoPecas.js',
   './checklists/checklists.js',
-  './checklists/FM-408-climatica.pdf',
-  './checklists/FM-409-durometros.pdf',
-  './checklists/FM-410-incubadora-estufa.pdf',
-  './checklists/FM-411-banho-maria.pdf',
-  './checklists/FM-411-dissolutor-desintegrador.pdf',
-  './fonts/Carlito-Regular.ttf',
-  './fonts/Carlito-Bold.ttf',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512_3.png',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
@@ -31,6 +19,20 @@ const ASSETS_OPCIONAIS = [
   'https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+];
+
+// Recursos úteis, mas cuja falha isolada não deve impedir o app principal de atualizar.
+const ASSETS_OPCIONAIS = [
+  './checklists/FM-408-climatica.pdf',
+  './checklists/FM-409-durometros.pdf',
+  './checklists/FM-410-incubadora-estufa.pdf',
+  './checklists/FM-411-banho-maria.pdf',
+  './checklists/FM-411-dissolutor-desintegrador.pdf',
+  './fonts/Carlito-Regular.ttf',
+  './fonts/Carlito-Bold.ttf',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512_3.png'
 ];
 
 const HOSTS_RUNTIME_PERMITIDOS = new Set([
@@ -44,27 +46,42 @@ function respostaCacheavel(response) {
   return Boolean(response) && (response.ok || response.type === 'opaque');
 }
 
+async function cachearAssetObrigatorio(cache, asset) {
+  let resposta = null;
+  try { resposta = await fetch(asset, { cache: 'no-cache' }); } catch (_) {}
+
+  // Para bibliotecas externas com URL/versionamento fixos, uma cópia já validada no cache
+  // da versão anterior é um fallback seguro quando a rede oscila durante a atualização.
+  // Arquivos locais da aplicação NÃO usam esse fallback para nunca misturar app v72 com v73.
+  if (!respostaCacheavel(resposta) && /^https:\/\//i.test(asset)) {
+    try { resposta = await caches.match(asset); } catch (_) {}
+  }
+
+  if (!respostaCacheavel(resposta)) throw new Error(`Asset crítico indisponível: ${asset}`);
+  await cache.put(asset, resposta.clone());
+}
+
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
 
-    // Se um arquivo crítico falhar, é melhor manter o SW anterior funcionando.
-    await cache.addAll(ASSETS_CRITICOS);
+    // Todos os recursos que sustentam armazenamento, assinatura e PDF precisam estar disponíveis
+    // antes de esta versão poder substituir a anterior.
+    await Promise.all(ASSETS_CRITICOS.map(asset => cachearAssetObrigatorio(cache, asset)));
 
-    // Recursos opcionais não podem derrubar toda a instalação.
     const resultados = await Promise.allSettled(
-      ASSETS_OPCIONAIS.map(asset => cache.add(asset))
+      ASSETS_OPCIONAIS.map(async asset => {
+        const resposta = await fetch(asset, { cache: 'no-cache' });
+        if (respostaCacheavel(resposta)) await cache.put(asset, resposta.clone());
+        else throw new Error(`Resposta não cacheável: ${asset}`);
+      })
     );
 
     resultados.forEach((resultado, indice) => {
-      if (resultado.status === 'rejected') {
-        console.warn(`Falha ao cachear asset opcional ${ASSETS_OPCIONAIS[indice]}:`, resultado.reason);
-      }
+      if (resultado.status === 'rejected') console.warn(`Falha ao cachear asset opcional ${ASSETS_OPCIONAIS[indice]}:`, resultado.reason);
     });
-
   })());
 });
-
 
 self.addEventListener('message', event => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
@@ -107,7 +124,7 @@ self.addEventListener('fetch', event => {
 
         return networkResponse;
       } catch (error) {
-        // ignoreSearch permite que /index.html?v=71 use /index.html do pré-cache.
+        // ignoreSearch permite que /index.html?v=73 use /index.html do pré-cache.
         const cachedRequest = await caches.match(request, { ignoreSearch: true });
         if (cachedRequest) return cachedRequest;
 
@@ -144,7 +161,7 @@ self.addEventListener('fetch', event => {
   if (!podeUsarRuntimeCache) return;
 
   event.respondWith((async () => {
-    // Nos arquivos locais, ignora apenas a query de versão (?v=71).
+    // Nos arquivos locais, ignora apenas a query de versão (?v=73).
     const cachedResponse = await caches.match(request, {
       ignoreSearch: mesmaOrigem
     });
