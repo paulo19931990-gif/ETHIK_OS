@@ -708,6 +708,7 @@ let registosBancoHoras = [];
 let contadorOS = 0;
 
 let mediaStreamCamera = null;
+let cameraSessaoId = 0;
 let osIdAtualFoto = null;
 let timeoutRascunho = null;
 let formularioSujo = false;
@@ -718,7 +719,7 @@ let pdfPreviewPaginaAtual = 1;
 let pdfPreviewModoEconomico = false;
 let pdfPreviewRenderTask = null;
 
-const APP_VERSION = 69;
+const APP_VERSION = 70;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -1576,12 +1577,12 @@ async function prepararCapturaCamera(id) {
         console.error('Falha ao preparar captura:', e);
         registrarErroApp('prepararCapturaCamera', e);
     }
-    liberarPreviewsBlobTemporarios();
 }
 
 function liberarPreviewsBlobTemporarios() {
-    // Libera os bitmaps já decodificados antes de abrir a câmera.
-    // Isso vale tanto para fotos novas em Blob quanto para fotos antigas em Base64.
+    // Libera os bitmaps decodificados para reduzir o uso de RAM enquanto a câmera está ativa.
+    // A v70 faz isso somente com o modal da câmera já cobrindo a interface e restaura
+    // todas as prévias antes de voltar à O.S., evitando o ícone de imagem quebrada.
     document.querySelectorAll('.foto-item').forEach(item => {
         const img = item.querySelector('img');
         if (!img) return;
@@ -1591,21 +1592,110 @@ function liberarPreviewsBlobTemporarios() {
         }
         if (img.getAttribute('src')) {
             img.dataset.previewPausado = '1';
+            img.style.visibility = 'hidden';
             img.removeAttribute('src');
         }
     });
 }
 
-function recarregarPreviewsBlobVisiveis() {
+async function recarregarPreviewsBlobVisiveis(aguardarRender = false) {
+    const tarefas = [];
     document.querySelectorAll('.foto-item').forEach(item => {
         const mediaId = item.querySelector('.foto-media-id')?.value || '';
         const base64 = item.querySelector('.foto-b64')?.value || '';
         const img = item.querySelector('img');
-        if (!img || img.getAttribute('src')) return;
-        delete img.dataset.previewPausado;
-        if (mediaId) carregarPreviewFotoBlob(img, mediaId).catch(() => {});
-        else if (base64 && dataUrlImagemSegura(base64)) img.src = base64;
+        if (!img) return;
+        if (img.getAttribute('src')) {
+            delete img.dataset.previewPausado;
+            img.style.visibility = '';
+            return;
+        }
+
+        const finalizar = async () => {
+            if (aguardarRender && typeof img.decode === 'function' && img.getAttribute('src')) {
+                try { await img.decode(); } catch (_) {}
+            }
+            delete img.dataset.previewPausado;
+            img.style.visibility = '';
+        };
+
+        if (mediaId) {
+            tarefas.push(
+                carregarPreviewFotoBlob(img, mediaId)
+                    .then(finalizar)
+                    .catch(() => { img.alt = 'Foto indisponível'; img.style.visibility = ''; })
+            );
+        } else if (base64 && dataUrlImagemSegura(base64)) {
+            img.src = base64;
+            tarefas.push(finalizar());
+        } else {
+            img.style.visibility = '';
+        }
     });
+
+    if (tarefas.length) await Promise.allSettled(tarefas);
+    if (aguardarRender) {
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+}
+
+function pararStreamCameraInterna() {
+    const video = document.getElementById('videoCamera');
+    if (video) {
+        try { video.pause(); } catch (_) {}
+        try { video.srcObject = null; } catch (_) {}
+    }
+    if (mediaStreamCamera) {
+        try { mediaStreamCamera.getTracks().forEach(t => t.stop()); } catch (_) {}
+        mediaStreamCamera = null;
+    }
+}
+
+function definirEstadoCameraInterna(texto = '', carregando = false) {
+    const status = document.getElementById('cameraStatusInterna');
+    const btn = document.getElementById('btnCapturarCameraInterna');
+    if (status) {
+        status.textContent = texto || '';
+        status.classList.toggle('hidden', !texto);
+    }
+    if (btn) btn.disabled = Boolean(carregando);
+}
+
+function ocultarModalCameraInterna() {
+    const modal = document.getElementById('modalCameraInterna');
+    if (modal) modal.classList.add('hidden');
+    document.body.style.overflow = '';
+    definirEstadoCameraInterna('', false);
+}
+
+async function obterStreamCameraComFallback() {
+    const tentativas = [
+        {
+            audio: false,
+            video: {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1280, max: 1600 },
+                height: { ideal: 960, max: 1200 },
+                frameRate: { ideal: 24, max: 30 }
+            }
+        },
+        { audio: false, video: { facingMode: { ideal: 'environment' } } },
+        { audio: false, video: true }
+    ];
+
+    let ultimoErro = null;
+    for (let i = 0; i < tentativas.length; i++) {
+        try {
+            return await navigator.mediaDevices.getUserMedia(tentativas[i]);
+        } catch (err) {
+            ultimoErro = err;
+            const nome = String(err?.name || '');
+            // Permissão negada não melhora com novas tentativas e poderia gerar prompts repetidos.
+            if (nome === 'NotAllowedError' || nome === 'PermissionDeniedError' || nome === 'SecurityError') break;
+            if (i < tentativas.length - 1) await new Promise(resolve => setTimeout(resolve, 250));
+        }
+    }
+    throw ultimoErro || new Error('Não foi possível iniciar a câmera.');
 }
 
 async function limparMarcadorCapturaCamera() {
@@ -1678,68 +1768,81 @@ async function abrirCameraInterna(id = osIdAtualFoto || 1) {
     if (fotosAtuais >= 20) { mostrarToast('Limite de 20 fotos por O.S. atingido.', true); return; }
 
     if (!navigator.mediaDevices?.getUserMedia) {
-        mostrarToast('Câmera interna não suportada neste navegador. Use a galeria.', true);
+        mostrarToast('Este navegador não oferece acesso direto à câmera. A galeria continua disponível.', true);
         return;
     }
-
-    await prepararCapturaCamera(osIdAtualFoto);
-    // Encerra eventual stream anterior sem recarregar as fotos que acabámos de liberar da memória.
-    fecharCameraInterna(false, false);
 
     const modal = document.getElementById('modalCameraInterna');
     const video = document.getElementById('videoCamera');
     if (!modal || !video) {
-        await limparMarcadorCapturaCamera();
-        recarregarPreviewsBlobVisiveis();
         mostrarToast('Tela da câmera indisponível.', true);
         return;
     }
 
+    const sessao = ++cameraSessaoId;
+    pararStreamCameraInterna();
+
+    // Cobre a O.S. antes de liberar os previews. Assim o Android nunca mostra as imagens
+    // temporariamente sem src enquanto a câmera está sendo preparada.
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    definirEstadoCameraInterna('Abrindo câmera…', true);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if (sessao !== cameraSessaoId) return;
+
+    await prepararCapturaCamera(osIdAtualFoto);
+    if (sessao !== cameraSessaoId) return;
+    liberarPreviewsBlobTemporarios();
+
     try {
-        // Mantém a câmera em resolução controlada para reduzir o uso de RAM.
-        // O navegador pode escolher uma resolução próxima, mas não precisamos carregar uma foto de 48/50 MP.
-        const constraints = {
-            audio: false,
-            video: {
-                facingMode: { ideal: 'environment' },
-                width: { ideal: 1280, max: 1600 },
-                height: { ideal: 960, max: 1200 },
-                frameRate: { ideal: 24, max: 30 }
-            }
-        };
-        mediaStreamCamera = await navigator.mediaDevices.getUserMedia(constraints);
+        mediaStreamCamera = await obterStreamCameraComFallback();
+        if (sessao !== cameraSessaoId) {
+            pararStreamCameraInterna();
+            return;
+        }
+
         video.srcObject = mediaStreamCamera;
-        modal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-        await aguardarVideoPronto(video);
+        await aguardarVideoPronto(video, 8000);
+        if (sessao !== cameraSessaoId) {
+            pararStreamCameraInterna();
+            return;
+        }
         await video.play().catch(() => {});
+        definirEstadoCameraInterna('', false);
     } catch (err) {
+        // Se o utilizador fechou a câmera durante a inicialização, não exibe erro tardio.
+        if (sessao !== cameraSessaoId) return;
+
         console.error('Erro ao abrir câmera interna:', err);
         registrarErroApp('abrirCameraInterna', err);
-        fecharCameraInterna(false);
+        pararStreamCameraInterna();
         await limparMarcadorCapturaCamera();
-        recarregarPreviewsBlobVisiveis();
+        await recarregarPreviewsBlobVisiveis(true);
+        ocultarModalCameraInterna();
+
         const nome = String(err?.name || '');
-        if (nome === 'NotAllowedError' || nome === 'PermissionDeniedError') mostrarToast('Permissão da câmera negada. Autorize a câmera para o Multi-OS.', true);
-        else mostrarToast('Não foi possível abrir a câmera. Use a galeria se necessário.', true);
+        if (nome === 'NotAllowedError' || nome === 'PermissionDeniedError' || nome === 'SecurityError') {
+            mostrarToast('Permissão da câmera negada. Autorize a câmera para o Multi-OS nas permissões do navegador.', true);
+        } else if (nome === 'NotFoundError' || nome === 'DevicesNotFoundError') {
+            mostrarToast('Nenhuma câmera compatível foi encontrada neste dispositivo.', true);
+        } else if (nome === 'NotReadableError' || nome === 'TrackStartError' || nome === 'AbortError') {
+            mostrarToast('A câmera está ocupada ou temporariamente indisponível. Feche outro app que esteja usando a câmera e tente novamente.', true);
+        } else {
+            mostrarToast('Não foi possível iniciar a câmera agora. Tente novamente.', true);
+        }
     }
 }
 
-function fecharCameraInterna(limparMarcador = true, recarregarPreviews = true) {
-    const video = document.getElementById('videoCamera');
-    if (video) {
-        try { video.pause(); } catch (_) {}
-        try { video.srcObject = null; } catch (_) {}
-    }
-    if (mediaStreamCamera) {
-        try { mediaStreamCamera.getTracks().forEach(t => t.stop()); } catch (_) {}
-        mediaStreamCamera = null;
-    }
-    const modal = document.getElementById('modalCameraInterna');
-    if (modal) modal.classList.add('hidden');
-    document.body.style.overflow = '';
-    if (limparMarcador) limparMarcadorCapturaCamera().catch(() => {});
-    if (recarregarPreviews) recarregarPreviewsBlobVisiveis();
+async function fecharCameraInterna(limparMarcador = true, recarregarPreviews = true) {
+    // Invalida qualquer abertura ainda pendente (por exemplo, se o utilizador tocar em X enquanto carrega).
+    cameraSessaoId++;
+    definirEstadoCameraInterna('Fechando câmera…', true);
+    pararStreamCameraInterna();
+
+    if (limparMarcador) await limparMarcadorCapturaCamera();
+    if (recarregarPreviews) await recarregarPreviewsBlobVisiveis(true);
+
+    ocultarModalCameraInterna();
 }
 
 async function tirarFotoDoVideo() {
@@ -1771,16 +1874,16 @@ async function tirarFotoDoVideo() {
         if (mediaId) renderFotoItem(osIdAtualFoto || 1, { mediaId }, '');
         else renderFotoItem(osIdAtualFoto || 1, await blobParaDataUrl(blob), '');
 
-        fecharCameraInterna(false);
         await limparMarcadorCapturaCamera();
         await autoSalvarRascunho(true);
+        await fecharCameraInterna(false, true);
         mostrarToast(`Foto capturada e otimizada (${Math.max(1, Math.round(blob.size / 1024))} KB).`);
     } catch (err) {
         console.error('Erro ao capturar foto interna:', err);
         registrarErroApp('tirarFotoDoVideo', err);
         mostrarToast(err.message || 'Não foi possível capturar a foto.', true);
     } finally {
-        if (btn) btn.disabled = false;
+        if (btn && !document.getElementById('modalCameraInterna')?.classList.contains('hidden')) btn.disabled = false;
     }
 }
 
