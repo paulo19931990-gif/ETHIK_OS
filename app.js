@@ -836,6 +836,9 @@ let contadorOS = 0;
 let mediaStreamCamera = null;
 let cameraSessaoId = 0;
 let cameraPreviewsLiberados = false;
+let cameraFotosCapturadasSessao = 0;
+let cameraPersistenciaPendente = Promise.resolve();
+let cameraProtecaoAgendada = false;
 let osIdAtualFoto = null;
 let timeoutRascunho = null;
 let filaRascunho = Promise.resolve();
@@ -855,7 +858,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 74;
+const APP_VERSION = 75;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -2207,6 +2210,44 @@ function definirEstadoCameraInterna(texto = '', carregando = false) {
     if (btn) btn.disabled = Boolean(carregando);
 }
 
+function atualizarContadorCameraSessao() {
+    const el = document.getElementById('cameraContadorSessao');
+    if (!el) return;
+    if (cameraFotosCapturadasSessao <= 0) {
+        el.textContent = 'Pronto para fotografar';
+        return;
+    }
+    el.textContent = `${cameraFotosCapturadasSessao} foto${cameraFotosCapturadasSessao === 1 ? '' : 's'} capturada${cameraFotosCapturadasSessao === 1 ? '' : 's'}`;
+}
+
+function agendarProtecaoCamera(sessao, id) {
+    if (cameraProtecaoAgendada) return;
+    cameraProtecaoAgendada = true;
+    const executar = () => {
+        if (sessao !== cameraSessaoId || !mediaStreamCamera) { cameraProtecaoAgendada = false; return; }
+        prepararCapturaCamera(id, sessao)
+            .catch(() => {})
+            .finally(() => { cameraProtecaoAgendada = false; });
+    };
+    // A câmera tem prioridade absoluta. O rascunho começa somente depois que o vídeo já está visível.
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(executar, { timeout: 350 });
+    else setTimeout(executar, 0);
+}
+
+function agendarPersistenciaFotoCamera() {
+    cameraPersistenciaPendente = cameraPersistenciaPendente
+        .catch(() => {})
+        .then(() => autoSalvarRascunho(true))
+        .catch(err => { console.warn('Falha ao persistir foto da sessão da câmera:', err); registrarErroApp('persistenciaCamera', err); });
+    return cameraPersistenciaPendente;
+}
+
+async function concluirCameraInterna() {
+    // Fecha visualmente primeiro. Os Blobs já foram gravados individualmente a cada disparo.
+    await fecharCameraInterna(false, true);
+    Promise.allSettled([limparMarcadorCapturaCamera(), cameraPersistenciaPendente, autoSalvarRascunho(true)]).catch(() => {});
+}
+
 function ocultarModalCameraInterna() {
     const modal = document.getElementById('modalCameraInterna');
     if (modal) modal.classList.add('hidden');
@@ -2215,16 +2256,10 @@ function ocultarModalCameraInterna() {
 }
 
 async function obterStreamCameraComFallback() {
+    // v75: a primeira tentativa é deliberadamente simples para reduzir a negociação com o Android.
+    // Só recorremos aos perfis mais genéricos se o aparelho rejeitar a câmera traseira 1280x720.
     const tentativas = [
-        {
-            audio: false,
-            video: {
-                facingMode: { ideal: 'environment' },
-                width: { ideal: 1280, max: 1600 },
-                height: { ideal: 960, max: 1200 },
-                frameRate: { ideal: 24, max: 30 }
-            }
-        },
+        { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
         { audio: false, video: { facingMode: { ideal: 'environment' } } },
         { audio: false, video: true }
     ];
@@ -2324,41 +2359,41 @@ async function abrirCameraInterna(id = osIdAtualFoto || 1) {
     const sessao = ++cameraSessaoId;
     pararStreamCameraInterna();
     cameraPreviewsLiberados = false;
+    cameraFotosCapturadasSessao = 0;
+    cameraProtecaoAgendada = false;
+    atualizarContadorCameraSessao();
 
-    // Prioridade da v71: pedir a câmera ao Android imediatamente. O salvamento de proteção
-    // começa em paralelo e não bloqueia mais a abertura visual da câmera.
+    // v75: pede a câmera antes de qualquer gravação no IndexedDB. Isso reduz disputa de CPU/I/O
+    // exatamente no instante em que o Android está inicializando o sensor.
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     definirEstadoCameraInterna('Abrindo câmera…', true);
 
-    const promessaStream = obterStreamCameraComFallback();
-    const promessaProtecao = prepararCapturaCamera(osIdAtualFoto, sessao);
-
     try {
-        mediaStreamCamera = await promessaStream;
+        mediaStreamCamera = await obterStreamCameraComFallback();
         if (sessao !== cameraSessaoId) { pararStreamCameraInterna(); return; }
 
         video.srcObject = mediaStreamCamera;
         try { await video.play(); } catch (_) {}
-        await aguardarVideoPronto(video, 3500);
+        await aguardarVideoPronto(video, 2500);
         if (sessao !== cameraSessaoId) { pararStreamCameraInterna(); return; }
 
         definirEstadoCameraInterna('', false);
+        atualizarContadorCameraSessao();
 
-        // Só libera previews quando realmente há muitas fotos e depois que a câmera já apareceu.
+        // Proteção do rascunho começa só depois de a imagem estar pronta para o usuário.
+        agendarProtecaoCamera(sessao, osIdAtualFoto);
+
+        // Thumbnails ficam na RAM. Previews pesados, quando existirem, são liberados sem bloquear a câmera.
         if (deveLiberarPreviewsParaCamera()) {
             const liberarQuandoLivre = () => {
                 if (sessao === cameraSessaoId && mediaStreamCamera) liberarPreviewsBlobTemporarios();
             };
-            if (typeof requestIdleCallback === 'function') requestIdleCallback(liberarQuandoLivre, { timeout: 500 });
-            else setTimeout(liberarQuandoLivre, 120);
+            if (typeof requestIdleCallback === 'function') requestIdleCallback(liberarQuandoLivre, { timeout: 600 });
+            else setTimeout(liberarQuandoLivre, 150);
         }
-
-        // A proteção continua ativa, apenas deixou de ficar no caminho crítico da abertura.
-        promessaProtecao.catch(() => {});
     } catch (err) {
         if (sessao !== cameraSessaoId) return;
-        await promessaProtecao.catch(() => {});
         console.error('Erro ao abrir câmera interna:', err);
         registrarErroApp('abrirCameraInterna', err);
         pararStreamCameraInterna();
@@ -2381,9 +2416,9 @@ async function abrirCameraInterna(id = osIdAtualFoto || 1) {
 
 async function fecharCameraInterna(limparMarcador = true, recarregarPreviews = true) {
     cameraSessaoId++;
+    cameraProtecaoAgendada = false;
     pararStreamCameraInterna();
 
-    // Fluxo rápido: com até 8 fotos não há previews para restaurar, então a câmera some na hora.
     const precisaRestaurar = Boolean(recarregarPreviews && cameraPreviewsLiberados);
     if (!precisaRestaurar) ocultarModalCameraInterna();
     else definirEstadoCameraInterna('Voltando ao relatório…', true);
@@ -2394,6 +2429,8 @@ async function fecharCameraInterna(limparMarcador = true, recarregarPreviews = t
     if (tarefas.length) await Promise.allSettled(tarefas);
 
     if (precisaRestaurar) ocultarModalCameraInterna();
+    cameraFotosCapturadasSessao = 0;
+    atualizarContadorCameraSessao();
 }
 
 async function tirarFotoDoVideo() {
@@ -2404,10 +2441,19 @@ async function tirarFotoDoVideo() {
         return;
     }
     if (btn?.disabled) return;
+
+    const destinoId = osIdAtualFoto || 1;
+    const fotosAtuais = document.querySelectorAll(`#fotosContainer_${destinoId} .foto-item`).length;
+    if (fotosAtuais >= 20) {
+        mostrarToast('Limite de 20 fotos por O.S. atingido.', true);
+        await concluirCameraInterna();
+        return;
+    }
+
     if (btn) btn.disabled = true;
 
     try {
-        // A captura nasce já em tamanho controlado; nunca criamos uma foto original de 48/50 MP.
+        // O stream permanece ligado após o disparo: a próxima foto não precisa reabrir o hardware da câmera.
         const alvo = calcularDimensoesCamera(video.videoWidth, video.videoHeight);
         const canvas = document.createElement('canvas');
         canvas.width = alvo.width; canvas.height = alvo.height;
@@ -2422,20 +2468,49 @@ async function tirarFotoDoVideo() {
         if (!blob) throw new Error('Não foi possível comprimir a foto.');
 
         const mediaId = await salvarBlobMidia(MEDIA_PHOTO_PREFIX, blob);
-        if (mediaId) { renderFotoItem(osIdAtualFoto || 1, { mediaId }, ''); agendarThumbnailFoto(mediaId, blob); }
-        else renderFotoItem(osIdAtualFoto || 1, await blobParaDataUrl(blob), '');
+        if (mediaId) {
+            renderFotoItem(destinoId, { mediaId }, '');
+            agendarThumbnailFoto(mediaId, blob);
+        } else {
+            renderFotoItem(destinoId, await blobParaDataUrl(blob), '');
+        }
 
-        // O Blob já está seguro. Fecha a câmera imediatamente e persiste o rascunho logo em seguida,
-        // sem obrigar o cliente a esperar o salvamento completo para voltar à O.S.
-        await fecharCameraInterna(false, true);
-        mostrarToast(`Foto capturada e otimizada (${Math.max(1, Math.round(blob.size / 1024))} KB).`);
-        Promise.allSettled([limparMarcadorCapturaCamera(), autoSalvarRascunho(true)]).catch(() => {});
+        cameraFotosCapturadasSessao++;
+        atualizarContadorCameraSessao();
+        // renderFotoItem agenda o autosave padrão de 3 s; durante a sessão usamos a fila específica
+        // para evitar um salvamento inesperado no meio de outro disparo.
+        cancelarAutoSavePendente();
+        agendarPersistenciaFotoCamera();
+
+        const totalAgora = document.querySelectorAll(`#fotosContainer_${destinoId} .foto-item`).length;
+        if (totalAgora >= 20) {
+            mostrarToast('Foto salva. Limite de 20 fotos atingido.');
+            await concluirCameraInterna();
+            return;
+        }
+
+        // Feedback curto sem fechar a câmera; o próximo disparo já fica disponível.
+        const status = document.getElementById('cameraStatusInterna');
+        if (status) {
+            status.textContent = 'Foto salva';
+            status.classList.remove('hidden');
+            status.classList.remove('bg-black');
+            status.classList.add('bg-black/20');
+            const sessaoFeedback = cameraSessaoId;
+            setTimeout(() => {
+                if (sessaoFeedback === cameraSessaoId && mediaStreamCamera && status.textContent === 'Foto salva' && !document.getElementById('modalCameraInterna')?.classList.contains('hidden')) {
+                    status.classList.add('hidden');
+                    status.classList.remove('bg-black/20');
+                    status.classList.add('bg-black');
+                }
+            }, 320);
+        }
     } catch (err) {
         console.error('Erro ao capturar foto interna:', err);
         registrarErroApp('tirarFotoDoVideo', err);
         mostrarToast(err.message || 'Não foi possível capturar a foto.', true);
     } finally {
-        if (btn && !document.getElementById('modalCameraInterna')?.classList.contains('hidden')) btn.disabled = false;
+        if (btn && mediaStreamCamera && !document.getElementById('modalCameraInterna')?.classList.contains('hidden')) btn.disabled = false;
     }
 }
 
