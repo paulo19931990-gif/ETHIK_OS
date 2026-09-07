@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=76">
+    <link rel="manifest" href="./manifest.json?v=77">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -20,14 +20,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
 
-    <script src="./vendor/tailwindcss.js?v=76"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=76"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=76"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=76"></script>
-    <script src="./vendor/pdf-lib.min.js?v=76"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=76"></script>
-    <script src="./vendor/localforage.min.js?v=76"></script>
-    <script src="./vendor/pdf.min.js?v=76"></script>
+    <script src="./vendor/tailwindcss.js?v=77"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=77"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=77"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=77"></script>
+    <script src="./vendor/pdf-lib.min.js?v=77"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=77"></script>
+    <script src="./vendor/localforage.min.js?v=77"></script>
+    <script src="./vendor/pdf.min.js?v=77"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -42,7 +42,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=76').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=77').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -76,12 +76,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=76';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=77';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=76">
+    <link rel="stylesheet" href="style.css?v=77">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -166,7 +166,7 @@
             <div class="flex justify-between items-center p-3 sm:p-4 border-b bg-white shrink-0 z-10 shadow-sm">
                 <h3 class="text-base font-bold text-gray-800">Visualização</h3>
                 <div class="flex gap-2">
-                    <a id="linkPreviewExt" href="#" onclick="return baixarPreviewPDF(event)" class="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-blue-100 flex items-center gap-1 border border-blue-200">Download</a>
+                    <a id="linkPreviewExt" href="#" onclick="gerarPDFConsolidado(); return false;" class="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold text-[10px] sm:text-xs uppercase tracking-wider hover:bg-blue-100 flex items-center gap-1 border border-blue-200 whitespace-nowrap">Gerar PDF &amp; Partilhar</a>
                     <button onclick="fecharPreviewPDF()" class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold text-xs uppercase tracking-wider hover:bg-gray-900">Fechar</button>
                 </div>
             </div>
@@ -538,8 +538,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=76"></script>
-    <script src="bancoPecas.js?v=76"></script>
-    <script src="app.js?v=76"></script>
+    <script src="checklists/checklists.js?v=77"></script>
+    <script src="bancoPecas.js?v=77"></script>
+    <script src="app.js?v=77"></script>
 </body>
 </html>
