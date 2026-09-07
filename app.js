@@ -839,6 +839,9 @@ let cameraPreviewsLiberados = false;
 let cameraFotosCapturadasSessao = 0;
 let cameraPersistenciaPendente = Promise.resolve();
 let cameraProtecaoAgendada = false;
+let cameraPromessaPreAquecida = null;
+let cameraPreAquecimentoOsId = null;
+let cameraPreAquecimentoTimer = null;
 let osIdAtualFoto = null;
 let timeoutRascunho = null;
 let filaRascunho = Promise.resolve();
@@ -858,7 +861,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 75;
+const APP_VERSION = 76;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -2255,12 +2258,61 @@ function ocultarModalCameraInterna() {
     definirEstadoCameraInterna('', false);
 }
 
+function preaquecerCameraInterna(id) {
+    if (!navigator.mediaDevices?.getUserMedia || mediaStreamCamera || cameraPromessaPreAquecida) return;
+    const destino = Number(id || 1);
+    cameraPreAquecimentoOsId = destino;
+    const promessa = obterStreamCameraComFallback();
+    cameraPromessaPreAquecida = promessa;
+
+    // pointerdown acontece um pouco antes do click. Se o clique não vier, liberamos
+    // qualquer stream pré-aquecido rapidamente para não manter a câmera ligada sem necessidade.
+    if (cameraPreAquecimentoTimer) clearTimeout(cameraPreAquecimentoTimer);
+    cameraPreAquecimentoTimer = setTimeout(async () => {
+        if (cameraPromessaPreAquecida !== promessa) return;
+        cameraPromessaPreAquecida = null;
+        cameraPreAquecimentoOsId = null;
+        cameraPreAquecimentoTimer = null;
+        try {
+            const stream = await promessa;
+            if (stream) stream.getTracks().forEach(t => t.stop());
+        } catch (_) {}
+    }, 1800);
+
+    promessa.catch(() => {
+        if (cameraPromessaPreAquecida === promessa) {
+            cameraPromessaPreAquecida = null;
+            cameraPreAquecimentoOsId = null;
+            if (cameraPreAquecimentoTimer) clearTimeout(cameraPreAquecimentoTimer);
+            cameraPreAquecimentoTimer = null;
+        }
+    });
+}
+
+async function obterStreamCameraRapido(id) {
+    const destino = Number(id || 1);
+    if (cameraPromessaPreAquecida && cameraPreAquecimentoOsId === destino) {
+        const promessa = cameraPromessaPreAquecida;
+        cameraPromessaPreAquecida = null;
+        cameraPreAquecimentoOsId = null;
+        if (cameraPreAquecimentoTimer) clearTimeout(cameraPreAquecimentoTimer);
+        cameraPreAquecimentoTimer = null;
+        try {
+            const stream = await promessa;
+            if (stream) return stream;
+        } catch (_) {
+            // Se o pré-aquecimento falhou, fazemos a tentativa normal abaixo.
+        }
+    }
+    return obterStreamCameraComFallback();
+}
+
 async function obterStreamCameraComFallback() {
-    // v75: a primeira tentativa é deliberadamente simples para reduzir a negociação com o Android.
-    // Só recorremos aos perfis mais genéricos se o aparelho rejeitar a câmera traseira 1280x720.
+    // v76: começa com a restrição mais simples possível. A resolução final da foto
+    // já é limitada no canvas, então não precisamos negociar tamanho para abrir o sensor.
     const tentativas = [
+        { audio: false, video: { facingMode: 'environment' } },
         { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-        { audio: false, video: { facingMode: { ideal: 'environment' } } },
         { audio: false, video: true }
     ];
 
@@ -2271,7 +2323,6 @@ async function obterStreamCameraComFallback() {
         } catch (err) {
             ultimoErro = err;
             const nome = String(err?.name || '');
-            // Permissão negada não melhora com novas tentativas e poderia gerar prompts repetidos.
             if (nome === 'NotAllowedError' || nome === 'PermissionDeniedError' || nome === 'SecurityError') break;
         }
     }
@@ -2361,36 +2412,33 @@ async function abrirCameraInterna(id = osIdAtualFoto || 1) {
     cameraPreviewsLiberados = false;
     cameraFotosCapturadasSessao = 0;
     cameraProtecaoAgendada = false;
-    atualizarContadorCameraSessao();
 
-    // v75: pede a câmera antes de qualquer gravação no IndexedDB. Isso reduz disputa de CPU/I/O
-    // exatamente no instante em que o Android está inicializando o sensor.
+    // A tela aparece imediatamente. O stream pode já ter começado no pointerdown do botão.
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     definirEstadoCameraInterna('Abrindo câmera…', true);
 
     try {
-        mediaStreamCamera = await obterStreamCameraComFallback();
+        mediaStreamCamera = await obterStreamCameraRapido(osIdAtualFoto);
         if (sessao !== cameraSessaoId) { pararStreamCameraInterna(); return; }
 
         video.srcObject = mediaStreamCamera;
-        try { await video.play(); } catch (_) {}
-        await aguardarVideoPronto(video, 2500);
+        // Não esperamos video.play() terminar; ele pode atrasar em alguns Androids.
+        try { video.play().catch(() => {}); } catch (_) {}
+        await aguardarVideoPronto(video, 2200);
         if (sessao !== cameraSessaoId) { pararStreamCameraInterna(); return; }
 
         definirEstadoCameraInterna('', false);
-        atualizarContadorCameraSessao();
 
-        // Proteção do rascunho começa só depois de a imagem estar pronta para o usuário.
+        // O rascunho continua protegido, mas só começa depois de o primeiro quadro da câmera aparecer.
         agendarProtecaoCamera(sessao, osIdAtualFoto);
 
-        // Thumbnails ficam na RAM. Previews pesados, quando existirem, são liberados sem bloquear a câmera.
         if (deveLiberarPreviewsParaCamera()) {
             const liberarQuandoLivre = () => {
                 if (sessao === cameraSessaoId && mediaStreamCamera) liberarPreviewsBlobTemporarios();
             };
-            if (typeof requestIdleCallback === 'function') requestIdleCallback(liberarQuandoLivre, { timeout: 600 });
-            else setTimeout(liberarQuandoLivre, 150);
+            if (typeof requestIdleCallback === 'function') requestIdleCallback(liberarQuandoLivre, { timeout: 700 });
+            else setTimeout(liberarQuandoLivre, 180);
         }
     } catch (err) {
         if (sessao !== cameraSessaoId) return;
@@ -2413,7 +2461,6 @@ async function abrirCameraInterna(id = osIdAtualFoto || 1) {
         }
     }
 }
-
 async function fecharCameraInterna(limparMarcador = true, recarregarPreviews = true) {
     cameraSessaoId++;
     cameraProtecaoAgendada = false;
@@ -2446,14 +2493,11 @@ async function tirarFotoDoVideo() {
     const fotosAtuais = document.querySelectorAll(`#fotosContainer_${destinoId} .foto-item`).length;
     if (fotosAtuais >= 20) {
         mostrarToast('Limite de 20 fotos por O.S. atingido.', true);
-        await concluirCameraInterna();
         return;
     }
-
     if (btn) btn.disabled = true;
 
     try {
-        // O stream permanece ligado após o disparo: a próxima foto não precisa reabrir o hardware da câmera.
         const alvo = calcularDimensoesCamera(video.videoWidth, video.videoHeight);
         const canvas = document.createElement('canvas');
         canvas.width = alvo.width; canvas.height = alvo.height;
@@ -2469,42 +2513,19 @@ async function tirarFotoDoVideo() {
 
         const mediaId = await salvarBlobMidia(MEDIA_PHOTO_PREFIX, blob);
         if (mediaId) {
-            renderFotoItem(destinoId, { mediaId }, '');
+            // Usa o Blob recém-criado como preview imediatamente; o thumbnail menor é criado depois.
+            renderFotoItem(destinoId, { mediaId, previewBlob: blob }, '');
             agendarThumbnailFoto(mediaId, blob);
         } else {
             renderFotoItem(destinoId, await blobParaDataUrl(blob), '');
         }
 
-        cameraFotosCapturadasSessao++;
-        atualizarContadorCameraSessao();
-        // renderFotoItem agenda o autosave padrão de 3 s; durante a sessão usamos a fila específica
-        // para evitar um salvamento inesperado no meio de outro disparo.
         cancelarAutoSavePendente();
-        agendarPersistenciaFotoCamera();
-
-        const totalAgora = document.querySelectorAll(`#fotosContainer_${destinoId} .foto-item`).length;
-        if (totalAgora >= 20) {
-            mostrarToast('Foto salva. Limite de 20 fotos atingido.');
-            await concluirCameraInterna();
-            return;
-        }
-
-        // Feedback curto sem fechar a câmera; o próximo disparo já fica disponível.
-        const status = document.getElementById('cameraStatusInterna');
-        if (status) {
-            status.textContent = 'Foto salva';
-            status.classList.remove('hidden');
-            status.classList.remove('bg-black');
-            status.classList.add('bg-black/20');
-            const sessaoFeedback = cameraSessaoId;
-            setTimeout(() => {
-                if (sessaoFeedback === cameraSessaoId && mediaStreamCamera && status.textContent === 'Foto salva' && !document.getElementById('modalCameraInterna')?.classList.contains('hidden')) {
-                    status.classList.add('hidden');
-                    status.classList.remove('bg-black/20');
-                    status.classList.add('bg-black');
-                }
-            }, 320);
-        }
+        // Volta imediatamente para a O.S. como na v74. O problema tratado na v76 é a abertura,
+        // não o fluxo de captura.
+        await fecharCameraInterna(false, true);
+        mostrarToast(`Foto capturada e otimizada (${Math.max(1, Math.round(blob.size / 1024))} KB).`);
+        Promise.allSettled([limparMarcadorCapturaCamera(), autoSalvarRascunho(true)]).catch(() => {});
     } catch (err) {
         console.error('Erro ao capturar foto interna:', err);
         registrarErroApp('tirarFotoDoVideo', err);
@@ -2513,7 +2534,6 @@ async function tirarFotoDoVideo() {
         if (btn && mediaStreamCamera && !document.getElementById('modalCameraInterna')?.classList.contains('hidden')) btn.disabled = false;
     }
 }
-
 function calcularDimensoesCamera(width, height) {
     const CAMERA_MAX_DIM = 1280;
     let w = Math.max(1, Number(width) || 1), h = Math.max(1, Number(height) || 1);
@@ -2687,6 +2707,7 @@ async function carregarPreviewFotoBlob(img, mediaId) {
 
 function renderFotoItem(id, fonte, desc) {
     const mediaId = fonte && typeof fonte === 'object' ? String(fonte.mediaId || '') : '';
+    const previewBlob = fonte && typeof fonte === 'object' && fonte.previewBlob instanceof Blob ? fonte.previewBlob : null;
     const base64 = typeof fonte === 'string' ? fonte : String(fonte?.b64 || '');
     if (!mediaId && !dataUrlImagemSegura(base64)) { console.warn('Imagem ignorada: formato inválido.'); return; }
     const div = document.createElement('div'); div.className = 'foto-item flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative group';
@@ -2703,7 +2724,17 @@ function renderFotoItem(id, fonte, desc) {
             <textarea rows="2" placeholder="Descreva a foto (obrigatório para PDF)..." class="foto-desc w-full border-0 p-1 text-xs outline-none resize-none bg-transparent focus:ring-0 text-gray-700 font-medium">${escapeHTML(desc)}</textarea>
         </div>`;
     document.getElementById(`fotosContainer_${id}`).appendChild(div);
-    if (mediaId) carregarPreviewFotoBlob(div.querySelector('img'), mediaId).catch(e => console.warn('Preview de foto indisponível:', e));
+    if (mediaId) {
+        const img = div.querySelector('img');
+        if (previewBlob) {
+            const url = URL.createObjectURL(previewBlob);
+            img.dataset.objectUrl = url;
+            img.dataset.previewThumbnail = '0';
+            img.src = url;
+        } else {
+            carregarPreviewFotoBlob(img, mediaId).catch(e => console.warn('Preview de foto indisponível:', e));
+        }
+    }
     marcarFormularioAlterado();
 }
 
@@ -3023,7 +3054,7 @@ function adicionarBlocoOS(dados = null) {
                     <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> Evidências Visuais</h4>
                     <div class="flex gap-2">
                         <button type="button" onclick="adicionarFoto(${id}, 'galeria')" aria-label="Adicionar foto da galeria" title="Galeria" class="w-10 h-10 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition-colors flex items-center justify-center border border-gray-200"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></button>
-                        <button type="button" onclick="adicionarFoto(${id}, 'camera')" aria-label="Tirar foto com a câmera" title="Câmera" class="w-10 h-10 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow flex items-center justify-center"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></button>
+                        <button type="button" onpointerdown="preaquecerCameraInterna(${id})" onclick="adicionarFoto(${id}, 'camera')" aria-label="Tirar foto com a câmera" title="Câmera" class="w-10 h-10 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow flex items-center justify-center"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></button>
                     </div>
                 </div>
                 <div id="fotosContainer_${id}" class="grid grid-cols-2 sm:grid-cols-3 gap-4"></div>

@@ -1,7 +1,7 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v75';
+const CACHE_NAME = 'multios-pro-v76';
 
-// v75: todos os recursos necessários ao funcionamento do Multi-OS ficam no próprio projeto.
+// v76: todos os recursos necessários ao funcionamento do Multi-OS ficam no próprio projeto.
 // A nova versão só instala se TODOS estes arquivos existirem. Isso evita instalar uma versão
 // "meio offline" ou misturar bibliotecas antigas/externas com o código atual.
 const ASSETS_CRITICOS = [
@@ -94,7 +94,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // v75 não usa bibliotecas de terceiros em tempo de execução. Só intercepta recursos do próprio app.
+  // v76 não usa bibliotecas de terceiros em tempo de execução. Só intercepta recursos do próprio app.
   if (!mesmaOrigem) return;
 
   // Arquivos com ?v=75: rede primeiro para não misturar versões; cache local como fallback offline.

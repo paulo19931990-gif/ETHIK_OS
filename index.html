@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=75">
+    <link rel="manifest" href="./manifest.json?v=76">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -20,14 +20,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
 
-    <script src="./vendor/tailwindcss.js?v=75"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=75"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=75"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=75"></script>
-    <script src="./vendor/pdf-lib.min.js?v=75"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=75"></script>
-    <script src="./vendor/localforage.min.js?v=75"></script>
-    <script src="./vendor/pdf.min.js?v=75"></script>
+    <script src="./vendor/tailwindcss.js?v=76"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=76"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=76"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=76"></script>
+    <script src="./vendor/pdf-lib.min.js?v=76"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=76"></script>
+    <script src="./vendor/localforage.min.js?v=76"></script>
+    <script src="./vendor/pdf.min.js?v=76"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -42,7 +42,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=75').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=76').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -76,12 +76,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=75';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=76';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=75">
+    <link rel="stylesheet" href="style.css?v=76">
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -89,7 +89,7 @@
     <datalist id="dbCodigosPecas"></datalist>
     <datalist id="dbNomesPecas"></datalist>
 
-    <!-- Galeria persistente; a câmera principal da v75 funciona dentro do Multi-OS -->
+    <!-- Galeria persistente; a câmera principal da v76 funciona dentro do Multi-OS -->
     <input id="inputGaleriaFotos" type="file" accept="image/*" class="hidden" onchange="tratarRetornoFotoNativa(event, 'galeria')" oncancel="tratarCancelamentoFotoNativa(event, 'galeria')">
 
     <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 sm:translate-x-0 sm:left-auto sm:right-6 text-white px-5 py-3 rounded-xl shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-[200] flex items-center gap-3 font-semibold bg-gray-900">
@@ -105,7 +105,7 @@
                     <div class="font-bold text-sm">Câmera Multi-OS</div>
                     <div class="text-[11px] text-gray-300">Captura otimizada para relatório técnico</div>
                 </div>
-                <button type="button" onclick="concluirCameraInterna()" aria-label="Fechar câmera" class="text-white p-2 bg-gray-800/80 rounded-full backdrop-blur-md">
+                <button type="button" onclick="fecharCameraInterna()" aria-label="Fechar câmera" class="text-white p-2 bg-gray-800/80 rounded-full backdrop-blur-md">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
@@ -113,14 +113,12 @@
                 <video id="videoCamera" autoplay playsinline class="max-h-full max-w-full object-cover rounded-2xl"></video>
                 <div id="cameraStatusInterna" class="absolute inset-0 flex items-center justify-center bg-black text-white text-sm font-semibold">Abrindo câmera…</div>
             </div>
-            <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-3 p-4 z-10">
-                <div id="cameraContadorSessao" class="text-white/80 text-xs font-semibold text-left">Pronto para fotografar</div>
+            <div class="flex items-center justify-center p-4 z-10">
                 <button type="button" id="btnCapturarCameraInterna" onclick="tirarFotoDoVideo()" aria-label="Capturar foto" class="bg-white text-gray-900 rounded-full w-20 h-20 flex items-center justify-center shadow-[0_0_0_4px_rgba(255,255,255,0.3)] active:scale-95 transition-transform disabled:opacity-50">
                     <div class="w-16 h-16 rounded-full border-2 border-gray-900 flex items-center justify-center">
                         <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     </div>
                 </button>
-                <button type="button" onclick="concluirCameraInterna()" class="justify-self-end px-4 py-2.5 rounded-xl bg-white/15 border border-white/20 text-white text-xs font-black uppercase tracking-wide active:scale-95">Concluir</button>
             </div>
         </div>
     </div>
@@ -540,8 +538,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=75"></script>
-    <script src="bancoPecas.js?v=75"></script>
-    <script src="app.js?v=75"></script>
+    <script src="checklists/checklists.js?v=76"></script>
+    <script src="bancoPecas.js?v=76"></script>
+    <script src="app.js?v=76"></script>
 </body>
 </html>
