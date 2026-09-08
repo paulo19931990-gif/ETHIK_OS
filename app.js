@@ -842,6 +842,8 @@ let cameraProtecaoAgendada = false;
 let cameraPromessaPreAquecida = null;
 let cameraPreAquecimentoOsId = null;
 let cameraPreAquecimentoTimer = null;
+let cameraOrientacaoHandler = null;
+let cameraUltimaOrientacaoFisica = { beta: null, gamma: null, ts: 0 };
 let osIdAtualFoto = null;
 let timeoutRascunho = null;
 let filaRascunho = Promise.resolve();
@@ -861,7 +863,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 77;
+const APP_VERSION = 78;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -2191,7 +2193,84 @@ async function recarregarPreviewsBlobVisiveis(aguardarRender = false) {
     cameraPreviewsLiberados = false;
 }
 
+function iniciarMonitorOrientacaoCamera() {
+    if (cameraOrientacaoHandler || typeof window === 'undefined') return;
+    cameraOrientacaoHandler = event => {
+        const beta = Number(event?.beta);
+        const gamma = Number(event?.gamma);
+        if (!Number.isFinite(beta) || !Number.isFinite(gamma)) return;
+        cameraUltimaOrientacaoFisica = { beta, gamma, ts: Date.now() };
+    };
+    try { window.addEventListener('deviceorientation', cameraOrientacaoHandler, { passive: true }); } catch (_) {}
+}
+
+function pararMonitorOrientacaoCamera() {
+    if (cameraOrientacaoHandler) {
+        try { window.removeEventListener('deviceorientation', cameraOrientacaoHandler); } catch (_) {}
+        cameraOrientacaoHandler = null;
+    }
+    cameraUltimaOrientacaoFisica = { beta: null, gamma: null, ts: 0 };
+}
+
+function anguloOrientacaoTela() {
+    let angulo = Number(screen?.orientation?.angle);
+    if (!Number.isFinite(angulo)) angulo = Number(window.orientation);
+    if (!Number.isFinite(angulo)) return 0;
+    angulo = ((angulo % 360) + 360) % 360;
+    return angulo;
+}
+
+function obterRotacaoCorrecaoCamera(video) {
+    const vw = Number(video?.videoWidth) || 0;
+    const vh = Number(video?.videoHeight) || 0;
+    if (!vw || !vh) return 0;
+
+    const quadroPaisagem = vw > vh;
+    const telaPaisagem = window.innerWidth > window.innerHeight;
+    const anguloTela = anguloOrientacaoTela();
+
+    // Caso mais confiável: a tela girou para paisagem, mas o sensor continua
+    // entregando o quadro em retrato. Normalizamos os pixels antes de guardar.
+    if (telaPaisagem && !quadroPaisagem) {
+        if (anguloTela === 270) return -90;
+        if (anguloTela === 90) return 90;
+    }
+
+    // Alguns Androids mantêm a interface do PWA em retrato mesmo com o aparelho
+    // fisicamente deitado. Nesse caso usamos o sensor apenas quando a leitura é
+    // recente e claramente indica paisagem, evitando rotações por pequenos movimentos.
+    const o = cameraUltimaOrientacaoFisica;
+    const leituraRecente = o.ts && (Date.now() - o.ts) < 2500;
+    if (!quadroPaisagem && leituraRecente && Number.isFinite(o.gamma) && Number.isFinite(o.beta)) {
+        const absGamma = Math.abs(o.gamma);
+        const absBeta = Math.abs(o.beta);
+        if (absGamma >= 55 && absBeta <= 65) return o.gamma >= 0 ? 90 : -90;
+    }
+
+    return 0;
+}
+
+function criarCanvasFrameCamera(video) {
+    const alvo = calcularDimensoesCamera(video.videoWidth, video.videoHeight);
+    const rotacao = obterRotacaoCorrecaoCamera(video);
+    const gira90 = Math.abs(rotacao) === 90;
+    const canvas = document.createElement('canvas');
+    canvas.width = gira90 ? alvo.height : alvo.width;
+    canvas.height = gira90 ? alvo.width : alvo.height;
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    if (!ctx) throw new Error('Canvas da câmera indisponível.');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    if (rotacao) ctx.rotate(rotacao * Math.PI / 180);
+    ctx.drawImage(video, -alvo.width / 2, -alvo.height / 2, alvo.width, alvo.height);
+    ctx.restore();
+    return { canvas, rotacao };
+}
+
 function pararStreamCameraInterna() {
+    pararMonitorOrientacaoCamera();
     const video = document.getElementById('videoCamera');
     if (video) {
         try { video.pause(); } catch (_) {}
@@ -2417,6 +2496,7 @@ async function abrirCameraInterna(id = osIdAtualFoto || 1) {
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     definirEstadoCameraInterna('Abrindo câmera…', true);
+    iniciarMonitorOrientacaoCamera();
 
     try {
         mediaStreamCamera = await obterStreamCameraRapido(osIdAtualFoto);
@@ -2498,15 +2578,10 @@ async function tirarFotoDoVideo() {
     if (btn) btn.disabled = true;
 
     try {
-        const alvo = calcularDimensoesCamera(video.videoWidth, video.videoHeight);
-        const canvas = document.createElement('canvas');
-        canvas.width = alvo.width; canvas.height = alvo.height;
-        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
-        if (!ctx) throw new Error('Canvas da câmera indisponível.');
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, alvo.width, alvo.height);
-        ctx.drawImage(video, 0, 0, alvo.width, alvo.height);
-
+        // v78: grava exatamente a orientação visual do aparelho. Se o Android
+        // entregar o quadro bruto em retrato enquanto o técnico fotografa deitado,
+        // os pixels são girados antes da compressão/armazenamento.
+        const { canvas } = criarCanvasFrameCamera(video);
         const blob = await canvasParaBlobJPEG(canvas, FOTO_JPEG_QUALIDADE);
         canvas.width = 1; canvas.height = 1;
         if (!blob) throw new Error('Não foi possível comprimir a foto.');
@@ -2604,12 +2679,15 @@ async function comprimirComImageBitmap(file, dims) {
             resizeQuality: 'medium',
             imageOrientation: 'from-image'
         });
+        // O bitmap pode trocar largura/altura depois de aplicar a orientação EXIF.
+        // Usar as dimensões reais evita esticar ou regravar a foto na orientação errada.
+        const saida = calcularDimensoesFoto(bitmap.width, bitmap.height);
         const canvas = document.createElement('canvas');
-        canvas.width = alvo.width; canvas.height = alvo.height;
+        canvas.width = saida.width; canvas.height = saida.height;
         const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) throw new Error('Canvas indisponível.');
-        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, alvo.width, alvo.height);
-        ctx.drawImage(bitmap, 0, 0, alvo.width, alvo.height);
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, saida.width, saida.height);
+        ctx.drawImage(bitmap, 0, 0, saida.width, saida.height);
         return await canvasParaBlobJPEG(canvas, FOTO_JPEG_QUALIDADE);
     } catch (e) {
         console.warn('Redução antecipada via ImageBitmap indisponível; usando fallback.', e);
@@ -3287,10 +3365,15 @@ async function construirPDFBytes(onProgressCallback) {
         const fotoItems = document.getElementById(`fotosContainer_${id}`).querySelectorAll('.foto-item');
         if (fotoItems.length > 0) {
             cy += 12; if (cy > 260) { docOS.addPage(); cy = margemTopoSegura; } docOS.setFont("helvetica", "bold"); docOS.setFontSize(10); docOS.text("EVIDÊNCIAS FOTOGRÁFICAS", 15, cy); cy += 8;
+            // v78: layout inteligente. Fotos horizontais usam praticamente toda a largura
+            // da folha para preservar detalhes; fotos verticais continuam duas por linha.
             let col = 0; let maxRowH = 0; let startY = cy;
+            const limiteInferiorFotos = 260;
+            const avancarLinhaRetrato = () => {
+                if (col > 0) { startY += maxRowH + 10; col = 0; maxRowH = 0; }
+            };
             for(let f = 0; f < fotoItems.length; f++) {
                 let fotoPct = basePct + ((f / fotoItems.length) * (75 / blocosOS.length) * 0.7); await reportProgress(fotoPct, `Anexando foto ${f + 1} de ${fotoItems.length} (OS ${idx + 1})...`);
-                if (col === 0 && startY > 195) { docOS.addPage(); startY = margemTopoSegura; }
                 const fItem = fotoItems[f]; const mediaId = fItem.querySelector('.foto-media-id')?.value || ''; const base64 = fItem.querySelector('.foto-b64')?.value || ''; const desc = fItem.querySelector('.foto-desc').value;
                 let fonteImagem = base64; let objectUrlTemporaria = null;
                 if (mediaId) {
@@ -3305,14 +3388,56 @@ async function construirPDFBytes(onProgressCallback) {
                     i.src = fonteImagem;
                 });
                 if (!imagemCarregada) { if (objectUrlTemporaria) URL.revokeObjectURL(objectUrlTemporaria); continue; }
-                let renderW = 85; let renderH = (imagemCarregada.height / imagemCarregada.width) * 85; if (renderH > 65) { renderH = 65; renderW = (imagemCarregada.width / imagemCarregada.height) * 65; }
-                let boxX = col === 0 ? 15 : 110; let imgX = boxX + (85 - renderW) / 2;
-                docOS.addImage(imagemCarregada, 'JPEG', imgX, startY, renderW, renderH);
+
+                const imgW = imagemCarregada.naturalWidth || imagemCarregada.width || 1;
+                const imgH = imagemCarregada.naturalHeight || imagemCarregada.height || 1;
+                const horizontal = imgW > imgH * 1.08;
+
+                if (horizontal) {
+                    // Fecha uma eventual linha de fotos verticais antes da foto panorâmica.
+                    avancarLinhaRetrato();
+                    const boxW = 180;
+                    let renderW = boxW;
+                    let renderH = (imgH / imgW) * renderW;
+                    const maxH = 92;
+                    if (renderH > maxH) { renderH = maxH; renderW = (imgW / imgH) * maxH; }
+                    const textLines = docOS.splitTextToSize(desc, boxW);
+                    const totalElementH = renderH + 5 + (textLines.length * 3.5);
+                    if (startY + totalElementH > limiteInferiorFotos) { docOS.addPage(); startY = margemTopoSegura; }
+                    const boxX = 15;
+                    const imgX = boxX + (boxW - renderW) / 2;
+                    docOS.addImage(imagemCarregada, 'JPEG', imgX, startY, renderW, renderH);
+                    docOS.setFont("helvetica", "normal"); docOS.setFontSize(8);
+                    docOS.text(textLines, boxX, startY + renderH + 5);
+                    startY += totalElementH + 10;
+                } else {
+                    const boxW = 85;
+                    let renderW = boxW;
+                    let renderH = (imgH / imgW) * renderW;
+                    const maxH = 72;
+                    if (renderH > maxH) { renderH = maxH; renderW = (imgW / imgH) * maxH; }
+                    const textLines = docOS.splitTextToSize(desc, boxW);
+                    const totalElementH = renderH + 5 + (textLines.length * 3.5);
+
+                    // Se a segunda foto da linha não couber, deixa a primeira sozinha e
+                    // continua na linha/página seguinte, sem sobrepor rodapé.
+                    if (col === 1 && startY + totalElementH > limiteInferiorFotos) avancarLinhaRetrato();
+                    if (col === 0 && startY + totalElementH > limiteInferiorFotos) { docOS.addPage(); startY = margemTopoSegura; }
+
+                    const boxX = col === 0 ? 15 : 110;
+                    const imgX = boxX + (boxW - renderW) / 2;
+                    docOS.addImage(imagemCarregada, 'JPEG', imgX, startY, renderW, renderH);
+                    docOS.setFont("helvetica", "normal"); docOS.setFontSize(8);
+                    docOS.text(textLines, boxX, startY + renderH + 5);
+                    if (totalElementH > maxRowH) maxRowH = totalElementH;
+                    col++;
+                    if (col === 2) avancarLinhaRetrato();
+                }
+
                 if (objectUrlTemporaria) URL.revokeObjectURL(objectUrlTemporaria);
-                docOS.setFont("helvetica", "normal"); docOS.setFontSize(8); const textLines = docOS.splitTextToSize(desc, 85); let textY = startY + renderH + 5; docOS.text(textLines, boxX, textY);
-                let totalElementH = renderH + 5 + (textLines.length * 3.5); if (totalElementH > maxRowH) maxRowH = totalElementH;
-                col++; if (col === 2 || f === fotoItems.length - 1) { col = 0; startY += maxRowH + 10; maxRowH = 0; }
-            } cy = startY;
+            }
+            avancarLinhaRetrato();
+            cy = startY;
         }
         const paginasDestaOS = docOS.internal.getNumberOfPages();
         for (let i = 1; i <= paginasDestaOS; i++) { docOS.setPage(i); if (imgObject && logoImgData) docOS.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, finalW, finalH); }
