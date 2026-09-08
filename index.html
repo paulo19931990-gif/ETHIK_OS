@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=78">
+    <link rel="manifest" href="./manifest.json?v=79">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -20,14 +20,26 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
 
-    <script src="./vendor/tailwindcss.js?v=78"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=78"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=78"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=78"></script>
-    <script src="./vendor/pdf-lib.min.js?v=78"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=78"></script>
-    <script src="./vendor/localforage.min.js?v=78"></script>
-    <script src="./vendor/pdf.min.js?v=78"></script>
+    <!-- v79: aplica o tema salvo antes de desenhar a interface, evitando piscar claro/escuro -->
+    <script>
+        (() => {
+            try {
+                const temaSalvo = localStorage.getItem('multi_os_theme');
+                document.documentElement.dataset.theme = temaSalvo === 'dark' ? 'dark' : 'light';
+            } catch (_) {
+                document.documentElement.dataset.theme = 'light';
+            }
+        })();
+    </script>
+
+    <script src="./vendor/tailwindcss.js?v=79"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=79"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=79"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=79"></script>
+    <script src="./vendor/pdf-lib.min.js?v=79"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=79"></script>
+    <script src="./vendor/localforage.min.js?v=79"></script>
+    <script src="./vendor/pdf.min.js?v=79"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -42,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=78').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=79').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -76,12 +88,194 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=78';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=79';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=78">
+    <link rel="stylesheet" href="style.css?v=79">
+
+    <!-- v79: tema escuro + acabamento visual do Histórico sem alterar o PDF ou os dados -->
+    <style id="multiOsThemeStyles">
+        :root {
+            --app-bg: #f9fafb;
+            --app-surface: #ffffff;
+            --app-surface-soft: #f8fafc;
+            --app-border: #e5e7eb;
+            --app-text: #111827;
+            --app-muted: #6b7280;
+            --app-muted-2: #9ca3af;
+            --app-input: #ffffff;
+            --app-shadow: 0 8px 25px rgba(15, 23, 42, .06);
+        }
+        html[data-theme="dark"] {
+            color-scheme: dark;
+            --app-bg: #0b1220;
+            --app-surface: #111c2d;
+            --app-surface-soft: #172235;
+            --app-border: #2a3b52;
+            --app-text: #f3f4f6;
+            --app-muted: #a8b3c3;
+            --app-muted-2: #7f8da2;
+            --app-input: #0f1a2b;
+            --app-shadow: 0 10px 28px rgba(0, 0, 0, .24);
+        }
+        body { transition: background-color .2s ease, color .2s ease; }
+        html[data-theme="dark"] body { background: var(--app-bg) !important; color: var(--app-text) !important; }
+
+        /* Conversão segura das utilidades claras mais usadas na interface. */
+        html[data-theme="dark"] .bg-white:not(.pdf-page-canvas):not(.canvas-container),
+        html[data-theme="dark"] .bg-gray-50,
+        html[data-theme="dark"] .bg-gray-50\/50 { background-color: var(--app-surface) !important; }
+        html[data-theme="dark"] .bg-gray-100 { background-color: var(--app-surface-soft) !important; }
+        html[data-theme="dark"] .bg-gray-200 { background-color: #243247 !important; }
+        html[data-theme="dark"] .bg-blue-50 { background-color: #10294a !important; }
+        html[data-theme="dark"] .bg-blue-100 { background-color: #17365f !important; }
+        html[data-theme="dark"] .bg-indigo-50 { background-color: #252654 !important; }
+        html[data-theme="dark"] .bg-red-50 { background-color: #3a1c25 !important; }
+        html[data-theme="dark"] .bg-amber-50 { background-color: #3b3219 !important; }
+        html[data-theme="dark"] .text-blue-800,
+        html[data-theme="dark"] .text-blue-700,
+        html[data-theme="dark"] .text-blue-600 { color: #93c5fd !important; }
+        html[data-theme="dark"] .text-indigo-700,
+        html[data-theme="dark"] .text-indigo-600 { color: #c7d2fe !important; }
+        html[data-theme="dark"] .text-red-700,
+        html[data-theme="dark"] .text-red-600 { color: #fca5a5 !important; }
+        html[data-theme="dark"] .text-amber-800,
+        html[data-theme="dark"] .text-amber-700 { color: #fde68a !important; }
+        html[data-theme="dark"] .border-gray-100,
+        html[data-theme="dark"] .border-gray-200,
+        html[data-theme="dark"] .border-gray-300 { border-color: var(--app-border) !important; }
+        html[data-theme="dark"] .text-gray-900,
+        html[data-theme="dark"] .text-gray-800,
+        html[data-theme="dark"] .text-gray-700 { color: var(--app-text) !important; }
+        html[data-theme="dark"] .text-gray-600,
+        html[data-theme="dark"] .text-gray-500 { color: var(--app-muted) !important; }
+        html[data-theme="dark"] .text-gray-400 { color: var(--app-muted-2) !important; }
+        html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+        html[data-theme="dark"] textarea,
+        html[data-theme="dark"] select {
+            background-color: var(--app-input) !important;
+            color: var(--app-text) !important;
+            border-color: var(--app-border) !important;
+        }
+        html[data-theme="dark"] input::placeholder,
+        html[data-theme="dark"] textarea::placeholder { color: #75849a !important; }
+        html[data-theme="dark"] table { color: var(--app-text); }
+        html[data-theme="dark"] .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--app-border) !important; }
+        html[data-theme="dark"] .shadow-sm,
+        html[data-theme="dark"] .shadow-md { box-shadow: var(--app-shadow) !important; }
+
+        /* Mantém áreas que precisam ser realmente brancas para assinatura/PDF. */
+        html[data-theme="dark"] .canvas-container,
+        html[data-theme="dark"] #modalAssinaturaExpandida .bg-white,
+        html[data-theme="dark"] .pdf-page-canvas { background: #fff !important; }
+        html[data-theme="dark"] #modalAssinaturaExpandida .canvas-container * { color: #6b7280 !important; }
+
+        .theme-toggle-btn {
+            width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
+            border: 1px solid #4b5563; color: #d1d5db; transition: .2s ease; flex: 0 0 auto;
+        }
+        .theme-toggle-btn:hover { border-color: #60a5fa; color: #fff; background: rgba(59,130,246,.12); }
+        .theme-icon { width: 19px; height: 19px; }
+        html[data-theme="dark"] #themeIconMoon { display:none !important; }
+        html[data-theme="dark"] #themeIconSun { display:block !important; }
+        html[data-theme="light"] #themeIconMoon { display:block !important; }
+        html[data-theme="light"] #themeIconSun { display:none !important; }
+        html[data-theme="dark"] #headerLogoContainer { background:#fff !important; }
+
+        /* Histórico v79 */
+        .history-shell { max-width: 920px; margin: 0 auto; }
+        .history-hero {
+            display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px;
+        }
+        .history-title-wrap { min-width: 0; }
+        .history-title { display: flex; align-items: center; gap: 10px; color: var(--app-text); font-size: 1.7rem; font-weight: 900; letter-spacing: -.025em; }
+        .history-title-icon { width: 39px; height: 39px; border-radius: 13px; display:flex; align-items:center; justify-content:center; background:#eff6ff; color:#2563eb; }
+        .history-title-icon svg { width:21px; height:21px; }
+        html[data-theme="dark"] .history-title-icon { background:#132b4f; color:#60a5fa; }
+        .history-subtitle { margin-top: 3px; color: var(--app-muted); font-size: .82rem; font-weight: 500; }
+        .history-logo-action {
+            display: inline-flex; align-items: center; gap: 9px; padding: 10px 13px; border: 1px solid var(--app-border);
+            border-radius: 12px; background: var(--app-surface); color: var(--app-text); font-size: .78rem; font-weight: 800;
+            cursor: pointer; box-shadow: 0 3px 12px rgba(15,23,42,.05); white-space: nowrap;
+        }
+        .history-logo-action:hover { border-color:#60a5fa; background:#eff6ff; color:#1d4ed8; }
+        html[data-theme="dark"] .history-logo-action:hover { background:#132b4f; color:#bfdbfe; }
+        .history-logo-mini { width: 27px; height: 27px; border-radius: 7px; object-fit: contain; background:#fff; padding:2px; display:none; }
+
+        .history-toolbar, .history-panel, .history-storage, .history-list-head {
+            background: var(--app-surface); border: 1px solid var(--app-border); box-shadow: var(--app-shadow);
+        }
+        .history-toolbar { padding: 12px; border-radius: 16px; display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:10px; margin-bottom:14px; }
+        .history-search { position:relative; }
+        .history-search svg { position:absolute; left:13px; top:50%; transform:translateY(-50%); width:19px; height:19px; color:var(--app-muted-2); pointer-events:none; }
+        .history-search input { width:100%; height:44px; border:1px solid var(--app-border); border-radius:12px; padding:0 13px 0 42px; background:var(--app-input); color:var(--app-text); outline:none; font-size:.9rem; }
+        .history-search input:focus, .history-sort:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.13); }
+        .history-sort { height:44px; border:1px solid var(--app-border); border-radius:12px; padding:0 10px; background:var(--app-input); color:var(--app-text); font-weight:700; font-size:.78rem; outline:none; }
+
+        .history-panel { border-radius:16px; overflow:hidden; margin-bottom:14px; }
+        .history-panel-title { padding:13px 15px; border-bottom:1px solid var(--app-border); display:flex; align-items:center; gap:9px; font-size:.84rem; font-weight:900; color:var(--app-text); }
+        .history-panel-title svg { width:19px; height:19px; color:#2563eb; }
+        .history-actions-grid { padding:12px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+        .history-action { min-height:44px; border-radius:11px; padding:9px 11px; display:flex; align-items:center; justify-content:center; gap:8px; font-size:.78rem; font-weight:850; transition:.16s ease; text-align:center; }
+        .history-action svg { width:17px; height:17px; flex:none; }
+        .history-action-neutral { color:var(--app-text); background:var(--app-surface-soft); border:1px solid var(--app-border); }
+        .history-action-neutral:hover { border-color:#94a3b8; }
+        .history-action-primary { color:#fff; background:linear-gradient(135deg,#4f46e5,#4338ca); border:1px solid #6366f1; }
+        .history-action-primary-soft { color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; }
+        html[data-theme="dark"] .history-action-primary-soft { color:#c7d2fe; background:#252654; border-color:#4f46e5; }
+        .history-action-warn { color:#92400e; background:#fffbeb; border:1px solid #fde68a; }
+        html[data-theme="dark"] .history-action-warn { color:#fde68a; background:#3b3219; border-color:#755f1a; }
+        .history-action-danger { color:#fff; background:linear-gradient(135deg,#ef4444,#dc2626); border:1px solid #ef4444; }
+
+        .history-storage { padding:14px 15px; border-radius:16px; margin-bottom:16px; }
+        .history-storage-top { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:9px; }
+        .history-storage-name { display:flex; align-items:center; gap:8px; color:var(--app-text); font-size:.78rem; font-weight:900; }
+        .history-storage-name svg { width:18px; height:18px; color:#2563eb; }
+        .history-storage-value { color:var(--app-muted); font-size:.76rem; font-weight:800; }
+        .history-storage-track { width:100%; height:7px; background:var(--app-surface-soft); border-radius:999px; overflow:hidden; }
+
+        .history-list-head { padding:11px 13px; border-radius:14px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .history-list-title { display:flex; align-items:center; gap:8px; color:var(--app-text); font-size:.86rem; font-weight:900; }
+        .history-list-title svg { width:19px; height:19px; color:#2563eb; }
+        .history-count { color:#2563eb; font-size:.75rem; font-weight:850; }
+
+        #historicoList { display:flex; flex-direction:column; gap:10px; }
+        .history-card { background:var(--app-surface); border:1px solid var(--app-border); border-radius:16px; padding:13px; box-shadow:var(--app-shadow); transition:.16s ease; }
+        .history-card:hover { transform:translateY(-1px); border-color:#bfdbfe; }
+        html[data-theme="dark"] .history-card:hover { border-color:#315681; }
+        .history-card-main { display:flex; align-items:flex-start; gap:11px; min-width:0; }
+        .history-card-icon { width:42px; height:42px; flex:0 0 auto; border-radius:12px; display:flex; align-items:center; justify-content:center; background:#eff6ff; color:#2563eb; }
+        html[data-theme="dark"] .history-card-icon { background:#132b4f; color:#93c5fd; }
+        .history-card-icon svg { width:21px; height:21px; }
+        .history-card-content { flex:1; min-width:0; }
+        .history-client { color:var(--app-text); font-weight:900; font-size:.96rem; line-height:1.24; overflow-wrap:anywhere; }
+        .history-meta { margin-top:5px; display:flex; flex-wrap:wrap; align-items:center; gap:5px 8px; color:var(--app-muted); font-size:.74rem; font-weight:650; }
+        .history-meta span { display:inline-flex; align-items:center; gap:4px; min-width:0; }
+        .history-meta svg { width:14px; height:14px; flex:none; }
+        .history-date { margin-top:5px; color:var(--app-muted-2); font-size:.66rem; font-weight:700; letter-spacing:.04em; }
+        .history-card-actions { display:grid; grid-template-columns:48px minmax(0,1fr); gap:9px; margin-top:11px; }
+        .history-delete-btn { height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:#dc2626; background:#fef2f2; border:1px solid #fecaca; }
+        .history-delete-btn:hover { background:#fee2e2; }
+        html[data-theme="dark"] .history-delete-btn { color:#fca5a5; background:#3a1c25; border-color:#6f2836; }
+        .history-open-btn { height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; gap:7px; color:white; background:linear-gradient(135deg,#2563eb,#1d4ed8); font-size:.78rem; font-weight:900; text-transform:uppercase; letter-spacing:.03em; box-shadow:0 5px 14px rgba(37,99,235,.2); }
+        .history-open-btn svg { width:16px; height:16px; }
+        .history-empty { background:var(--app-surface); border:1px dashed var(--app-border); color:var(--app-muted); border-radius:16px; padding:34px 18px; text-align:center; font-weight:700; }
+
+        @media (max-width: 640px) {
+            .history-hero { align-items:flex-start; }
+            .history-title { font-size:1.55rem; }
+            .history-subtitle { max-width:220px; }
+            .history-logo-action { padding:9px 10px; font-size:.72rem; }
+            .history-toolbar { grid-template-columns:1fr; }
+            .history-actions-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+        }
+        @media (max-width: 380px) {
+            .history-logo-action span { display:none; }
+            .history-logo-action { width:42px; justify-content:center; padding:0; }
+        }
+    </style>
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -283,11 +477,18 @@
                         <span class="text-[10px] text-gray-400 font-medium uppercase tracking-widest leading-tight">Enterprise</span>
                     </div>
                 </div>
-                <!-- Botão Instalar App -->
-                <button onclick="acionarInstalacaoApp()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-xs font-semibold">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    Instalar App
-                </button>
+                <div class="flex items-center gap-2">
+                    <!-- v79: alternância Claro/Escuro, persistida somente como preferência visual -->
+                    <button type="button" id="themeToggleButton" onclick="alternarTemaApp()" class="theme-toggle-btn" aria-label="Ativar modo escuro" title="Alternar modo claro/escuro">
+                        <svg id="themeIconMoon" class="theme-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646a9.003 9.003 0 1011.708 11.708z"></path></svg>
+                        <svg id="themeIconSun" class="theme-icon hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    </button>
+                    <!-- Botão Instalar App -->
+                    <button onclick="acionarInstalacaoApp()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-xs font-semibold">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Instalar App
+                    </button>
+                </div>
             </div>
             <div class="flex overflow-x-auto hide-scrollbar border-t border-gray-800">
                 <button id="btnNavNovaOs" onclick="switchTab('novaOs')" class="nav-btn border-blue-500 text-white bg-gray-800/50 flex-1 flex justify-center items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 transition-all whitespace-nowrap">
@@ -397,41 +598,88 @@
 
         <!-- ABA: HISTÓRICO -->
         <div id="historico" class="tab-content hidden">
-            <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <h2 class="text-2xl font-black text-gray-900 tracking-tight">Histórico</h2>
-                <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                    <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="Buscar cliente..." class="w-full sm:w-48 px-4 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                    <button onclick="abrirModalExportar()" class="px-4 py-2 bg-gray-800 text-white rounded-lg font-bold shadow-sm hover:bg-gray-900 text-sm">Backup</button>
-                    <label class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-bold shadow-sm hover:bg-gray-300 text-sm cursor-pointer">
-                        Importar Backup <input type="file" accept=".json,application/json" onchange="importarBackupJSON(event)" class="hidden">
-                    </label>
-                    <button onclick="exportarBancoPecas()" title="Exportar a lista de peças para outro técnico" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold shadow-sm hover:bg-indigo-700 text-sm flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2h-5.586a1 1 0 00-.707.293L5.293 8.707A1 1 0 005 9.414V19a2 2 0 002 2z"></path></svg>
-                        Exportar Peças
-                    </button>
-                    <label title="Adicionar peças de outro técnico sem apagar as suas" class="px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg font-bold shadow-sm hover:bg-indigo-100 text-sm cursor-pointer flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v12m0 0l-3-3m3 3l3-3M5 20h14"></path></svg>
-                        Importar Peças
-                        <input type="file" accept=".json,application/json" onchange="importarBancoPecasJSON(event)" class="hidden">
-                    </label>
-                    <button onclick="abrirLixeira()" class="px-4 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg font-bold shadow-sm hover:bg-amber-100 text-sm">Lixeira</button>
-                    <button onclick="limparTodoHistorico()" class="px-4 py-2 bg-red-600 text-white rounded-lg font-bold shadow-sm hover:bg-red-700 text-sm">Mover Tudo p/ Lixeira</button>
-                </div>
-            </div>
-            
-            <div class="mb-6 bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex justify-between items-center gap-4">
-                <div class="flex-1">
-                    <div class="flex justify-between text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                        <span>Armazenamento Dispositivo</span>
-                        <span id="storage-text">Calculando...</span>
+            <div class="history-shell">
+                <div class="history-hero">
+                    <div class="history-title-wrap">
+                        <div class="history-title">
+                            <span class="history-title-icon">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </span>
+                            <span>Histórico</span>
+                        </div>
+                        <p class="history-subtitle">Consulte, encontre e organize suas Ordens de Serviço.</p>
                     </div>
-                    <div class="w-full bg-gray-100 rounded-full h-2">
-                        <div id="storage-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
-                    </div>
+                    <label class="history-logo-action" title="Trocar o logótipo usado no aplicativo e nos PDFs">
+                        <img id="historicoLogoPreview" class="history-logo-mini" src="" alt="Logo atual">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <span>Trocar Logo</span>
+                        <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="hidden">
+                    </label>
                 </div>
-            </div>
 
-            <div id="historicoList" class="space-y-4"></div>
+                <div class="history-toolbar">
+                    <div class="history-search">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.65a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="Buscar cliente, O.S. ou equipamento...">
+                    </div>
+                    <select id="ordenacaoHistorico" class="history-sort" onchange="carregarHistorico()" aria-label="Ordenar histórico">
+                        <option value="recentes">Mais recentes</option>
+                        <option value="antigas">Mais antigas</option>
+                        <option value="cliente">Cliente A–Z</option>
+                    </select>
+                </div>
+
+                <section class="history-panel" aria-label="Ações de dados">
+                    <div class="history-panel-title">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path></svg>
+                        Ações de Dados
+                    </div>
+                    <div class="history-actions-grid">
+                        <button onclick="abrirModalExportar()" class="history-action history-action-neutral">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h8l4 4v12a2 2 0 01-2 2H7a2 2 0 01-2-2V5zm4 0v5h6V5M9 17h6"></path></svg> Backup
+                        </button>
+                        <label class="history-action history-action-neutral cursor-pointer">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v12m0 0l-3-3m3 3l3-3M5 20h14"></path></svg> Importar Backup
+                            <input type="file" accept=".json,application/json" onchange="importarBackupJSON(event)" class="hidden">
+                        </label>
+                        <button onclick="exportarBancoPecas()" title="Exportar a lista de peças para outro técnico" class="history-action history-action-primary">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2h-5.586a1 1 0 00-.707.293L5.293 8.707A1 1 0 005 9.414V19a2 2 0 002 2z"></path></svg> Exportar Peças
+                        </button>
+                        <label title="Adicionar peças de outro técnico sem apagar as suas" class="history-action history-action-primary-soft cursor-pointer">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v12m0 0l-3-3m3 3l3-3M5 20h14"></path></svg> Importar Peças
+                            <input type="file" accept=".json,application/json" onchange="importarBancoPecasJSON(event)" class="hidden">
+                        </label>
+                        <button onclick="abrirLixeira()" class="history-action history-action-warn">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg> Lixeira
+                        </button>
+                        <button onclick="limparTodoHistorico()" class="history-action history-action-danger">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg> Mover Tudo p/ Lixeira
+                        </button>
+                    </div>
+                </section>
+
+                <div class="history-storage">
+                    <div class="history-storage-top">
+                        <span class="history-storage-name">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path></svg>
+                            Armazenamento do Dispositivo
+                        </span>
+                        <span id="storage-text" class="history-storage-value">Calculando...</span>
+                    </div>
+                    <div class="history-storage-track">
+                        <div id="storage-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width:0%"></div>
+                    </div>
+                </div>
+
+                <div class="history-list-head">
+                    <div class="history-list-title">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Ordens de Serviço
+                    </div>
+                    <span id="historicoContador" class="history-count">Total: 0</span>
+                </div>
+                <div id="historicoList"></div>
+            </div>
         </div>
 
         <!-- ABA: BANCO DE HORAS -->
@@ -538,8 +786,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=78"></script>
-    <script src="bancoPecas.js?v=78"></script>
-    <script src="app.js?v=78"></script>
+    <script src="checklists/checklists.js?v=79"></script>
+    <script src="bancoPecas.js?v=79"></script>
+    <script src="app.js?v=79"></script>
 </body>
 </html>

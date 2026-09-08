@@ -863,7 +863,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 78;
+const APP_VERSION = 79;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -1475,6 +1475,42 @@ async function acionarInstalacaoApp() {
     else { alert("Instalação automática não disponível. Adicione manualmente ao ecrã principal usando o menu do seu navegador."); }
 }
 
+const TEMA_APP_KEY = 'multi_os_theme';
+
+function aplicarTemaApp(tema, persistir = false) {
+    const temaFinal = tema === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = temaFinal;
+    if (persistir) {
+        try { localStorage.setItem(TEMA_APP_KEY, temaFinal); } catch (_) {}
+    }
+    const iconeLua = document.getElementById('themeIconMoon');
+    const iconeSol = document.getElementById('themeIconSun');
+    const botao = document.getElementById('themeToggleButton');
+    const escuro = temaFinal === 'dark';
+    if (iconeLua) iconeLua.classList.toggle('hidden', escuro);
+    if (iconeSol) iconeSol.classList.toggle('hidden', !escuro);
+    if (botao) {
+        botao.setAttribute('aria-label', escuro ? 'Ativar modo claro' : 'Ativar modo escuro');
+        botao.title = escuro ? 'Mudar para modo claro' : 'Mudar para modo escuro';
+    }
+    const metaTema = document.querySelector('meta[name="theme-color"]');
+    if (metaTema) metaTema.setAttribute('content', '#111827');
+}
+
+function inicializarTemaApp() {
+    let tema = document.documentElement.dataset.theme || 'light';
+    try {
+        const salvo = localStorage.getItem(TEMA_APP_KEY);
+        if (salvo === 'dark' || salvo === 'light') tema = salvo;
+    } catch (_) {}
+    aplicarTemaApp(tema, false);
+}
+
+function alternarTemaApp() {
+    const atual = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    aplicarTemaApp(atual === 'dark' ? 'light' : 'dark', true);
+}
+
 async function atualizarIndicadorArmazenamento() {
     const elText = document.getElementById('storage-text'); const elBar = document.getElementById('storage-bar');
     if (navigator.storage && navigator.storage.estimate) {
@@ -1498,6 +1534,8 @@ async function carregarLogoDoArmazenamento() {
                 imgObject = img;
                 if(document.getElementById('headerLogo')) document.getElementById('headerLogo').src = logoSalvo;
                 if(document.getElementById('headerLogoContainer')) document.getElementById('headerLogoContainer').classList.remove('hidden');
+                const previewHistorico = document.getElementById('historicoLogoPreview');
+                if (previewHistorico) { previewHistorico.src = logoSalvo; previewHistorico.style.display = 'block'; }
             };
         }
     } catch(e) { console.error('Erro logo:', e); }
@@ -1826,6 +1864,7 @@ async function salvarNomeTecnicoBh() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+    inicializarTemaApp();
     await solicitarPersistenciaArmazenamento();
     await iniciarBancoPecas(); // Inicializa o banco de dados e atualiza as HTML datalists
     
@@ -3252,32 +3291,94 @@ async function salvarDocumento(silencioso = false) {
     }
 }
 
-function filtrarHistorico() { const termo = document.getElementById('buscaHistorico').value.toLowerCase(); document.querySelectorAll('.historico-item').forEach(item => { item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none'; }); }
+function atualizarContadorHistoricoVisivel() {
+    const contador = document.getElementById('historicoContador');
+    if (!contador) return;
+    const itens = [...document.querySelectorAll('.historico-item')];
+    const visiveis = itens.filter(item => item.style.display !== 'none').length;
+    const total = itens.length;
+    contador.textContent = visiveis === total ? `Total: ${total}` : `${visiveis} de ${total}`;
+}
+
+function filtrarHistorico() {
+    const input = document.getElementById('buscaHistorico');
+    const termo = String(input?.value || '').trim().toLowerCase();
+    document.querySelectorAll('.historico-item').forEach(item => {
+        item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none';
+    });
+    atualizarContadorHistoricoVisivel();
+}
+
+function ordenarHistoricoParaTela(lista) {
+    const modo = document.getElementById('ordenacaoHistorico')?.value || 'recentes';
+    const copia = [...lista];
+    if (modo === 'cliente') {
+        copia.sort((a, b) => String(a.clienteEmpresa || a.nomeClienteFinal || '').localeCompare(String(b.clienteEmpresa || b.nomeClienteFinal || ''), 'pt-BR', { sensitivity: 'base' }));
+        return copia;
+    }
+    const obterData = item => {
+        const valor = new Date(item?.dataAtualizacao || 0).getTime();
+        return Number.isFinite(valor) ? valor : 0;
+    };
+    copia.sort((a, b) => modo === 'antigas' ? obterData(a) - obterData(b) : obterData(b) - obterData(a));
+    return copia;
+}
 
 async function carregarHistorico() {
     try {
-    const list = document.getElementById('historicoList'); let historicoMeta = await obterHistoricoSalvo();
-    historicoMeta = Array.isArray(historicoMeta) ? historicoMeta.filter(doc => doc && idLocalSeguro(doc.id)) : [];
-    if(historicoMeta.length === 0) return list.innerHTML = '<div class="bg-white p-8 rounded-xl border border-gray-200 text-center text-gray-500 font-medium">Nenhum documento salvo.</div>';
-    
-    list.innerHTML = historicoMeta.map(doc => `
-    <div class="historico-item bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-md transition-all">
-        <div class="flex-1">
-            <h3 class="font-black text-gray-900 text-lg mb-1">${escapeHTML(doc.clienteEmpresa || doc.nomeClienteFinal || 'Desconhecido')}</h3>
-            <div class="flex flex-wrap items-center gap-3 text-sm text-gray-500 font-medium">
-                <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg> OS #${escapeHTML(doc.osNumResumo || 'N/A')}</span>
-                <span class="text-gray-300">|</span>
-                <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${escapeHTML(doc.equipamentoResumo || 'Diversos')}</span>
-            </div>
-            <p class="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-PT') : ''}</p>
-        </div>
-        <div class="flex items-center gap-2 w-full md:w-auto shrink-0">
-            <button onclick="apagarDocumento('${doc.id}')" class="p-3 bg-white text-gray-400 hover:text-red-600 border border-gray-200 rounded-lg shadow-sm transition-colors flex-shrink-0"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
-            <button onclick="carregarDocumentoParaEdicao('${doc.id}')" class="flex-1 md:w-32 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md transition-colors text-sm uppercase tracking-wide text-center">Abrir</button>
-        </div>
-    </div>`).join(''); filtrarHistorico();
+        const list = document.getElementById('historicoList');
+        if (!list) return;
+        let historicoMeta = await obterHistoricoSalvo();
+        historicoMeta = Array.isArray(historicoMeta) ? historicoMeta.filter(doc => doc && idLocalSeguro(doc.id)) : [];
+        historicoMeta = ordenarHistoricoParaTela(historicoMeta);
 
-    } catch(e) { console.error('Falha ao carregar histórico:', e); registrarErroApp('carregarHistorico', e); const list = document.getElementById('historicoList'); if(list) list.innerHTML = '<div class="bg-red-50 p-6 rounded-xl border border-red-200 text-center text-red-700 font-medium">Falha ao ler o histórico. Nenhum índice foi apagado. Feche e abra o aplicativo novamente ou restaure um backup se o problema persistir.</div>'; mostrarToast('Falha ao ler o histórico. Os dados não foram substituídos.', true); }
+        const contador = document.getElementById('historicoContador');
+        if (contador) contador.textContent = `Total: ${historicoMeta.length}`;
+        if (historicoMeta.length === 0) {
+            list.innerHTML = '<div class="history-empty">Nenhum documento salvo.</div>';
+            return;
+        }
+
+        list.innerHTML = historicoMeta.map(doc => `
+        <div class="historico-item history-card">
+            <div class="history-card-main">
+                <div class="history-card-icon" aria-hidden="true">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0118 9.414V19a2 2 0 01-2 2z"></path></svg>
+                </div>
+                <div class="history-card-content">
+                    <h3 class="history-client">${escapeHTML(doc.clienteEmpresa || doc.nomeClienteFinal || 'Desconhecido')}</h3>
+                    <div class="history-meta">
+                        <span>
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                            OS #${escapeHTML(doc.osNumResumo || 'N/A')}
+                        </span>
+                        <span>
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            ${escapeHTML(doc.equipamentoResumo || 'Diversos')}
+                        </span>
+                    </div>
+                    <div class="history-date">${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-BR') : ''}</div>
+                </div>
+            </div>
+            <div class="history-card-actions">
+                <button onclick="apagarDocumento('${doc.id}')" class="history-delete-btn" aria-label="Mover O.S. para lixeira" title="Mover para lixeira">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+                <button onclick="carregarDocumentoParaEdicao('${doc.id}')" class="history-open-btn">
+                    Abrir
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+            </div>
+        </div>`).join('');
+        filtrarHistorico();
+
+    } catch(e) {
+        console.error('Falha ao carregar histórico:', e);
+        registrarErroApp('carregarHistorico', e);
+        const list = document.getElementById('historicoList');
+        if(list) list.innerHTML = '<div class="history-empty" style="color:#b91c1c;border-color:#fecaca">Falha ao ler o histórico. Nenhum índice foi apagado. Feche e abra o aplicativo novamente ou restaure um backup se o problema persistir.</div>';
+        mostrarToast('Falha ao ler o histórico. Os dados não foram substituídos.', true);
+    }
 }
 
 async function carregarDocumentoParaEdicao(id) {
