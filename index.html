@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=80">
+    <link rel="manifest" href="./manifest.json?v=82">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -20,7 +20,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
 
-    <!-- v80: aplica o tema salvo antes de desenhar a interface, evitando piscar claro/escuro -->
+    <!-- v81: aplica o tema salvo antes de desenhar a interface, evitando piscar claro/escuro -->
     <script>
         (() => {
             try {
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=80"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=80"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=80"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=80"></script>
-    <script src="./vendor/pdf-lib.min.js?v=80"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=80"></script>
-    <script src="./vendor/localforage.min.js?v=80"></script>
-    <script src="./vendor/pdf.min.js?v=80"></script>
+    <script src="./vendor/tailwindcss.js?v=82"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=82"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=82"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=82"></script>
+    <script src="./vendor/pdf-lib.min.js?v=82"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=82"></script>
+    <script src="./vendor/localforage.min.js?v=82"></script>
+    <script src="./vendor/pdf.min.js?v=82"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=80').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=82').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,14 +88,14 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=80';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=82';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=80">
+    <link rel="stylesheet" href="style.css?v=82">
 
-    <!-- v80: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
+    <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
         :root {
             --app-bg: #f9fafb;
@@ -184,7 +184,25 @@
         html[data-theme="light"] #themeIconSun { display:none !important; }
         html[data-theme="dark"] #headerLogoContainer { background:#fff !important; }
 
-        /* Histórico v80 */
+        /* v81: estados selecionados com contraste forte no modo escuro.
+           O !important é intencional para vencer as conversões globais do tema
+           (bg-gray-50/text-gray-500), sem alterar o comportamento dos inputs. */
+        html[data-theme="dark"] input.peer:checked + div {
+            color: #ffffff !important;
+        }
+        html[data-theme="dark"] input.peer:checked + .natureza-servico-option {
+            background-color: #2563eb !important;
+            color: #ffffff !important;
+            border-color: #60a5fa !important;
+            box-shadow: 0 0 0 1px rgba(96,165,250,.35), 0 7px 18px rgba(37,99,235,.28) !important;
+        }
+        html[data-theme="dark"] input.peer:not(:checked) + .natureza-servico-option {
+            background-color: #172235 !important;
+            color: #a8b3c3 !important;
+            border-color: #2a3b52 !important;
+        }
+
+        /* Histórico v81 */
         .history-shell { max-width: 920px; margin: 0 auto; }
         .history-hero {
             display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px;
@@ -263,7 +281,7 @@
         .history-open-btn svg { width:16px; height:16px; }
         .history-empty { background:var(--app-surface); border:1px dashed var(--app-border); color:var(--app-muted); border-radius:16px; padding:34px 18px; text-align:center; font-weight:700; }
 
-        /* v80: acabamento consistente do modo escuro em toda a interface.
+        /* v81: acabamento consistente do modo escuro em toda a interface.
            PDFs continuam brancos; a área de assinatura usa papel cinza claro só na tela. */
         html[data-theme="dark"] .bg-gray-200\/80 { background-color:#223149 !important; }
         html[data-theme="dark"] .bg-white\/90 { background-color:rgba(17,28,45,.96) !important; }
@@ -551,7 +569,7 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <!-- v80: alternância Claro/Escuro, persistida somente como preferência visual -->
+                    <!-- v81: alternância Claro/Escuro, persistida somente como preferência visual -->
                     <button type="button" id="themeToggleButton" onclick="alternarTemaApp()" class="theme-toggle-btn" aria-label="Ativar modo escuro" title="Alternar modo claro/escuro">
                         <svg id="themeIconMoon" class="theme-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646a9.003 9.003 0 1011.708 11.708z"></path></svg>
                         <svg id="themeIconSun" class="theme-icon hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
@@ -584,7 +602,7 @@
         
         <!-- ABA: NOVA OS -->
         <div id="novaOs" class="tab-content block">
-            <!-- v80: troca de logo removida da Nova O.S.; permanece somente no Histórico -->
+            <!-- v81: troca de logo removida da Nova O.S.; permanece somente no Histórico -->
 
             <form id="osForm" class="space-y-6" onsubmit="event.preventDefault();">
                 <div class="flex justify-between items-center px-1">
@@ -850,8 +868,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=80"></script>
-    <script src="bancoPecas.js?v=80"></script>
-    <script src="app.js?v=80"></script>
+    <script src="checklists/checklists.js?v=82"></script>
+    <script src="bancoPecas.js?v=82"></script>
+    <script src="app.js?v=82"></script>
 </body>
 </html>

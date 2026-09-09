@@ -863,7 +863,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 80;
+const APP_VERSION = 82;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -1960,7 +1960,7 @@ async function autoSalvarRascunho(forcar = false) {
     const clientePreenchido = document.querySelector('[id^="cliente_"]')?.value.trim();
     const novaOs = document.getElementById('novaOs');
     const bloqueado = document.getElementById('lockStatus')?.textContent?.includes('BLOQUEADO');
-    if (typeof localforage === 'undefined' || restaurandoDocumento || salvamentoManualEmAndamento || !novaOs || novaOs.classList.contains('hidden') || (!forcar && bloqueado) || (!forcar && !clientePreenchido)) return false;
+    if (typeof localforage === 'undefined' || restaurandoDocumento || salvamentoManualEmAndamento || !novaOs || (!forcar && novaOs.classList.contains('hidden')) || (!forcar && bloqueado) || (!forcar && !clientePreenchido)) return false;
     try {
         const dados = recolherDadosDoFormulario();
         await salvarRascunhoPersistente(dados, true);
@@ -3058,7 +3058,7 @@ function adicionarBlocoOS(dados = null) {
     const genToggle = (tid, label, checked, oc = false) => `
         <label class="cursor-pointer relative">
             <input type="checkbox" id="${tid}_${id}" ${checked ? 'checked' : ''} ${oc ? 'onchange="atualizarVisibilidadeCamposPorBloco()"' : ''} class="peer sr-only">
-            <div class="px-3 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 text-sm font-bold peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 peer-checked:shadow-md transition-all text-center select-none">
+            <div class="natureza-servico-option px-3 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 text-sm font-bold peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 peer-checked:shadow-md transition-all text-center select-none">
                 ${label}
             </div>
         </label>`;
