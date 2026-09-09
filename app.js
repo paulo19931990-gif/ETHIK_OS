@@ -863,7 +863,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 82;
+const APP_VERSION = 83;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -3683,6 +3683,10 @@ function aplicarAssinaturaVisualImediataPreview(alvo) {
         const patch = document.createElement('div');
         patch.className = 'pdf-signature-live-patch absolute pointer-events-none bg-white overflow-hidden';
         patch.dataset.signatureTarget = alvo;
+        // v83: esta camada é parte visual da folha do PDF, não da interface.
+        // Força branco para o modo escuro nunca transformar a assinatura em um retângulo escuro.
+        patch.style.setProperty('background-color', '#ffffff', 'important');
+        patch.style.colorScheme = 'light';
         patch.style.zIndex = '9';
         patch.style.left = `${(sigX / A4_W) * 100}%`;
         patch.style.top = `${(sigY / A4_H) * 100}%`;
