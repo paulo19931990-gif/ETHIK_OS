@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=79">
+    <link rel="manifest" href="./manifest.json?v=80">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -20,7 +20,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Multi-OS Pro">
 
-    <!-- v79: aplica o tema salvo antes de desenhar a interface, evitando piscar claro/escuro -->
+    <!-- v80: aplica o tema salvo antes de desenhar a interface, evitando piscar claro/escuro -->
     <script>
         (() => {
             try {
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=79"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=79"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=79"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=79"></script>
-    <script src="./vendor/pdf-lib.min.js?v=79"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=79"></script>
-    <script src="./vendor/localforage.min.js?v=79"></script>
-    <script src="./vendor/pdf.min.js?v=79"></script>
+    <script src="./vendor/tailwindcss.js?v=80"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=80"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=80"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=80"></script>
+    <script src="./vendor/pdf-lib.min.js?v=80"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=80"></script>
+    <script src="./vendor/localforage.min.js?v=80"></script>
+    <script src="./vendor/pdf.min.js?v=80"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=79').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=80').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,14 +88,14 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=79';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=80';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=79">
+    <link rel="stylesheet" href="style.css?v=80">
 
-    <!-- v79: tema escuro + acabamento visual do Histórico sem alterar o PDF ou os dados -->
+    <!-- v80: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
         :root {
             --app-bg: #f9fafb;
@@ -184,7 +184,7 @@
         html[data-theme="light"] #themeIconSun { display:none !important; }
         html[data-theme="dark"] #headerLogoContainer { background:#fff !important; }
 
-        /* Histórico v79 */
+        /* Histórico v80 */
         .history-shell { max-width: 920px; margin: 0 auto; }
         .history-hero {
             display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px;
@@ -262,6 +262,79 @@
         .history-open-btn { height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; gap:7px; color:white; background:linear-gradient(135deg,#2563eb,#1d4ed8); font-size:.78rem; font-weight:900; text-transform:uppercase; letter-spacing:.03em; box-shadow:0 5px 14px rgba(37,99,235,.2); }
         .history-open-btn svg { width:16px; height:16px; }
         .history-empty { background:var(--app-surface); border:1px dashed var(--app-border); color:var(--app-muted); border-radius:16px; padding:34px 18px; text-align:center; font-weight:700; }
+
+        /* v80: acabamento consistente do modo escuro em toda a interface.
+           PDFs continuam brancos; a área de assinatura usa papel cinza claro só na tela. */
+        html[data-theme="dark"] .bg-gray-200\/80 { background-color:#223149 !important; }
+        html[data-theme="dark"] .bg-white\/90 { background-color:rgba(17,28,45,.96) !important; }
+        html[data-theme="dark"] .bg-blue-50\/50,
+        html[data-theme="dark"] .bg-blue-50\/70 { background-color:#10233c !important; }
+        html[data-theme="dark"] .bg-blue-200 { background-color:#1d416d !important; }
+
+        html[data-theme="dark"] .border-blue-100,
+        html[data-theme="dark"] .border-blue-200,
+        html[data-theme="dark"] .border-blue-300 { border-color:#315681 !important; }
+        html[data-theme="dark"] .border-red-100,
+        html[data-theme="dark"] .border-red-200 { border-color:#6f2836 !important; }
+        html[data-theme="dark"] .border-amber-100,
+        html[data-theme="dark"] .border-amber-200 { border-color:#755f1a !important; }
+
+        html[data-theme="dark"] #novaOs .os-bloco,
+        html[data-theme="dark"] #bancoHoras > .bg-white,
+        html[data-theme="dark"] #bancoHoras .overflow-x-auto.bg-white {
+            background-color:#111c2d !important;
+            border-color:#2a3b52 !important;
+        }
+        html[data-theme="dark"] #novaOs .os-bloco > .bg-gray-800 { background-color:#152238 !important; }
+        html[data-theme="dark"] #novaOs h4.border-b,
+        html[data-theme="dark"] #bancoHoras .border-b { border-color:#2a3b52 !important; }
+
+        /* Campos, selects e controles segmentados deixam de manter fundos claros. */
+        html[data-theme="dark"] #novaOs input:not([type="checkbox"]):not([type="radio"]),
+        html[data-theme="dark"] #novaOs textarea,
+        html[data-theme="dark"] #novaOs select,
+        html[data-theme="dark"] #bancoHoras input:not([type="checkbox"]):not([type="radio"]),
+        html[data-theme="dark"] #bancoHoras textarea,
+        html[data-theme="dark"] #bancoHoras select {
+            background-color:#0f1a2b !important;
+            color:#f3f4f6 !important;
+            border-color:#33465f !important;
+        }
+        html[data-theme="dark"] #novaOs input[readonly],
+        html[data-theme="dark"] #bancoHoras input[readonly] { background-color:#18263a !important; }
+        html[data-theme="dark"] #novaOs .bg-gray-200\/80,
+        html[data-theme="dark"] #bancoHoras .bg-gray-200\/80 {
+            background-color:#1b2a40 !important;
+            border:1px solid #30445f;
+        }
+
+        /* Blocos auxiliares azuis ficam azul-petróleo, sem cartões claros soltos. */
+        html[data-theme="dark"] #novaOs .bg-blue-50\/70,
+        html[data-theme="dark"] #novaOs .bg-blue-50\/50 {
+            background-color:#10233c !important;
+            border-color:#315681 !important;
+        }
+
+        /* Assinatura: reduz o branco forte sem mexer nos pixels/arquivo da assinatura. */
+        html[data-theme="dark"] #novaOs .canvas-container {
+            background:#d7dee8 !important;
+            border-color:#64748b !important;
+            box-shadow:inset 0 0 0 1px rgba(15,23,42,.08) !important;
+        }
+        html[data-theme="dark"] #novaOs .canvas-container span { color:#475569 !important; opacity:.8; }
+
+        /* Pré-visualização continua com a folha do PDF branca; só a moldura acompanha o tema. */
+        html[data-theme="dark"] #modalPreviewPDF > div { background:#111c2d !important; }
+        html[data-theme="dark"] #modalPreviewPDF #pdfRenderContainer { background:#243247 !important; }
+        html[data-theme="dark"] #modalPreviewPDF .pdf-page-canvas { background:#fff !important; }
+
+        /* Modais de PIN/backup/checklist acompanham o tema, sem interferir na assinatura expandida. */
+        html[data-theme="dark"] #modalCriarPin > div,
+        html[data-theme="dark"] #modalValidarPin > div,
+        html[data-theme="dark"] #modalExportar > div {
+            background:#111c2d !important;
+            border:1px solid #2a3b52;
+        }
 
         @media (max-width: 640px) {
             .history-hero { align-items:flex-start; }
@@ -478,7 +551,7 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <!-- v79: alternância Claro/Escuro, persistida somente como preferência visual -->
+                    <!-- v80: alternância Claro/Escuro, persistida somente como preferência visual -->
                     <button type="button" id="themeToggleButton" onclick="alternarTemaApp()" class="theme-toggle-btn" aria-label="Ativar modo escuro" title="Alternar modo claro/escuro">
                         <svg id="themeIconMoon" class="theme-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646a9.003 9.003 0 1011.708 11.708z"></path></svg>
                         <svg id="themeIconSun" class="theme-icon hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
@@ -511,16 +584,7 @@
         
         <!-- ABA: NOVA OS -->
         <div id="novaOs" class="tab-content block">
-            <div id="configLogoCard" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6 flex items-center justify-between gap-4">
-                <div>
-                    <h3 class="font-bold text-sm text-gray-800">Logótipo da Empresa</h3>
-                    <p class="text-xs text-gray-500">Defina ou troque o logótipo que aparecerá no PDF a qualquer momento.</p>
-                </div>
-                <label class="px-4 py-2 bg-blue-50 text-blue-700 font-semibold text-sm rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
-                    Fazer Upload
-                    <input type="file" accept="image/png, image/jpeg" onchange="lerLogotipo(event)" class="hidden">
-                </label>
-            </div>
+            <!-- v80: troca de logo removida da Nova O.S.; permanece somente no Histórico -->
 
             <form id="osForm" class="space-y-6" onsubmit="event.preventDefault();">
                 <div class="flex justify-between items-center px-1">
@@ -786,8 +850,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=79"></script>
-    <script src="bancoPecas.js?v=79"></script>
-    <script src="app.js?v=79"></script>
+    <script src="checklists/checklists.js?v=80"></script>
+    <script src="bancoPecas.js?v=80"></script>
+    <script src="app.js?v=80"></script>
 </body>
 </html>

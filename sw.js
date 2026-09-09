@@ -1,7 +1,7 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v79';
+const CACHE_NAME = 'multios-pro-v80';
 
-// v79: todos os recursos necessários ao funcionamento do Multi-OS ficam no próprio projeto.
+// v80: todos os recursos necessários ao funcionamento do Multi-OS ficam no próprio projeto.
 // A nova versão só instala se TODOS estes arquivos existirem. Isso evita instalar uma versão
 // "meio offline" ou misturar bibliotecas antigas/externas com o código atual.
 const ASSETS_CRITICOS = [
