@@ -863,7 +863,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 83;
+const APP_VERSION = 85;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
@@ -882,7 +882,9 @@ const MEDIA_ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000;
 const DRAFT_PREFIX = 'draft_doc_';
 const DRAFT_INDEX_KEY = 'draft_index_v73';
 const DRAFT_MIGRATION_KEY = 'migracao_drafts_v73';
-const midiasCriadasSessao = new Set();
+// v84: associa cada mídia criada ao documento que a originou. Isso impede que
+// salvar uma O.S. apague por engano Blobs pertencentes a outra O.S./rascunho.
+const midiasCriadasSessao = new Map();
 
 const truncarStr = (str, max) => (str && str.length > max) ? str.substring(0, max - 3) + '...' : (str || '');
 const getVal = (campo, id) => document.getElementById(`${campo}_${id}`) ? document.getElementById(`${campo}_${id}`).value : '';
@@ -1279,16 +1281,17 @@ function blobParaDataUrl(blob) {
     });
 }
 
-async function salvarBlobMidia(prefixo, blob, rastrearSessao = true) {
+async function salvarBlobMidia(prefixo, blob, rastrearSessao = true, documentoIdRastreio = documentoAtualId) {
     if (typeof localforage === 'undefined' || !(blob instanceof Blob)) return null;
     const mediaId = novoIdLocal();
     const chave = `${prefixo}${mediaId}`;
+    const docIdSeguro = idLocalSeguro(String(documentoIdRastreio || '')) ? String(documentoIdRastreio) : String(documentoAtualId || '');
     try {
         await localforage.setItem(chave, blob);
         const teste = await localforage.getItem(chave);
         if (!(teste instanceof Blob) || teste.size !== blob.size) throw new Error('Navegador não preservou o Blob corretamente');
-        await registrarMetaMidia(chave, { tipo: prefixo === MEDIA_PHOTO_PREFIX ? 'foto' : (prefixo === MEDIA_PDF_PREFIX ? 'pdf' : 'midia'), documentoId: documentoAtualId, orfaoDesde: null });
-        if (rastrearSessao) midiasCriadasSessao.add(chave);
+        await registrarMetaMidia(chave, { tipo: prefixo === MEDIA_PHOTO_PREFIX ? 'foto' : (prefixo === MEDIA_PDF_PREFIX ? 'pdf' : 'midia'), documentoId: docIdSeguro, orfaoDesde: null });
+        if (rastrearSessao) midiasCriadasSessao.set(chave, docIdSeguro);
         return mediaId;
     } catch (e) {
         try { await localforage.removeItem(chave); await localforage.removeItem(chaveMetaMidia(chave)); } catch (_) {}
@@ -1396,14 +1399,38 @@ function idsMidiaDocumento(doc) {
 async function limparMidiasRemovidasDoDocumento(documentoAnterior, documentoNovo) {
     const antigas = idsMidiaDocumento(documentoAnterior);
     const novas = idsMidiaDocumento(documentoNovo);
+    const docIdNovo = String(documentoNovo?.id || '');
+
+    // v84: antes de apagar qualquer Blob, reconstrói as referências de TODO o app:
+    // histórico, lixeira, rascunhos (inclusive legado) e formulário atualmente aberto.
+    // Se essa leitura falhar, não apaga nada: na dúvida, preserva os dados.
+    let refsSeguras;
+    try {
+        refsSeguras = await coletarReferenciasMidiaSeguras();
+    } catch (e) {
+        console.warn('Limpeza imediata de mídias cancelada por segurança; nenhuma mídia foi apagada:', e);
+        registrarErroApp('limparMidiasRemovidasDoDocumento', e);
+        return;
+    }
+
     for (const chave of antigas) {
-        if (!novas.has(chave)) {
+        if (!novas.has(chave) && !refsSeguras.has(chave)) {
             try { await removerChaveMidiaComRelacionados(chave); } catch (e) { console.warn('Não foi possível limpar mídia antiga:', e); }
         }
     }
-    for (const chave of Array.from(midiasCriadasSessao)) {
-        if (novas.has(chave)) midiasCriadasSessao.delete(chave);
-        else await removerChaveMidiaComRelacionados(chave);
+
+    // Só trata mídias criadas pela O.S. que está sendo salva. Mídias de outros
+    // documentos/rascunhos permanecem intocadas, mesmo que tenham sido criadas
+    // na mesma sessão do aplicativo.
+    for (const [chave, documentoIdCriacao] of Array.from(midiasCriadasSessao.entries())) {
+        if (String(documentoIdCriacao || '') !== docIdNovo) continue;
+        if (novas.has(chave)) {
+            midiasCriadasSessao.delete(chave);
+            continue;
+        }
+        if (!refsSeguras.has(chave)) {
+            await removerChaveMidiaComRelacionados(chave);
+        }
     }
 }
 
@@ -3477,20 +3504,25 @@ async function construirPDFBytes(onProgressCallback) {
                 let fotoPct = basePct + ((f / fotoItems.length) * (75 / blocosOS.length) * 0.7); await reportProgress(fotoPct, `Anexando foto ${f + 1} de ${fotoItems.length} (OS ${idx + 1})...`);
                 const fItem = fotoItems[f]; const mediaId = fItem.querySelector('.foto-media-id')?.value || ''; const base64 = fItem.querySelector('.foto-b64')?.value || ''; const desc = fItem.querySelector('.foto-desc').value;
                 let fonteImagem = base64; let objectUrlTemporaria = null;
-                if (mediaId) {
-                    const blobFoto = await obterBlobMidia(MEDIA_PHOTO_PREFIX, mediaId);
-                    if (!blobFoto) { console.warn('Foto Blob não encontrada:', mediaId); continue; }
-                    objectUrlTemporaria = URL.createObjectURL(blobFoto); fonteImagem = objectUrlTemporaria;
-                }
-                const imagemCarregada = await new Promise((resolve) => {
-                    const i = new Image();
-                    i.onload = () => resolve(i);
-                    i.onerror = () => resolve(null);
-                    i.src = fonteImagem;
-                });
-                if (!imagemCarregada) { if (objectUrlTemporaria) URL.revokeObjectURL(objectUrlTemporaria); continue; }
+                const osIdentificacao = getVal('osNum', id).trim() || `posição ${idx + 1}`;
+                const fotoIdentificacao = `foto ${f + 1} da O.S. ${osIdentificacao}`;
+                try {
+                    if (mediaId) {
+                        const blobFoto = await obterBlobMidia(MEDIA_PHOTO_PREFIX, mediaId);
+                        if (!blobFoto) throw new Error(`Evidência fotográfica indisponível: ${fotoIdentificacao}. O PDF foi cancelado para não gerar um relatório incompleto.`);
+                        objectUrlTemporaria = URL.createObjectURL(blobFoto); fonteImagem = objectUrlTemporaria;
+                    } else if (!dataUrlImagemSegura(base64)) {
+                        throw new Error(`Evidência fotográfica inválida: ${fotoIdentificacao}. O PDF foi cancelado para não gerar um relatório incompleto.`);
+                    }
+                    const imagemCarregada = await new Promise((resolve) => {
+                        const i = new Image();
+                        i.onload = () => resolve(i);
+                        i.onerror = () => resolve(null);
+                        i.src = fonteImagem;
+                    });
+                    if (!imagemCarregada) throw new Error(`Não foi possível abrir ${fotoIdentificacao}. O PDF foi cancelado para não ocultar uma evidência.`);
 
-                const imgW = imagemCarregada.naturalWidth || imagemCarregada.width || 1;
+                    const imgW = imagemCarregada.naturalWidth || imagemCarregada.width || 1;
                 const imgH = imagemCarregada.naturalHeight || imagemCarregada.height || 1;
                 const horizontal = imgW > imgH * 1.08;
 
@@ -3535,7 +3567,9 @@ async function construirPDFBytes(onProgressCallback) {
                     if (col === 2) avancarLinhaRetrato();
                 }
 
-                if (objectUrlTemporaria) URL.revokeObjectURL(objectUrlTemporaria);
+                } finally {
+                    if (objectUrlTemporaria) URL.revokeObjectURL(objectUrlTemporaria);
+                }
             }
             avancarLinhaRetrato();
             cy = startY;
