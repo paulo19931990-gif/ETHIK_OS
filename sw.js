@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v85';
+const CACHE_NAME = 'multios-pro-v86';
 
 // v81: todos os recursos necessários ao funcionamento do Multi-OS ficam no próprio projeto.
 // A nova versão só instala se TODOS estes arquivos existirem. Isso evita instalar uma versão
@@ -97,7 +97,7 @@ self.addEventListener('fetch', event => {
   // v81 não usa bibliotecas de terceiros em tempo de execução. Só intercepta recursos do próprio app.
   if (!mesmaOrigem) return;
 
-  // Arquivos com ?v=85: rede primeiro para não misturar versões; cache local como fallback offline.
+  // Arquivos com ?v=86: rede primeiro para não misturar versões; cache local como fallback offline.
   if (url.searchParams.has('v')) {
     event.respondWith((async () => {
       try {
