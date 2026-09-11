@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=87">
+    <link rel="manifest" href="./manifest.json?v=88">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=87"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=87"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=87"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=87"></script>
-    <script src="./vendor/pdf-lib.min.js?v=87"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=87"></script>
-    <script src="./vendor/localforage.min.js?v=87"></script>
-    <script src="./vendor/pdf.min.js?v=87"></script>
+    <script src="./vendor/tailwindcss.js?v=88"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=88"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=88"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=88"></script>
+    <script src="./vendor/pdf-lib.min.js?v=88"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=88"></script>
+    <script src="./vendor/localforage.min.js?v=88"></script>
+    <script src="./vendor/pdf.min.js?v=88"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=87').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=88').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=87';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=88';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=87">
+    <link rel="stylesheet" href="style.css?v=88">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -256,6 +256,28 @@
         .history-storage-name svg { width:18px; height:18px; color:#2563eb; }
         .history-storage-value { color:var(--app-muted); font-size:.76rem; font-weight:800; }
         .history-storage-track { width:100%; height:7px; background:var(--app-surface-soft); border-radius:999px; overflow:hidden; }
+
+        /* v88: rascunhos recuperáveis ficam visíveis dentro do Histórico. */
+        .drafts-panel { margin-bottom:16px; }
+        .drafts-list { display:flex; flex-direction:column; gap:9px; }
+        .draft-card { background:var(--app-surface); border:1px solid #f4c66a; border-left:4px solid #f59e0b; border-radius:15px; padding:12px; box-shadow:var(--app-shadow); }
+        html[data-theme="dark"] .draft-card { border-color:#755f1a; border-left-color:#fbbf24; }
+        .draft-card-top { display:flex; align-items:flex-start; gap:10px; }
+        .draft-icon { width:40px; height:40px; flex:0 0 auto; border-radius:11px; display:flex; align-items:center; justify-content:center; background:#fffbeb; color:#d97706; }
+        html[data-theme="dark"] .draft-icon { background:#3b3219; color:#fbbf24; }
+        .draft-icon svg { width:20px; height:20px; }
+        .draft-content { min-width:0; flex:1; }
+        .draft-title { color:var(--app-text); font-size:.92rem; font-weight:900; overflow-wrap:anywhere; }
+        .draft-meta { margin-top:4px; color:var(--app-muted); font-size:.72rem; font-weight:650; display:flex; flex-wrap:wrap; gap:5px 9px; }
+        .draft-date { margin-top:5px; color:var(--app-muted-2); font-size:.66rem; font-weight:700; }
+        .draft-badge { display:inline-flex; align-items:center; padding:3px 7px; border-radius:999px; background:#fef3c7; color:#92400e; font-size:.62rem; font-weight:900; text-transform:uppercase; letter-spacing:.04em; }
+        html[data-theme="dark"] .draft-badge { background:#4a3913; color:#fde68a; }
+        .draft-actions { display:grid; grid-template-columns:48px minmax(0,1fr); gap:9px; margin-top:10px; }
+        .draft-delete-btn { height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#dc2626; background:#fef2f2; border:1px solid #fecaca; }
+        html[data-theme="dark"] .draft-delete-btn { color:#fca5a5; background:#3a1c25; border-color:#6f2836; }
+        .draft-open-btn { height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; gap:7px; color:#fff; background:linear-gradient(135deg,#f59e0b,#d97706); font-size:.76rem; font-weight:900; text-transform:uppercase; letter-spacing:.03em; }
+        .draft-open-btn svg { width:15px; height:15px; }
+        .draft-empty { background:var(--app-surface); border:1px dashed var(--app-border); color:var(--app-muted); border-radius:14px; padding:18px; text-align:center; font-size:.78rem; font-weight:700; }
 
         .history-list-head { padding:11px 13px; border-radius:14px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
         .history-list-title { display:flex; align-items:center; gap:8px; color:var(--app-text); font-size:.86rem; font-weight:900; }
@@ -608,9 +630,15 @@
             <!-- v81: troca de logo removida da Nova O.S.; permanece somente no Histórico -->
 
             <form id="osForm" class="space-y-6" onsubmit="event.preventDefault();">
-                <div class="flex justify-between items-center px-1">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1">
                     <h2 class="text-2xl font-black text-gray-900 tracking-tight">Relatório de Serviço</h2>
-                    <span id="autoSaveIndicator" class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100"></span>
+                    <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                        <span id="autoSaveIndicator" class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100"></span>
+                        <button type="button" onclick="iniciarNovaOS()" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wide shadow-md shadow-blue-500/20 transition-colors" title="Guardar o trabalho atual como rascunho, se necessário, e iniciar outra O.S.">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Nova O.S.
+                        </button>
+                    </div>
                 </div>
 
                 <div id="listaOrdensServico" class="space-y-6"></div>
@@ -705,7 +733,7 @@
                 <div class="history-toolbar">
                     <div class="history-search">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.65a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                        <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="Buscar cliente, O.S. ou equipamento...">
+                        <input type="text" id="buscaHistorico" oninput="filtrarHistorico()" placeholder="Buscar cliente, O.S., equipamento ou rascunho...">
                     </div>
                     <select id="ordenacaoHistorico" class="history-sort" onchange="carregarHistorico()" aria-label="Ordenar histórico">
                         <option value="recentes">Mais recentes</option>
@@ -755,6 +783,19 @@
                         <div id="storage-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width:0%"></div>
                     </div>
                 </div>
+
+                <section class="drafts-panel" aria-label="Rascunhos pendentes">
+                    <div class="history-list-head">
+                        <div class="history-list-title">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                            Rascunhos
+                        </div>
+                        <span id="rascunhosContador" class="history-count">Total: 0</span>
+                    </div>
+                    <div id="rascunhosList" class="drafts-list">
+                        <div class="draft-empty">Nenhum rascunho pendente.</div>
+                    </div>
+                </section>
 
                 <div class="history-list-head">
                     <div class="history-list-title">
@@ -871,8 +912,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=87"></script>
-    <script src="bancoPecas.js?v=87"></script>
-    <script src="app.js?v=87"></script>
+    <script src="checklists/checklists.js?v=88"></script>
+    <script src="bancoPecas.js?v=88"></script>
+    <script src="app.js?v=88"></script>
 </body>
 </html>

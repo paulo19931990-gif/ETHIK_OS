@@ -863,7 +863,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 87;
+const APP_VERSION = 88;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
@@ -2027,19 +2027,15 @@ async function autoSalvarRascunho(forcar = false) {
 }
 
 async function verificarRascunhoPendente() {
+    // v88: não interrompe mais a tela inicial com mensagem de recuperação.
+    // Os rascunhos continuam persistidos e ficam disponíveis na seção Rascunhos do Histórico.
     if (typeof localforage === 'undefined') return;
     try {
-        const drafts = await listarRascunhosPersistentes();
-        const draft = drafts[0] || null;
-        if(draft && draft.ordens && draft.ordens.length > 0) {
-            const recuperar = confirm('⚠️ Existe um rascunho não guardado da última sessão.\n\nOK = recuperar agora.\nCancelar = manter o rascunho salvo para recuperar depois.');
-            if (recuperar) restaurarDadosParaFormulario(draft);
-            else {
-                atualizarIndicadorRascunho('Rascunho anterior mantido com segurança', 'rascunho');
-                mostrarToast('Rascunho mantido. Ele não foi apagado e poderá ser recuperado depois.');
-            }
-        }
-    } catch(e) { console.error('Falha ao verificar rascunho:', e); registrarErroApp('verificarRascunhoPendente', e); }
+        await migrarRascunhoLegadoV73();
+    } catch(e) {
+        console.error('Falha ao preparar rascunhos persistentes:', e);
+        registrarErroApp('verificarRascunhoPendente', e);
+    }
 }
 
 async function persistirBancoHorasSeguro(novosRegistos) {
@@ -3341,7 +3337,7 @@ function validarCamposObrigatorios() {
     } catch (_) {}
     mostrarToast(ultimaMensagemValidacaoObrigatoria, true);
     try {
-        if (typeof localforage !== 'undefined') void localforage.setItem('diagnostico_ultima_validacao_v87', {
+        if (typeof localforage !== 'undefined') void localforage.setItem('diagnostico_ultima_validacao_v88', {
             data: new Date().toISOString(),
             total: pendencias.length,
             campos: pendencias.map(p => p.rotulo).slice(0, 50)
@@ -3437,10 +3433,20 @@ function atualizarContadorHistoricoVisivel() {
 function filtrarHistorico() {
     const input = document.getElementById('buscaHistorico');
     const termo = String(input?.value || '').trim().toLowerCase();
-    document.querySelectorAll('.historico-item').forEach(item => {
+    document.querySelectorAll('.historico-item, .rascunho-item').forEach(item => {
         item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none';
     });
     atualizarContadorHistoricoVisivel();
+    atualizarContadorRascunhosVisivel();
+}
+
+function atualizarContadorRascunhosVisivel() {
+    const contador = document.getElementById('rascunhosContador');
+    if (!contador) return;
+    const itens = [...document.querySelectorAll('.rascunho-item')];
+    const visiveis = itens.filter(item => item.style.display !== 'none').length;
+    const total = itens.length;
+    contador.textContent = visiveis === total ? `Total: ${total}` : `${visiveis} de ${total}`;
 }
 
 function ordenarHistoricoParaTela(lista) {
@@ -3458,6 +3464,117 @@ function ordenarHistoricoParaTela(lista) {
     return copia;
 }
 
+function resumirRascunhoParaHistorico(draft, idsSalvos = new Set()) {
+    const ordens = Array.isArray(draft?.ordens) ? draft.ordens : [];
+    const primeira = ordens[0] || {};
+    const cliente = String(primeira.cliente || draft?.nomeClienteFinal || '').trim() || 'Cliente não informado';
+    const osNum = String(primeira.osNum || '').trim() || 'Sem número';
+    const equipamento = String(primeira.equipamento || '').trim() || 'Equipamento não informado';
+    const totalFotos = ordens.reduce((soma, ordem) => soma + (Array.isArray(ordem?.fotos) ? ordem.fotos.length : 0), 0);
+    const existeNoHistorico = idsSalvos.has(String(draft?.id || ''));
+    return { cliente, osNum, equipamento, totalFotos, totalOrdens: ordens.length, existeNoHistorico };
+}
+
+async function carregarRascunhosHistorico(idsSalvos = null) {
+    const list = document.getElementById('rascunhosList');
+    const contador = document.getElementById('rascunhosContador');
+    if (!list) return;
+    try {
+        const drafts = await listarRascunhosPersistentes();
+        const ids = idsSalvos instanceof Set ? idsSalvos : new Set((await obterHistoricoSalvo()).map(x => String(x?.id || '')));
+        const validos = drafts.filter(d => d && idLocalSeguro(String(d.id || '')) && Array.isArray(d.ordens) && d.ordens.length > 0);
+        if (contador) contador.textContent = `Total: ${validos.length}`;
+        if (!validos.length) {
+            list.innerHTML = '<div class="draft-empty">Nenhum rascunho pendente.</div>';
+            return;
+        }
+        list.innerHTML = validos.map(draft => {
+            const resumo = resumirRascunhoParaHistorico(draft, ids);
+            const quando = draft.dataAtualizacao ? new Date(draft.dataAtualizacao).toLocaleString('pt-BR') : 'Data não disponível';
+            const badge = resumo.existeNoHistorico ? 'Alterações não salvas' : 'O.S. nova';
+            return `
+            <div class="rascunho-item draft-card">
+                <div class="draft-card-top">
+                    <div class="draft-icon" aria-hidden="true">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                    </div>
+                    <div class="draft-content">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div class="draft-title">${escapeHTML(resumo.cliente)}</div>
+                            <span class="draft-badge">${escapeHTML(badge)}</span>
+                        </div>
+                        <div class="draft-meta">
+                            <span>OS #${escapeHTML(resumo.osNum)}</span>
+                            <span>${escapeHTML(resumo.equipamento)}</span>
+                            <span>${resumo.totalOrdens} folha${resumo.totalOrdens === 1 ? '' : 's'}</span>
+                            <span>${resumo.totalFotos} foto${resumo.totalFotos === 1 ? '' : 's'}</span>
+                        </div>
+                        <div class="draft-date">Última alteração: ${escapeHTML(quando)}</div>
+                    </div>
+                </div>
+                <div class="draft-actions">
+                    <button type="button" onclick="excluirRascunhoHistorico('${draft.id}')" class="draft-delete-btn" title="Excluir este rascunho" aria-label="Excluir rascunho">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                    <button type="button" onclick="abrirRascunhoHistorico('${draft.id}')" class="draft-open-btn">
+                        Abrir Rascunho
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+        filtrarHistorico();
+    } catch (e) {
+        console.error('Falha ao listar rascunhos no Histórico:', e);
+        registrarErroApp('carregarRascunhosHistorico', e);
+        list.innerHTML = '<div class="draft-empty" style="color:#b91c1c;border-color:#fecaca">Não foi possível listar os rascunhos. Nenhum rascunho foi apagado.</div>';
+    }
+}
+
+async function abrirRascunhoHistorico(id) {
+    const alvoId = String(id || '');
+    if (!idLocalSeguro(alvoId) || typeof localforage === 'undefined') { mostrarToast('Rascunho inválido.', true); return; }
+    try {
+        if (alvoId === String(documentoAtualId) && formularioSujo) {
+            const protegido = await autoSalvarRascunho(true);
+            if (!protegido) { mostrarToast('Não foi possível proteger as alterações atuais.', true); return; }
+        } else if (!await confirmarSaidaComAlteracoes(alvoId)) return;
+
+        const draft = await obterRascunhoDocumento(alvoId);
+        if (!draft || !Array.isArray(draft.ordens) || !draft.ordens.length) {
+            mostrarToast('Este rascunho não está mais disponível.', true);
+            await carregarRascunhosHistorico();
+            return;
+        }
+        restaurarDadosParaFormulario(draft);
+        mostrarToast('Rascunho recuperado. Continue o preenchimento normalmente.');
+    } catch (e) {
+        console.error('Falha ao abrir rascunho:', e);
+        registrarErroApp('abrirRascunhoHistorico', e);
+        mostrarToast('Não foi possível abrir o rascunho.', true);
+    }
+}
+
+async function excluirRascunhoHistorico(id) {
+    const alvoId = String(id || '');
+    if (!idLocalSeguro(alvoId) || typeof localforage === 'undefined') return;
+    if (alvoId === String(documentoAtualId) && formularioSujo) {
+        mostrarToast('Este rascunho pertence à O.S. que está aberta com alterações. Inicie outra O.S. ou salve antes de excluí-lo.', true);
+        return;
+    }
+    if (!confirm('Excluir este rascunho?\n\nA O.S. salva no Histórico, se existir, não será apagada.')) return;
+    try {
+        await removerRascunhoPersistente(alvoId);
+        agendarLimpezaMidiasOrfas(1200);
+        await carregarRascunhosHistorico();
+        mostrarToast('Rascunho excluído.');
+    } catch (e) {
+        console.error('Falha ao excluir rascunho:', e);
+        registrarErroApp('excluirRascunhoHistorico', e);
+        mostrarToast('Não foi possível excluir o rascunho.', true);
+    }
+}
+
 async function carregarHistorico() {
     try {
         const list = document.getElementById('historicoList');
@@ -3465,6 +3582,7 @@ async function carregarHistorico() {
         let historicoMeta = await obterHistoricoSalvo();
         historicoMeta = Array.isArray(historicoMeta) ? historicoMeta.filter(doc => doc && idLocalSeguro(doc.id)) : [];
         historicoMeta = ordenarHistoricoParaTela(historicoMeta);
+        await carregarRascunhosHistorico(new Set(historicoMeta.map(doc => String(doc.id))));
 
         const contador = document.getElementById('historicoContador');
         if (contador) contador.textContent = `Total: ${historicoMeta.length}`;
