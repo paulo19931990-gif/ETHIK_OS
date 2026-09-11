@@ -863,8 +863,9 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 86;
+const APP_VERSION = 87;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
+const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
 const BACKUP_IMPORT_MAX_BYTES = 100 * 1024 * 1024;
 const MAX_LOG_ERROS = 50;
@@ -1982,6 +1983,31 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
+function atualizarIndicadorRascunho(texto, estado = 'rascunho') {
+    const indicador = document.getElementById('autoSaveIndicator');
+    if (!indicador) return;
+    indicador.textContent = texto || '';
+    indicador.dataset.estado = estado;
+    indicador.title = estado === 'historico'
+        ? 'Esta O.S. foi gravada oficialmente no Histórico.'
+        : (estado === 'erro' ? 'O rascunho local não pôde ser gravado.' : 'Rascunho local de segurança; ainda não é o salvamento oficial no Histórico.');
+}
+
+async function protegerRascunhoAtualAntesDeValidar() {
+    if (typeof localforage === 'undefined' || !document.querySelector('.os-bloco')) return false;
+    try {
+        const dados = recolherDadosDoFormulario();
+        await salvarRascunhoPersistente(dados, true);
+        atualizarIndicadorRascunho(`Rascunho protegido localmente: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
+        return true;
+    } catch (e) {
+        console.error('Falha ao proteger rascunho antes da validação:', e);
+        registrarErroApp('protegerRascunhoAntesValidar', e);
+        atualizarIndicadorRascunho('Falha ao proteger rascunho', 'erro');
+        return false;
+    }
+}
+
 async function autoSalvarRascunho(forcar = false) {
     timeoutRascunho = null;
     const clientePreenchido = document.querySelector('[id^="cliente_"]')?.value.trim();
@@ -1991,12 +2017,11 @@ async function autoSalvarRascunho(forcar = false) {
     try {
         const dados = recolherDadosDoFormulario();
         await salvarRascunhoPersistente(dados, true);
-        const indicador = document.getElementById('autoSaveIndicator');
-        if (indicador) indicador.textContent = `Salvo: ${new Date().toLocaleTimeString('pt-BR')}`;
+        atualizarIndicadorRascunho(`Rascunho salvo localmente: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
         return true;
     } catch(e) {
         console.error('Falha no auto-salvamento:', e); registrarErroApp('autoSalvarRascunho', e);
-        const indicador = document.getElementById('autoSaveIndicator'); if (indicador) indicador.textContent = 'Falha ao salvar rascunho';
+        atualizarIndicadorRascunho('Falha ao salvar rascunho', 'erro');
         return false;
     }
 }
@@ -2007,8 +2032,12 @@ async function verificarRascunhoPendente() {
         const drafts = await listarRascunhosPersistentes();
         const draft = drafts[0] || null;
         if(draft && draft.ordens && draft.ordens.length > 0) {
-            if(confirm('⚠️ Recuperar o trabalho não guardado mais recente da última sessão?')) restaurarDadosParaFormulario(draft);
-            else await removerRascunhoPersistente(draft.id);
+            const recuperar = confirm('⚠️ Existe um rascunho não guardado da última sessão.\n\nOK = recuperar agora.\nCancelar = manter o rascunho salvo para recuperar depois.');
+            if (recuperar) restaurarDadosParaFormulario(draft);
+            else {
+                atualizarIndicadorRascunho('Rascunho anterior mantido com segurança', 'rascunho');
+                mostrarToast('Rascunho mantido. Ele não foi apagado e poderá ser recuperado depois.');
+            }
         }
     } catch(e) { console.error('Falha ao verificar rascunho:', e); registrarErroApp('verificarRascunhoPendente', e); }
 }
@@ -3270,23 +3299,76 @@ function calcDias(id) {
     let diffDays = Math.round((new Date(document.getElementById(`dtFim_${id}`).value) - new Date(document.getElementById(`dtInicio_${id}`).value)) / (1000 * 60 * 60 * 24)) + 1;
     document.getElementById(`totalDias_${id}`).value = `${isNaN(diffDays) || diffDays < 1 ? 1 : diffDays} dia(s)`;
 }
+let ultimaMensagemValidacaoObrigatoria = '';
+
 function validarCamposObrigatorios() {
-    let valido = true; document.querySelectorAll('.ring-2.ring-red-500').forEach(el => el.classList.remove('ring-2', 'ring-red-500'));
-    const blocos = document.querySelectorAll('.os-bloco'); if(blocos.length === 0) return false;
-    blocos.forEach(b => { const id = b.getAttribute('data-id'); const cCliente = document.getElementById(`cliente_${id}`); const cOsNum = document.getElementById(`osNum_${id}`);
-        if (!cCliente.value.trim()) { cCliente.classList.add('ring-2', 'ring-red-500'); valido = false; }
-        if (!cOsNum.value.trim()) { cOsNum.classList.add('ring-2', 'ring-red-500'); valido = false; } });
-    document.querySelectorAll('.foto-desc').forEach(el => { if(!el.value.trim()) { el.closest('.foto-item').classList.add('ring-2', 'ring-red-500'); valido = false; } });
-    return valido;
+    const pendencias = [];
+    document.querySelectorAll('.ring-2.ring-red-500').forEach(el => el.classList.remove('ring-2', 'ring-red-500'));
+    const blocos = [...document.querySelectorAll('.os-bloco')];
+    if (blocos.length === 0) {
+        ultimaMensagemValidacaoObrigatoria = 'Nenhuma O.S. foi encontrada no documento.';
+        mostrarToast(ultimaMensagemValidacaoObrigatoria, true);
+        return false;
+    }
+
+    const adicionarPendencia = (elemento, rotulo, itemVisual = null) => {
+        if (!elemento) return;
+        elemento.classList.add('ring-2', 'ring-red-500');
+        if (itemVisual && itemVisual !== elemento) itemVisual.classList.add('ring-2', 'ring-red-500');
+        pendencias.push({ elemento, rotulo });
+    };
+
+    blocos.forEach((b, indiceBloco) => {
+        const id = b.getAttribute('data-id');
+        const cCliente = document.getElementById(`cliente_${id}`);
+        const cOsNum = document.getElementById(`osNum_${id}`);
+        const numeroOs = cOsNum?.value?.trim();
+        const nomeBloco = numeroOs ? `O.S. #${numeroOs}` : `O.S. ${indiceBloco + 1}`;
+        if (!cCliente?.value?.trim()) adicionarPendencia(cCliente, `Cliente/Empresa da ${nomeBloco}`);
+        if (!numeroOs) adicionarPendencia(cOsNum, `Número da O.S. ${indiceBloco + 1}`);
+        [...b.querySelectorAll('.foto-desc')].forEach((el, indiceFoto) => {
+            if (!el.value.trim()) adicionarPendencia(el, `Descrição da foto ${indiceFoto + 1} da ${nomeBloco}`, el.closest('.foto-item'));
+        });
+    });
+
+    if (pendencias.length === 0) { ultimaMensagemValidacaoObrigatoria = ''; return true; }
+
+    const primeira = pendencias[0];
+    ultimaMensagemValidacaoObrigatoria = `Falta preencher: ${primeira.rotulo}${pendencias.length > 1 ? ` (+${pendencias.length - 1} campo${pendencias.length - 1 === 1 ? '' : 's'})` : ''}.`;
+    try {
+        primeira.elemento.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        setTimeout(() => { try { primeira.elemento.focus({ preventScroll: true }); } catch (_) { try { primeira.elemento.focus(); } catch (_) {} } }, 350);
+    } catch (_) {}
+    mostrarToast(ultimaMensagemValidacaoObrigatoria, true);
+    try {
+        if (typeof localforage !== 'undefined') void localforage.setItem('diagnostico_ultima_validacao_v87', {
+            data: new Date().toISOString(),
+            total: pendencias.length,
+            campos: pendencias.map(p => p.rotulo).slice(0, 50)
+        }).catch(() => {});
+    } catch (_) {}
+    return false;
 }
+
 async function salvarDocumento(silencioso = false) {
     const btnSalvar = document.getElementById('btnSalvarOs');
     if (!silencioso && btnSalvar && btnSalvar.disabled) return false;
-    cancelarAutoSavePendente(); salvamentoManualEmAndamento = true;
+    cancelarAutoSavePendente();
     if (!silencioso && btnSalvar) btnSalvar.disabled = true;
-    if (!silencioso && !validarCamposObrigatorios()) { mostrarToast('Preencha os campos em vermelho.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
+
+    // v87: antes de validar ou tentar o salvamento oficial, protege o estado atual em rascunho.
+    // Assim, mesmo que um único campo obrigatório esteja vazio, o trabalho longo não fica desprotegido.
+    if (!silencioso) {
+        if (typeof localforage === 'undefined') { mostrarToast('Armazenamento local indisponível. Não foi possível proteger o trabalho.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
+        const rascunhoProtegido = await protegerRascunhoAtualAntesDeValidar();
+        if (!rascunhoProtegido) { mostrarToast('Não foi possível proteger o rascunho antes de salvar. O salvamento foi cancelado por segurança.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
+    }
+
+    salvamentoManualEmAndamento = true;
+    if (!silencioso && !validarCamposObrigatorios()) { salvamentoManualEmAndamento = false; if (btnSalvar) btnSalvar.disabled = false; return false; }
     if (typeof localforage === 'undefined') { if(!silencioso) mostrarToast('Armazenamento local indisponível.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
     let dados = null; let documentoAnterior = null; let historicoAnterior = null;
+    let salvamentoConfirmado = false;
     try {
         await aprenderPecasDaOS();
         dados = recolherDadosDoFormulario();
@@ -3294,23 +3376,48 @@ async function salvarDocumento(silencioso = false) {
         historicoAnterior = await obterHistoricoSalvo(); // se falhar, NÃO substitui o histórico por []
         await aplicarIntegridadeDocumento(dados, documentoAnterior?.integridade || null);
         await localforage.setItem(`os_doc_${dados.id}`, dados);
+
+        // Confirma que o documento realmente ficou gravado antes de anunciar sucesso.
+        const documentoConfirmado = await localforage.getItem(`os_doc_${dados.id}`);
+        if (!documentoConfirmado || String(documentoConfirmado.id || '') !== String(dados.id) || !Array.isArray(documentoConfirmado.ordens) || documentoConfirmado.ordens.length !== dados.ordens.length) {
+            throw new Error('A verificação do documento salvo falhou.');
+        }
+
         const historicoMeta = [...historicoAnterior]; const meta = gerarMetadadosResumo(dados);
         const index = historicoMeta.findIndex(d => d.id === dados.id); if(index >= 0) historicoMeta[index] = meta; else historicoMeta.unshift(meta);
         if(!await gravarHistoricoSalvo(historicoMeta)) throw new Error('Falha ao atualizar índice do histórico.');
-        await removerRascunhoPersistente(dados.id); await limparMidiasRemovidasDoDocumento(documentoAnterior, dados); formularioSujo = false;
-        if(document.getElementById('autoSaveIndicator')) document.getElementById('autoSaveIndicator').textContent = 'Salvo';
-        if(!silencioso) { mostrarToast('Salvo com sucesso!'); await carregarHistorico(); }
+        const historicoConfirmado = await localforage.getItem('historico_os');
+        if (!Array.isArray(historicoConfirmado) || !historicoConfirmado.some(item => String(item?.id || '') === String(dados.id))) {
+            throw new Error('A O.S. foi gravada, mas não pôde ser confirmada no índice do Histórico.');
+        }
+
+        salvamentoConfirmado = true;
+        formularioSujo = false;
+        // A remoção do rascunho é pós-confirmação: se falhar, não transforma um salvamento válido em falha.
+        try { await removerRascunhoPersistente(dados.id); }
+        catch (e) { console.warn('O.S. salva, mas o rascunho antigo não pôde ser removido:', e); registrarErroApp('removerRascunhoAposSalvar', e); }
+        atualizarIndicadorRascunho(`O.S. salva no Histórico: ${new Date().toLocaleTimeString('pt-BR')}`, 'historico');
+        if(!silencioso) mostrarToast('O.S. salva e confirmada no Histórico!');
+
+        // Limpeza de mídia é manutenção e não deve desfazer um salvamento já confirmado.
+        try { await limparMidiasRemovidasDoDocumento(documentoAnterior, dados); }
+        catch (e) { console.warn('Salvamento concluído, mas a limpeza de mídia foi adiada:', e); registrarErroApp('limpezaAposSalvar', e); }
+        try { if(!silencioso) await carregarHistorico(); }
+        catch (e) { console.warn('O.S. salva, mas a atualização visual do Histórico falhou:', e); registrarErroApp('atualizarHistoricoAposSalvar', e); }
         agendarLimpezaMidiasOrfas(1200);
         return true;
     } catch(e) {
         console.error('Erro ao salvar documento:', e); registrarErroApp('salvarDocumento', e);
-        if (dados && historicoAnterior) {
+        if (!salvamentoConfirmado && dados && historicoAnterior) {
             try {
                 if (documentoAnterior === null || documentoAnterior === undefined) await localforage.removeItem(`os_doc_${dados.id}`); else await localforage.setItem(`os_doc_${dados.id}`, documentoAnterior);
                 await localforage.setItem('historico_os', historicoAnterior);
             } catch (rollbackErr) { console.error('Falha no rollback do salvamento:', rollbackErr); registrarErroApp('rollbackSalvarDocumento', rollbackErr); }
         }
-        if(!silencioso) mostrarToast('Erro ao salvar. Os dados anteriores foram preservados quando possível.', true);
+        if(!silencioso) {
+            atualizarIndicadorRascunho('Rascunho preservado; O.S. não confirmada no Histórico', 'rascunho');
+            mostrarToast(`Não foi possível confirmar a O.S. no Histórico. O rascunho foi preservado. ${e?.message || ''}`.trim(), true);
+        }
         return false;
     } finally {
         salvamentoManualEmAndamento = false;
@@ -3452,7 +3559,7 @@ function atualizarProgressoPDF(percentual, texto) {
 }
 
 async function construirPDFBytes(onProgressCallback) {
-    if (!validarCamposObrigatorios()) throw new Error("Preencha os campos obrigatórios!");
+    if (!validarCamposObrigatorios()) throw new Error(ultimaMensagemValidacaoObrigatoria || "Preencha os campos obrigatórios!");
     if (!validarChecklistsAntesPDF()) throw new Error("Geração cancelada para revisão do checklist.");
     if (!dependenciasPdfDisponiveis(false)) throw new Error("Bibliotecas de PDF indisponíveis. Verifique a ligação ou o cache offline.");
     const reportProgress = async (pct, txt) => { if(onProgressCallback) { onProgressCallback(pct, txt); await new Promise(r => setTimeout(r, 15)); } };
@@ -3806,7 +3913,7 @@ async function carregarBytesNoPreview(bytesPdf, focarAssinatura = false) {
     if (pdfPreviewDoc) { try { pdfPreviewDoc.destroy(); } catch(_) {} pdfPreviewDoc = null; }
 
     pdfPreviewDoc = await pdfjsLib.getDocument({data: bytesPdf}).promise;
-    pdfPreviewModoEconomico = blob.size > PDF_PREVIEW_ECONOMICO_BYTES;
+    pdfPreviewModoEconomico = blob.size > PDF_PREVIEW_ECONOMICO_BYTES || pdfPreviewDoc.numPages > PDF_PREVIEW_ECONOMICO_PAGINAS;
     const paginaAssinatura = pdfPreviewHotspotsAssinatura[0]?.pagina || pdfPreviewDoc.numPages;
 
     if (pdfPreviewModoEconomico) {
@@ -3886,6 +3993,7 @@ async function preVisualizarPDF() {
     try {
         btn.disabled = true;
         if (!dependenciasPdfDisponiveis(true)) throw new Error('Bibliotecas de pré-visualização indisponíveis. Verifique a ligação ou o cache offline.');
+        if (!await protegerRascunhoAtualAntesDeValidar()) throw new Error('Não foi possível proteger o rascunho antes da pré-visualização.');
         const bytesPdf = await construirPDFBytes(atualizarProgressoPDF);
         const primeiraOs = document.querySelector('.os-bloco'); let pOs = 'Rascunho', pCliente = 'Cliente';
         if(primeiraOs) { const pId = primeiraOs.getAttribute('data-id'); pOs = getVal('osNum', pId).trim() || 'Rascunho'; pCliente = getVal('cliente', pId).trim() || 'Cliente'; }
