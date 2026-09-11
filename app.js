@@ -831,6 +831,7 @@ let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
 let currentZoom = 1, startZoom = 1, startDist = 0;
 let pinchStartScrollLeft = 0, pinchStartScrollTop = 0, pinchStartViewportX = 0, pinchStartViewportY = 0;
 let registosBancoHoras = [];
+let bancoHorasEdicaoId = null;
 let contadorOS = 0;
 
 let mediaStreamCamera = null;
@@ -863,7 +864,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 88;
+const APP_VERSION = 89;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
@@ -2059,135 +2060,205 @@ function calcularMinsDesvio(horaEntrada, horaSaida, isCredito) {
     let mins = (sH * 60 + sM) - (eH * 60 + eM); if (mins < 0) mins += 1440; return isCredito ? mins : -mins; 
 }
 
+function atualizarModoEdicaoBancoHoras() {
+    const emEdicao = !!bancoHorasEdicaoId;
+    const aviso = document.getElementById('bh_edicao_aviso');
+    const btnHorario = document.getElementById('btnBhAdicionarHorario');
+    const txtHorario = document.getElementById('btnBhAdicionarHorarioTxt');
+    const btnDia = document.getElementById('btnBhAdicionarDiaCompleto');
+    const btnCancelar = document.getElementById('btnBhCancelarEdicao');
+    if (aviso) aviso.classList.toggle('hidden', !emEdicao);
+    if (txtHorario) txtHorario.textContent = emEdicao ? 'Salvar alterações' : 'Adicionar por Horário';
+    if (btnHorario) {
+        btnHorario.classList.toggle('bg-blue-600', emEdicao);
+        btnHorario.classList.toggle('hover:bg-blue-700', emEdicao);
+        btnHorario.classList.toggle('bg-gray-800', !emEdicao);
+        btnHorario.classList.toggle('hover:bg-gray-900', !emEdicao);
+    }
+    if (btnDia) btnDia.classList.toggle('hidden', emEdicao);
+    if (btnCancelar) btnCancelar.classList.toggle('hidden', !emEdicao);
+}
+
+function limparCamposBancoHorasAposGravar() {
+    ['bh_cliente','bh_motivo','bh_local','bh_chegada','bh_saida'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const credito = document.getElementById('bh_tipo_credito'); if (credito) credito.checked = true;
+    const debito = document.getElementById('bh_tipo_debito'); if (debito) debito.checked = false;
+}
+
+function iniciarEdicaoRegistoHora(id) {
+    const reg = registosBancoHoras.find(r => String(r.id) === String(id));
+    if (!reg) { mostrarToast('Lançamento não encontrado.', true); return; }
+    bancoHorasEdicaoId = String(reg.id);
+    document.getElementById('bh_data').value = reg.data || '';
+    document.getElementById('bh_cliente').value = reg.cliente || '';
+    document.getElementById('bh_motivo').value = reg.motivo || '';
+    document.getElementById('bh_local').value = reg.local || '';
+    document.getElementById('bh_chegada').value = reg.chegada || '';
+    document.getElementById('bh_saida').value = reg.saida || '';
+    const credito = reg.isCredito !== undefined ? !!reg.isCredito : Number(reg.balancoFinal) >= 0;
+    document.getElementById('bh_tipo_credito').checked = credito;
+    document.getElementById('bh_tipo_debito').checked = !credito;
+    atualizarModoEdicaoBancoHoras();
+    const campoData = document.getElementById('bh_data');
+    if (campoData) { campoData.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => campoData.focus({preventScroll:true}), 350); }
+    mostrarToast('Lançamento carregado para edição.');
+}
+
+function cancelarEdicaoBancoHoras() {
+    bancoHorasEdicaoId = null;
+    atualizarModoEdicaoBancoHoras();
+    limparCamposBancoHorasAposGravar();
+    mostrarToast('Edição cancelada.');
+}
+
 async function adicionarRegistoBancoHoras() {
-    const data = document.getElementById('bh_data').value; const cliente = document.getElementById('bh_cliente').value; const motivo = document.getElementById('bh_motivo').value; const local = document.getElementById('bh_local').value; const chegada = document.getElementById('bh_chegada').value; const saida = document.getElementById('bh_saida').value; const isCredito = document.getElementById('bh_tipo_credito').checked;
-    if(!data || !chegada || !saida) { mostrarToast("Preencha Data e Horários!", true); return; }
-    if(!dataISOValida(data) || !horaValida(chegada) || !horaValida(saida)) { mostrarToast("Data ou horário inválido.", true); return; }
-    
+    const data = document.getElementById('bh_data').value;
+    const cliente = document.getElementById('bh_cliente').value;
+    const motivo = document.getElementById('bh_motivo').value;
+    const local = document.getElementById('bh_local').value;
+    const chegada = document.getElementById('bh_chegada').value;
+    const saida = document.getElementById('bh_saida').value;
+    const isCredito = document.getElementById('bh_tipo_credito').checked;
+    if(!data || !chegada || !saida) { mostrarToast('Preencha Data e Horários!', true); return; }
+    if(!dataISOValida(data) || !horaValida(chegada) || !horaValida(saida)) { mostrarToast('Data ou horário inválido.', true); return; }
+
+    if (bancoHorasEdicaoId) {
+        const indice = registosBancoHoras.findIndex(r => String(r.id) === String(bancoHorasEdicaoId));
+        if (indice < 0) { bancoHorasEdicaoId = null; atualizarModoEdicaoBancoHoras(); mostrarToast('O lançamento que estava sendo editado não foi encontrado.', true); return; }
+        const atualizado = { ...registosBancoHoras[indice], data, cliente, motivo, local, chegada, saida, isCredito, balancoFinal: calcularMinsDesvio(chegada, saida, isCredito) };
+        const novosRegistos = registosBancoHoras.map((r, i) => i === indice ? atualizado : r).sort((a,b) => new Date(a.data) - new Date(b.data));
+        if(!await persistirBancoHorasSeguro(novosRegistos)) return;
+        bancoHorasEdicaoId = null;
+        atualizarModoEdicaoBancoHoras();
+        limparCamposBancoHorasAposGravar();
+        const mesDoRegisto = data.slice(0, 7); document.getElementById('bh_mes_inicio').value = mesDoRegisto; document.getElementById('bh_mes_fim').value = mesDoRegisto;
+        renderTabelaBancoHoras(); mostrarToast('Lançamento atualizado com sucesso!');
+        return;
+    }
+
     const novoReg = { id: novoIdLocal(), data, cliente, motivo, local, chegada, saida, isCredito, balancoFinal: calcularMinsDesvio(chegada, saida, isCredito) };
     const novosRegistos = [...registosBancoHoras, novoReg].sort((a,b) => new Date(a.data) - new Date(b.data)); if(!await persistirBancoHorasSeguro(novosRegistos)) return;
-    
-    document.getElementById('bh_cliente').value = ''; document.getElementById('bh_motivo').value = ''; document.getElementById('bh_local').value = '';
+    limparCamposBancoHorasAposGravar();
     const mesDoRegisto = data.slice(0, 7); document.getElementById('bh_mes_inicio').value = mesDoRegisto; document.getElementById('bh_mes_fim').value = mesDoRegisto;
-    renderTabelaBancoHoras(); mostrarToast("Lançamento efetuado!");
+    renderTabelaBancoHoras(); mostrarToast('Lançamento efetuado!');
 }
 
 async function adicionarDiaCompletoBancoHoras() {
-    const data = document.getElementById('bh_data').value; 
-    const cliente = document.getElementById('bh_cliente').value; 
-    const motivoInput = document.getElementById('bh_motivo').value.trim(); 
-    const local = document.getElementById('bh_local').value; 
+    if (bancoHorasEdicaoId) { mostrarToast('Conclua ou cancele a edição atual antes de adicionar um dia completo.', true); return; }
+    const data = document.getElementById('bh_data').value;
+    const cliente = document.getElementById('bh_cliente').value;
+    const motivoInput = document.getElementById('bh_motivo').value.trim();
+    const local = document.getElementById('bh_local').value;
     const isCredito = document.getElementById('bh_tipo_credito').checked;
-    
-    if(!data) { mostrarToast("Selecione a Data!", true); return; }
-    if(!dataISOValida(data)) { mostrarToast("Data inválida.", true); return; }
-    
-    const dateObj = new Date(data + 'T00:00:00');
-    const dayOfWeek = dateObj.getDay(); 
-    
-    let mins = 0; let chegada = "08:00"; let saida = "17:00";
-    
-    if (dayOfWeek >= 1 && dayOfWeek <= 4) { mins = 540; chegada = "08:00"; saida = "17:00"; } 
-    else if (dayOfWeek === 5) { mins = 480; chegada = "08:00"; saida = "16:00"; } 
-    else { mostrarToast("Aviso: Fim de semana (Sáb/Dom) considerado 0h.", true); return; }
-    
+    if(!data) { mostrarToast('Selecione a Data!', true); return; }
+    if(!dataISOValida(data)) { mostrarToast('Data inválida.', true); return; }
+    const dateObj = new Date(data + 'T00:00:00'); const dayOfWeek = dateObj.getDay();
+    let mins = 0; let chegada = '08:00'; let saida = '17:00';
+    if (dayOfWeek >= 1 && dayOfWeek <= 4) { mins = 540; chegada = '08:00'; saida = '17:00'; }
+    else if (dayOfWeek === 5) { mins = 480; chegada = '08:00'; saida = '16:00'; }
+    else { mostrarToast('Aviso: Fim de semana (Sáb/Dom) considerado 0h.', true); return; }
     const balancoFinal = isCredito ? mins : -mins;
-    const motivoFinal = motivoInput ? `${motivoInput} (Dia Completo)` : "Dia Completo";
-    
+    const motivoFinal = motivoInput ? `${motivoInput} (Dia Completo)` : 'Dia Completo';
     const novoReg = { id: novoIdLocal(), data, cliente, motivo: motivoFinal, local, chegada, saida, isCredito, balancoFinal };
     const novosRegistos = [...registosBancoHoras, novoReg].sort((a,b) => new Date(a.data) - new Date(b.data));
     if(!await persistirBancoHorasSeguro(novosRegistos)) return;
-    
-    document.getElementById('bh_cliente').value = ''; document.getElementById('bh_motivo').value = ''; document.getElementById('bh_local').value = '';
+    limparCamposBancoHorasAposGravar();
     const mesDoRegisto = data.slice(0, 7); document.getElementById('bh_mes_inicio').value = mesDoRegisto; document.getElementById('bh_mes_fim').value = mesDoRegisto;
     renderTabelaBancoHoras(); mostrarToast(`Dia completo adicionado (${mins/60}h)!`);
 }
 
 async function removerRegistoHora(id) {
-    if(!confirm('Apagar este registo?')) return; const novosRegistos = registosBancoHoras.filter(r => r.id !== id); if(await persistirBancoHorasSeguro(novosRegistos)) renderTabelaBancoHoras();
+    if(!confirm('Apagar este registo?')) return;
+    const novosRegistos = registosBancoHoras.filter(r => String(r.id) !== String(id));
+    if(await persistirBancoHorasSeguro(novosRegistos)) {
+        if (String(bancoHorasEdicaoId || '') === String(id)) { bancoHorasEdicaoId = null; atualizarModoEdicaoBancoHoras(); limparCamposBancoHorasAposGravar(); }
+        renderTabelaBancoHoras();
+    }
 }
 
 async function limparTabelaHoras() {
     const inicioVal = document.getElementById('bh_mes_inicio').value; const fimVal = document.getElementById('bh_mes_fim').value; if(!inicioVal || !fimVal) return;
-    if(confirm(`Apagar TODOS os registos do período?`)) {
+    if(confirm('Apagar TODOS os registos do período?')) {
+        const removidos = new Set(registosBancoHoras.filter(r => { const mes = r.data.slice(0, 7); return mes >= inicioVal && mes <= fimVal; }).map(r => String(r.id)));
         const novosRegistos = registosBancoHoras.filter(r => { const mes = r.data.slice(0, 7); return !(mes >= inicioVal && mes <= fimVal); });
-        if(await persistirBancoHorasSeguro(novosRegistos)) { renderTabelaBancoHoras(); mostrarToast('Dados apagados.'); }
+        if(await persistirBancoHorasSeguro(novosRegistos)) {
+            if (bancoHorasEdicaoId && removidos.has(String(bancoHorasEdicaoId))) { bancoHorasEdicaoId = null; atualizarModoEdicaoBancoHoras(); limparCamposBancoHorasAposGravar(); }
+            renderTabelaBancoHoras(); mostrarToast('Dados apagados.');
+        }
     }
 }
 
 function renderTabelaBancoHoras() {
-    const tbody = document.getElementById('bh_tabela_registos'); 
+    const tbody = document.getElementById('bh_tabela_registos');
     const inicioVal = document.getElementById('bh_mes_inicio').value; const fimVal = document.getElementById('bh_mes_fim').value;
     let regsFiltrados = registosBancoHoras;
-    
     if (inicioVal && fimVal) regsFiltrados = registosBancoHoras.filter(r => { const m = r.data.slice(0, 7); return m >= inicioVal && m <= fimVal; });
-    
     let html = ''; let totalPeriodo = 0;
-    
-    if(regsFiltrados.length === 0) { 
-        html = `<tr><td colspan="5" class="p-6 text-center text-gray-400 font-medium">Nenhum registo encontrado.</td></tr>`; 
+    if(regsFiltrados.length === 0) {
+        html = `<tr><td colspan="5" class="p-6 text-center text-gray-400 font-medium">Nenhum registo encontrado.</td></tr>`;
     } else {
         regsFiltrados.forEach(reg => {
             totalPeriodo += reg.balancoFinal;
             const textoBalanco = formatarMins(reg.balancoFinal); const corBal = reg.balancoFinal > 0 ? 'text-blue-600' : (reg.balancoFinal < 0 ? 'text-red-600' : 'text-gray-500');
+            const emEdicao = String(bancoHorasEdicaoId || '') === String(reg.id);
             html += `
-            <tr class="hover:bg-blue-50/50 transition-colors">
+            <tr class="${emEdicao ? 'bg-blue-50/80' : 'hover:bg-blue-50/50'} transition-colors">
                 <td class="p-4 font-semibold text-gray-700 whitespace-nowrap">${reg.data.split('-').reverse().join('/')}</td>
                 <td class="p-4"><div class="font-bold text-gray-900">${escapeHTML(reg.cliente || '-')}</div><div class="text-xs text-gray-500 mt-0.5">${escapeHTML(reg.local || '-')} | ${escapeHTML(reg.motivo || '-')}</div></td>
                 <td class="p-4 font-mono text-gray-600 text-center whitespace-nowrap">${reg.chegada} - ${reg.saida}</td>
                 <td class="p-4 text-right font-mono font-black ${corBal} text-base whitespace-nowrap">${textoBalanco}</td>
-                <td class="p-4 text-center"><button onclick="removerRegistoHora('${reg.id}')" class="text-gray-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
+                <td class="p-4 text-center whitespace-nowrap"><div class="inline-flex items-center gap-1">
+                    <button type="button" onclick="iniciarEdicaoRegistoHora('${reg.id}')" class="text-blue-500 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors" title="Editar lançamento" aria-label="Editar lançamento"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 13H9v-2.828l6.586-6.586z"></path></svg></button>
+                    <button type="button" onclick="removerRegistoHora('${reg.id}')" class="text-gray-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors" title="Excluir lançamento" aria-label="Excluir lançamento"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                </div></td>
             </tr>`;
         });
     }
     tbody.innerHTML = html;
-    
     let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
-    
     const valPeriodoEl = document.getElementById('bh_periodo_horas'); const badgePeriodo = document.getElementById('bh_status_periodo');
     valPeriodoEl.textContent = formatarMins(totalPeriodo);
-    
-    if(totalPeriodo > 0) { valPeriodoEl.className = "text-4xl font-black font-mono text-blue-400 tracking-tight"; badgePeriodo.textContent = "CRÉDITO"; badgePeriodo.className = "px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-900/50 text-blue-400 uppercase tracking-widest border border-blue-800"; } 
-    else if (totalPeriodo < 0) { valPeriodoEl.className = "text-4xl font-black font-mono text-red-400 tracking-tight"; badgePeriodo.textContent = "DÉBITO"; badgePeriodo.className = "px-2.5 py-1 rounded-md text-[10px] font-bold bg-red-900/50 text-red-400 uppercase tracking-widest border border-red-800"; } 
-    else { valPeriodoEl.className = "text-4xl font-black font-mono text-gray-300 tracking-tight"; badgePeriodo.textContent = "NEUTRO"; badgePeriodo.className = "px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest border border-gray-600"; }
-
+    if(totalPeriodo > 0) { valPeriodoEl.className = 'text-4xl font-black font-mono text-blue-400 tracking-tight'; badgePeriodo.textContent = 'CRÉDITO'; badgePeriodo.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-900/50 text-blue-400 uppercase tracking-widest border border-blue-800'; }
+    else if (totalPeriodo < 0) { valPeriodoEl.className = 'text-4xl font-black font-mono text-red-400 tracking-tight'; badgePeriodo.textContent = 'DÉBITO'; badgePeriodo.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-red-900/50 text-red-400 uppercase tracking-widest border border-red-800'; }
+    else { valPeriodoEl.className = 'text-4xl font-black font-mono text-gray-300 tracking-tight'; badgePeriodo.textContent = 'NEUTRO'; badgePeriodo.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest border border-gray-600'; }
     const valTotalEl = document.getElementById('bh_total_horas'); const badgeStatus = document.getElementById('bh_status_saldo'); const cardGlow = document.getElementById('card_global_glow');
     valTotalEl.textContent = formatarMins(totalGlobal);
     cardGlow.classList.remove('shadow-[0_0_20px_rgba(37,99,235,0.3)]', 'shadow-[0_0_20px_rgba(239,68,68,0.3)]', 'border-blue-800', 'border-red-800');
-    
-    if(totalGlobal > 0) { 
-        valTotalEl.className = "text-4xl font-black font-mono text-blue-400 tracking-tight"; badgeStatus.textContent = "A RECEBER"; badgeStatus.className = "px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-900/50 text-blue-400 uppercase tracking-widest border border-blue-800"; 
-        cardGlow.classList.add('shadow-[0_0_20px_rgba(37,99,235,0.3)]', 'border-blue-800');
-    } else if (totalGlobal < 0) { 
-        valTotalEl.className = "text-4xl font-black font-mono text-red-400 tracking-tight"; badgeStatus.textContent = "A COMPENSAR"; badgeStatus.className = "px-2.5 py-1 rounded-md text-[10px] font-bold bg-red-900/50 text-red-400 uppercase tracking-widest border border-red-800"; 
-        cardGlow.classList.add('shadow-[0_0_20px_rgba(239,68,68,0.3)]', 'border-red-800');
-    } else { 
-        valTotalEl.className = "text-4xl font-black font-mono text-gray-300 tracking-tight"; badgeStatus.textContent = "REGULARIZADO"; badgeStatus.className = "px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest border border-gray-600"; 
-    }
+    if(totalGlobal > 0) { valTotalEl.className = 'text-4xl font-black font-mono text-blue-400 tracking-tight'; badgeStatus.textContent = 'A RECEBER'; badgeStatus.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-900/50 text-blue-400 uppercase tracking-widest border border-blue-800'; cardGlow.classList.add('shadow-[0_0_20px_rgba(37,99,235,0.3)]', 'border-blue-800'); }
+    else if (totalGlobal < 0) { valTotalEl.className = 'text-4xl font-black font-mono text-red-400 tracking-tight'; badgeStatus.textContent = 'A COMPENSAR'; badgeStatus.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-red-900/50 text-red-400 uppercase tracking-widest border border-red-800'; cardGlow.classList.add('shadow-[0_0_20px_rgba(239,68,68,0.3)]', 'border-red-800'); }
+    else { valTotalEl.className = 'text-4xl font-black font-mono text-gray-300 tracking-tight'; badgeStatus.textContent = 'REGULARIZADO'; badgeStatus.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest border border-gray-600'; }
 }
 
 function gerarPdfBancoHoras() {
-    if (!window.jspdf?.jsPDF) { mostrarToast("Motor de PDF indisponível. Verifique a ligação ou o cache offline.", true); return; }
+    if (!window.jspdf?.jsPDF) { mostrarToast('Motor de PDF indisponível. Verifique a ligação ou o cache offline.', true); return; }
     try {
-    const inicioVal = document.getElementById('bh_mes_inicio').value; const fimVal = document.getElementById('bh_mes_fim').value;
-    let regsFiltrados = registosBancoHoras; let strPeriodo = 'Todos os Registos';
-    if (inicioVal && fimVal) { regsFiltrados = registosBancoHoras.filter(r => { const mesRegisto = r.data.slice(0, 7); return mesRegisto >= inicioVal && mesRegisto <= fimVal; }); strPeriodo = `${inicioVal.split('-').reverse().join('/')} a ${fimVal.split('-').reverse().join('/')}`; }
-    if(regsFiltrados.length === 0) { mostrarToast("Não há dados.", true); return; }
-    const { jsPDF } = window.jspdf; const doc = new jsPDF('landscape'); let startYHeader = 25;
-    if (imgObject && logoImgData) { let ratio = Math.min(45 / imgObject.width, 15 / imgObject.height); doc.addImage(logoImgData, logoImgFormat || 'PNG', 15, 10, imgObject.width * ratio, imgObject.height * ratio); startYHeader = Math.max(25, 10 + (imgObject.height * ratio) + 5); }
-    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("RELATÓRIO DE HORAS", 148, 15, { align: "center" }); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(`Técnico: ${document.getElementById('bh_nome_tecnico').value || 'Não Preenchido'}`, 15, startYHeader); doc.text(`Período: ${strPeriodo}`, 280, startYHeader, { align: "right" });
-    let corpoTabela = []; let totalPeriodo = 0; regsFiltrados.forEach(reg => { totalPeriodo += reg.balancoFinal; corpoTabela.push([reg.data.split('-').reverse().join('/'), reg.cliente || '-', reg.motivo || '-', reg.local || '-', `${reg.chegada} - ${reg.saida}`, formatarMins(reg.balancoFinal)]); });
-    let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += r.balancoFinal);
-    doc.autoTable({ startY: startYHeader + 5, head: [['Data', 'Cliente', 'Motivo', 'Local', 'Período', 'Extra/Falta']], body: corpoTabela, theme: 'grid', headStyles: { fillColor: [16, 185, 129] }, styles: { fontSize: 9, cellPadding: 3 }, columnStyles: { 5: { halign: 'right', fontStyle: 'bold' } } });
-    let posY = doc.lastAutoTable.finalY + 15; if (posY > 160) { doc.addPage(); posY = 30; }
-    doc.setFont("helvetica", "bold"); doc.setFontSize(11); const textSaldoPeriodo = totalPeriodo >= 0 ? "SALDO PERÍODO (CRÉDITO)" : "SALDO PERÍODO (DÉBITO)"; const colorPer = totalPeriodo >= 0 ? [37, 99, 235] : [239, 68, 68]; doc.setTextColor(...colorPer); doc.text(`${textSaldoPeriodo}: ${formatarMins(totalPeriodo)}`, 15, posY);
-    posY += 10; doc.setFontSize(14); const textoSaldo = totalGlobal >= 0 ? "SALDO ACUMULADO (CRÉDITO)" : "SALDO ACUMULADO (DÉBITO)"; const textColor = totalGlobal >= 0 ? [37, 99, 235] : [239, 68, 68]; doc.setTextColor(...textColor); doc.text(`${textoSaldo}: ${formatarMins(totalGlobal)}`, 15, posY);
-    doc.setTextColor(0, 0, 0); doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.line(80, posY + 35, 210, posY + 35); doc.text("ASSINATURA", 145, posY + 40, {align: "center"});
-    doc.save(`Horas_${new Date().getTime()}.pdf`);
-    } catch (err) {
-        console.error('Erro ao gerar folha de ponto:', err);
-        mostrarToast('Não foi possível gerar a folha de ponto em PDF.', true);
-    }
+        const inicioVal = document.getElementById('bh_mes_inicio').value; const fimVal = document.getElementById('bh_mes_fim').value;
+        let regsFiltrados = registosBancoHoras; let strPeriodo = 'Todos os Registos';
+        if (inicioVal && fimVal) { regsFiltrados = registosBancoHoras.filter(r => { const mesRegisto = r.data.slice(0, 7); return mesRegisto >= inicioVal && mesRegisto <= fimVal; }); strPeriodo = `${inicioVal.split('-').reverse().join('/')} a ${fimVal.split('-').reverse().join('/')}`; }
+        if(regsFiltrados.length === 0) { mostrarToast('Não há dados.', true); return; }
+        const { jsPDF } = window.jspdf; const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const pageW = doc.internal.pageSize.getWidth(); const pageH = doc.internal.pageSize.getHeight(); let startYHeader = 25;
+        if (imgObject && logoImgData) { const ratio = Math.min(45 / imgObject.width, 15 / imgObject.height); doc.addImage(logoImgData, logoImgFormat || 'PNG', 15, 9, imgObject.width * ratio, imgObject.height * ratio); startYHeader = Math.max(25, 9 + (imgObject.height * ratio) + 5); }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(31, 41, 55); doc.text('RELATÓRIO DE HORAS', pageW / 2, 15, { align: 'center' });
+        doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(75, 85, 99); doc.text(`Técnico: ${document.getElementById('bh_nome_tecnico').value || 'Não Preenchido'}`, 15, startYHeader); doc.text(`Período: ${strPeriodo}`, pageW - 15, startYHeader, { align: 'right' });
+        doc.setDrawColor(226, 232, 240); doc.line(15, startYHeader + 3.5, pageW - 15, startYHeader + 3.5);
+        const corpoTabela = []; let totalPeriodo = 0;
+        regsFiltrados.forEach(reg => { totalPeriodo += Number(reg.balancoFinal) || 0; corpoTabela.push([reg.data.split('-').reverse().join('/'), reg.cliente || '-', reg.motivo || '-', reg.local || '-', `${reg.chegada} - ${reg.saida}`, formatarMins(reg.balancoFinal)]); });
+        let totalGlobal = 0; registosBancoHoras.forEach(r => totalGlobal += Number(r.balancoFinal) || 0);
+        doc.autoTable({ startY: startYHeader + 7, head: [['Data', 'Cliente', 'Motivo / Atividade', 'Local', 'Período', 'Extra / Falta']], body: corpoTabela, theme: 'grid', margin: { left: 15, right: 15, bottom: 16 }, headStyles: { fillColor: [16, 185, 129], textColor: [255,255,255], fontStyle: 'bold', halign: 'left' }, styles: { fontSize: 8.3, cellPadding: 2.6, textColor: [55,65,81], lineColor: [226,232,240], lineWidth: 0.2, valign: 'middle' }, alternateRowStyles: { fillColor: [248,250,252] }, columnStyles: { 0: { cellWidth: 29 }, 4: { cellWidth: 38, halign: 'center' }, 5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } } });
+        let resumoY = doc.lastAutoTable.finalY + 10; const cardH = 31; const assinaturaEspaco = 32;
+        if (resumoY + cardH + assinaturaEspaco > pageH - 10) { doc.addPage(); resumoY = 23; }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(107,114,128); doc.text(`${regsFiltrados.length} lançamento${regsFiltrados.length === 1 ? '' : 's'} no período selecionado`, 15, resumoY - 3);
+        const gap = 8; const cardW = (pageW - 30 - gap) / 2;
+        const desenharCardSaldo = (x, titulo, valor, minutos, subtitulo) => { const cor = minutos > 0 ? [37,99,235] : (minutos < 0 ? [239,68,68] : [75,85,99]); doc.setFillColor(248,250,252); doc.setDrawColor(226,232,240); doc.roundedRect(x, resumoY, cardW, cardH, 3, 3, 'FD'); doc.setFillColor(...cor); doc.roundedRect(x, resumoY, 3.2, cardH, 1.5, 1.5, 'F'); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(75,85,99); doc.text(titulo, x + 9, resumoY + 8); doc.setFont('helvetica','bold'); doc.setFontSize(19); doc.setTextColor(...cor); doc.text(valor, x + 9, resumoY + 21); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(107,114,128); doc.text(subtitulo, x + cardW - 8, resumoY + 21, { align: 'right' }); };
+        desenharCardSaldo(15, 'SALDO DO PERÍODO', formatarMins(totalPeriodo), totalPeriodo, totalPeriodo > 0 ? 'CRÉDITO' : (totalPeriodo < 0 ? 'DÉBITO' : 'NEUTRO'));
+        desenharCardSaldo(15 + cardW + gap, 'SALDO ACUMULADO', formatarMins(totalGlobal), totalGlobal, totalGlobal > 0 ? 'A RECEBER' : (totalGlobal < 0 ? 'A COMPENSAR' : 'REGULARIZADO'));
+        const assinaturaY = resumoY + cardH + 21; doc.setDrawColor(75,85,99); doc.setLineWidth(0.25); doc.line((pageW/2)-55, assinaturaY, (pageW/2)+55, assinaturaY); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(75,85,99); doc.text('ASSINATURA', pageW/2, assinaturaY + 5, { align: 'center' });
+        const paginas = doc.getNumberOfPages(); for (let p = 1; p <= paginas; p++) { doc.setPage(p); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(148,163,184); doc.text('Multi-OS Pro • Banco de Horas', 15, pageH - 6); doc.text(`Página ${p} de ${paginas}`, pageW - 15, pageH - 6, { align: 'right' }); }
+        const nomeTec = (document.getElementById('bh_nome_tecnico').value || 'Tecnico').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0,40) || 'Tecnico'; const periodoArquivo = inicioVal && fimVal ? `${inicioVal.replace('-', '')}_${fimVal.replace('-', '')}` : dataLocalISO().replace(/-/g,''); doc.save(`Horas_${nomeTec}_${periodoArquivo}.pdf`);
+    } catch (err) { console.error('Erro ao gerar folha de ponto:', err); mostrarToast('Não foi possível gerar a folha de ponto em PDF.', true); }
 }
 
 async function prepararCapturaCamera(id, sessaoEsperada = cameraSessaoId) {

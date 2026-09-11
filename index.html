@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=88">
+    <link rel="manifest" href="./manifest.json?v=89">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=88"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=88"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=88"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=88"></script>
-    <script src="./vendor/pdf-lib.min.js?v=88"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=88"></script>
-    <script src="./vendor/localforage.min.js?v=88"></script>
-    <script src="./vendor/pdf.min.js?v=88"></script>
+    <script src="./vendor/tailwindcss.js?v=89"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=89"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=89"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=89"></script>
+    <script src="./vendor/pdf-lib.min.js?v=89"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=89"></script>
+    <script src="./vendor/localforage.min.js?v=89"></script>
+    <script src="./vendor/pdf.min.js?v=89"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=88').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=89').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=88';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=89';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=88">
+    <link rel="stylesheet" href="style.css?v=89">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -846,14 +846,19 @@
                             </div>
                         </div>
                     </div>
-                    
+                    <div id="bh_edicao_aviso" class="hidden rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
+                        Editando um lançamento existente. Ajuste os campos e toque em “Salvar alterações”.
+                    </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                        <button onclick="adicionarRegistoBancoHoras()" class="py-4 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900 shadow-md transition-colors text-sm uppercase tracking-wide">
-                            Adicionar por Horário
+                        <button id="btnBhAdicionarHorario" type="button" onclick="adicionarRegistoBancoHoras()" class="py-4 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900 shadow-md transition-colors text-sm uppercase tracking-wide">
+                            <span id="btnBhAdicionarHorarioTxt">Adicionar por Horário</span>
                         </button>
-                        <button onclick="adicionarDiaCompletoBancoHoras()" class="py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <button id="btnBhAdicionarDiaCompleto" type="button" onclick="adicionarDiaCompletoBancoHoras()" class="py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"></path></svg>
                             Adicionar Dia Completo (Auto)
+                        </button>
+                        <button id="btnBhCancelarEdicao" type="button" onclick="cancelarEdicaoBancoHoras()" class="hidden py-4 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-xl shadow-sm transition-colors text-sm uppercase tracking-wide">
+                            Cancelar edição
                         </button>
                     </div>
                 </div>
@@ -878,7 +883,7 @@
                             <th class="p-4">Registo</th>
                             <th class="p-4 text-center">Horário</th>
                             <th class="p-4 text-right">Saldo</th>
-                            <th class="p-4 text-center w-16">Ação</th>
+                            <th class="p-4 text-center w-28">Ações</th>
                         </tr>
                     </thead>
                     <tbody id="bh_tabela_registos" class="divide-y divide-gray-100 text-sm"></tbody>
@@ -912,8 +917,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=88"></script>
-    <script src="bancoPecas.js?v=88"></script>
-    <script src="app.js?v=88"></script>
+    <script src="checklists/checklists.js?v=89"></script>
+    <script src="bancoPecas.js?v=89"></script>
+    <script src="app.js?v=89"></script>
 </body>
 </html>
