@@ -864,7 +864,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 90;
+const APP_VERSION = 91;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
@@ -3074,18 +3074,26 @@ function atualizarTotalKm() {
 }
 
 function obterResumoKmRodape() {
+    // Serviço 100% interno não exige deslocamento: placa/KM não aparecem no PDF.
+    if (verificarServicoInternoGlobal()) return '';
+    const placa = (document.getElementById('placaVeiculo')?.value || '').trim().toUpperCase();
     const saidaEl = document.getElementById('kmSaida');
     const chegadaEl = document.getElementById('kmChegada');
-    if (!saidaEl || !chegadaEl) return '';
-    const saida = parseKmSeguro(saidaEl.value);
-    const chegada = parseKmSeguro(chegadaEl.value);
-    if (!Number.isFinite(saida) || !Number.isFinite(chegada) || chegada < saida) return '';
-    const total = Math.round((chegada - saida) * 10) / 10;
-    return `KM saída: ${formatarKm(saida)} | KM chegada: ${formatarKm(chegada)} | Total: ${formatarKm(total)} km`;
+    const partes = [];
+    if (placa) partes.push(`Placa: ${placa}`);
+    if (saidaEl && chegadaEl) {
+        const saida = parseKmSeguro(saidaEl.value);
+        const chegada = parseKmSeguro(chegadaEl.value);
+        if (Number.isFinite(saida) && Number.isFinite(chegada) && chegada >= saida) {
+            const total = Math.round((chegada - saida) * 10) / 10;
+            partes.push(`KM saída: ${formatarKm(saida)}`, `KM chegada: ${formatarKm(chegada)}`, `Total: ${formatarKm(total)} km`);
+        }
+    }
+    return partes.join(' | ');
 }
 
 function recolherDadosDoFormulario() {
-    let dados = { id: documentoAtualId, dataAtualizacao: new Date().toISOString(), tecnico: document.getElementById('tecnico').value, nomeClienteFinal: document.getElementById('nomeClienteFinal').value, cargo: document.getElementById('cargo').value, setor: document.getElementById('setor').value, kmSaida: document.getElementById('kmSaida')?.value.trim() || '', kmChegada: document.getElementById('kmChegada')?.value.trim() || '', totalKm: document.getElementById('kmTotal')?.value.trim() || '', assinaturaTecnico: padTecnico && !padTecnico.isEmpty() ? padTecnico.toDataURL() : null, assinaturaCliente: padCliente && !padCliente.isEmpty() ? padCliente.toDataURL() : null, ordens: [] };
+    let dados = { id: documentoAtualId, dataAtualizacao: new Date().toISOString(), tecnico: document.getElementById('tecnico').value, nomeClienteFinal: document.getElementById('nomeClienteFinal').value, cargo: document.getElementById('cargo').value, setor: document.getElementById('setor').value, placaVeiculo: document.getElementById('placaVeiculo')?.value.trim().toUpperCase() || '', kmSaida: document.getElementById('kmSaida')?.value.trim() || '', kmChegada: document.getElementById('kmChegada')?.value.trim() || '', totalKm: document.getElementById('kmTotal')?.value.trim() || '', assinaturaTecnico: padTecnico && !padTecnico.isEmpty() ? padTecnico.toDataURL() : null, assinaturaCliente: padCliente && !padCliente.isEmpty() ? padCliente.toDataURL() : null, ordens: [] };
     document.querySelectorAll('.os-bloco').forEach(b => {
         const id = b.getAttribute('data-id');
         let ordem = {
@@ -3109,7 +3117,7 @@ function restaurarDadosParaFormulario(doc) {
     cancelarAutoSavePendente(); restaurandoDocumento = true; formularioSujo = false;
     desbloquearEdicao(); documentoAtualId = doc.id; document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
     if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
-    if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o)); ['tecnico','nomeClienteFinal','cargo','setor','kmSaida','kmChegada'].forEach(k => { const el = document.getElementById(k); if (el) el.value = doc[k] || ''; });
+    if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o)); ['tecnico','nomeClienteFinal','cargo','setor','placaVeiculo','kmSaida','kmChegada'].forEach(k => { const el = document.getElementById(k); if (el) el.value = doc[k] || ''; });
     atualizarTotalKm();
     switchTab('novaOs');
     setTimeout(() => {
@@ -3131,6 +3139,8 @@ function atualizarVisibilidadeCamposPorBloco() {
 }
 function atualizarVisibilidadeClienteGeral() {
     const isInterno = verificarServicoInternoGlobal();
+    const controleKm = document.getElementById('controleKmContainer');
+    if (controleKm) controleKm.style.display = isInterno ? 'none' : 'block';
     if (document.getElementById('secaoClienteContainer')) { if (isInterno) { document.getElementById('secaoClienteContainer').style.display = 'none'; if(padCliente) padCliente.clear(); } else { document.getElementById('secaoClienteContainer').style.display = 'block'; setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50); } }
 }
 
@@ -3180,7 +3190,7 @@ async function confirmarAssinaturaExpandida() {
 }
 
 function toggleLock(locked) {
-    document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico select, #listaOrdensServico button, #tecnico, #nomeClienteFinal, #cargo, #setor, #kmSaida, #kmChegada, #kmTotal, #btnAddOs').forEach(el => { el.disabled = locked; locked ? el.classList.add('opacity-50', 'pointer-events-none') : el.classList.remove('opacity-50', 'pointer-events-none'); });
+    document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico select, #listaOrdensServico button, #tecnico, #nomeClienteFinal, #cargo, #setor, #placaVeiculo, #kmSaida, #kmChegada, #kmTotal, #btnAddOs').forEach(el => { el.disabled = locked; locked ? el.classList.add('opacity-50', 'pointer-events-none') : el.classList.remove('opacity-50', 'pointer-events-none'); });
     if(document.getElementById('lockStatus')) { document.getElementById('lockStatus').textContent = locked ? "BLOQUEADO" : "EDITÁVEL"; document.getElementById('lockStatus').className = locked ? "text-[10px] font-bold text-red-600 uppercase tracking-wider bg-red-50 px-2 py-1 rounded" : "text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-1 rounded"; }
 }
 function bloquearEdicao() { toggleLock(true); mostrarToast('Formulário selado pela Assinatura do Cliente.'); }
@@ -3207,7 +3217,7 @@ async function iniciarNovaOS(forcarDescartarRascunho = false) {
     cancelarAutoSavePendente(); salvamentoManualEmAndamento = true; restaurandoDocumento = true;
     try {
         documentoAtualId = novoIdLocal(); document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
-        if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor','kmSaida','kmChegada','kmTotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor','placaVeiculo','kmSaida','kmChegada','kmTotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         const kmAviso = document.getElementById('kmAviso'); if (kmAviso) { kmAviso.textContent = ''; kmAviso.classList.add('hidden'); }
         desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco();
         // Em exclusões internas o rascunho antigo também deve sair. Ao iniciar manualmente uma nova O.S.,
@@ -4005,7 +4015,7 @@ async function construirPDFBytes(onProgressCallback) {
         pagina.drawText(textoAuditoria, { x: 15, y: 15, size: 6, font: fonteNormal, color: rgb(0.6, 0.6, 0.6) });
         const textoPags = `Página ${idx + 1} de ${todasAsPaginas.length}`;
         pagina.drawText(textoPags, { x: width - fonteNormal.widthOfTextAtSize(textoPags, 8) - 15, y: 15, size: 8, font: fonteNormal, color: rgb(0.5, 0.5, 0.5) });
-        if (textoKmRodape) {
+        if (textoKmRodape && idx === todasAsPaginas.length - 1) {
             const larguraKm = fonteNormal.widthOfTextAtSize(textoKmRodape, 6);
             pagina.drawText(textoKmRodape, { x: Math.max(15, (width - larguraKm) / 2), y: 7, size: 6, font: fonteNormal, color: rgb(0.45, 0.45, 0.45) });
         }

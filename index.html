@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=90">
+    <link rel="manifest" href="./manifest.json?v=91">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=90"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=90"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=90"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=90"></script>
-    <script src="./vendor/pdf-lib.min.js?v=90"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=90"></script>
-    <script src="./vendor/localforage.min.js?v=90"></script>
-    <script src="./vendor/pdf.min.js?v=90"></script>
+    <script src="./vendor/tailwindcss.js?v=91"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=91"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=91"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=91"></script>
+    <script src="./vendor/pdf-lib.min.js?v=91"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=91"></script>
+    <script src="./vendor/localforage.min.js?v=91"></script>
+    <script src="./vendor/pdf.min.js?v=91"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=90').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=91').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=90';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=91';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=90">
+    <link rel="stylesheet" href="style.css?v=91">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -174,6 +174,21 @@
            portanto deve permanecer branca mesmo quando a interface está em modo escuro. */
         html[data-theme="dark"] .pdf-signature-live-patch { background:#fff !important; color-scheme:light; }
         html[data-theme="dark"] #modalAssinaturaExpandida .canvas-container * { color: #6b7280 !important; }
+
+        /* v91: Controle de veículo/KM legível no tema escuro.
+           O fundo bg-gray-50/70 da v90 não era convertido pelas regras globais. */
+        html[data-theme="dark"] #controleKmContainer {
+            background-color: var(--app-surface-soft) !important;
+            border-color: var(--app-border) !important;
+        }
+        html[data-theme="dark"] #controleKmContainer .km-control-title { color: var(--app-text) !important; }
+        html[data-theme="dark"] #controleKmContainer .km-control-subtitle,
+        html[data-theme="dark"] #controleKmContainer .km-control-label { color: var(--app-muted) !important; }
+        html[data-theme="dark"] #controleKmContainer #kmTotal {
+            background-color: #1e293b !important;
+            color: #f8fafc !important;
+            border-color: var(--app-border) !important;
+        }
 
         .theme-toggle-btn {
             width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
@@ -661,24 +676,28 @@
                     </div>
 
                     <div class="p-5 space-y-6">
-                        <div class="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+                        <div id="controleKmContainer" class="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
                             <div class="flex items-center justify-between gap-3 mb-3">
                                 <div>
-                                    <div class="text-xs font-black uppercase tracking-wider text-gray-700">Controle de KM</div>
-                                    <div class="text-[11px] text-gray-500 mt-0.5">Opcional • o total é calculado automaticamente.</div>
+                                    <div class="km-control-title text-xs font-black uppercase tracking-wider text-gray-700">Controle de veículo e KM</div>
+                                    <div class="km-control-subtitle text-[11px] text-gray-500 mt-0.5">Opcional • exibido apenas quando houver serviço externo.</div>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div>
-                                    <label for="kmSaida" class="block text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">KM de Saída</label>
+                                    <label for="placaVeiculo" class="km-control-label block text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">Placa</label>
+                                    <input type="text" id="placaVeiculo" maxlength="10" autocapitalize="characters" oninput="this.value=this.value.toUpperCase()" placeholder="Ex: ABC1D23" autocomplete="off" class="w-full border border-gray-300 p-2.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase">
+                                </div>
+                                <div>
+                                    <label for="kmSaida" class="km-control-label block text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">KM de Saída</label>
                                     <input type="text" inputmode="decimal" id="kmSaida" oninput="atualizarTotalKm()" placeholder="Ex: 125430" autocomplete="off" class="w-full border border-gray-300 p-2.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500 font-mono">
                                 </div>
                                 <div>
-                                    <label for="kmChegada" class="block text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">KM de Chegada</label>
+                                    <label for="kmChegada" class="km-control-label block text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">KM de Chegada</label>
                                     <input type="text" inputmode="decimal" id="kmChegada" oninput="atualizarTotalKm()" placeholder="Ex: 125612" autocomplete="off" class="w-full border border-gray-300 p-2.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500 font-mono">
                                 </div>
                                 <div>
-                                    <label for="kmTotal" class="block text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">Total de KM</label>
+                                    <label for="kmTotal" class="km-control-label block text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">Total de KM</label>
                                     <input type="text" id="kmTotal" readonly placeholder="Calculado" class="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-100 text-gray-800 font-mono font-bold outline-none">
                                 </div>
                             </div>
@@ -941,8 +960,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=90"></script>
-    <script src="bancoPecas.js?v=90"></script>
-    <script src="app.js?v=90"></script>
+    <script src="checklists/checklists.js?v=91"></script>
+    <script src="bancoPecas.js?v=91"></script>
+    <script src="app.js?v=91"></script>
 </body>
 </html>
