@@ -864,7 +864,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 89;
+const APP_VERSION = 90;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
@@ -3023,8 +3023,69 @@ function removerAnexo(id) {
     marcarFormularioAlterado();
 }
 
+function parseKmSeguro(valor) {
+    const bruto = String(valor ?? '').trim();
+    if (!bruto) return null;
+    // Aceita decimal com vírgula ou ponto; espaços são ignorados.
+    const normalizado = bruto.replace(/\s+/g, '').replace(',', '.');
+    if (!/^\d+(?:\.\d+)?$/.test(normalizado)) return NaN;
+    const numero = Number(normalizado);
+    return Number.isFinite(numero) && numero >= 0 ? numero : NaN;
+}
+
+function formatarKm(valor) {
+    if (!Number.isFinite(valor)) return '';
+    const arredondado = Math.round(valor * 10) / 10;
+    return (Number.isInteger(arredondado) ? String(arredondado) : arredondado.toFixed(1)).replace('.', ',');
+}
+
+function atualizarTotalKm() {
+    const saidaEl = document.getElementById('kmSaida');
+    const chegadaEl = document.getElementById('kmChegada');
+    const totalEl = document.getElementById('kmTotal');
+    const avisoEl = document.getElementById('kmAviso');
+    if (!saidaEl || !chegadaEl || !totalEl) return null;
+
+    const saida = parseKmSeguro(saidaEl.value);
+    const chegada = parseKmSeguro(chegadaEl.value);
+    let mensagem = '';
+    let total = null;
+
+    if (saida === null || chegada === null) {
+        totalEl.value = '';
+    } else if (!Number.isFinite(saida) || !Number.isFinite(chegada)) {
+        totalEl.value = '';
+        mensagem = 'Informe os quilômetros somente com números.';
+    } else if (chegada < saida) {
+        totalEl.value = '';
+        mensagem = 'KM de chegada não pode ser menor que o KM de saída.';
+    } else {
+        total = Math.round((chegada - saida) * 10) / 10;
+        totalEl.value = formatarKm(total);
+    }
+
+    if (avisoEl) {
+        avisoEl.textContent = mensagem;
+        avisoEl.classList.toggle('hidden', !mensagem);
+    }
+    chegadaEl.classList.toggle('ring-2', Boolean(mensagem));
+    chegadaEl.classList.toggle('ring-red-500', Boolean(mensagem));
+    return total;
+}
+
+function obterResumoKmRodape() {
+    const saidaEl = document.getElementById('kmSaida');
+    const chegadaEl = document.getElementById('kmChegada');
+    if (!saidaEl || !chegadaEl) return '';
+    const saida = parseKmSeguro(saidaEl.value);
+    const chegada = parseKmSeguro(chegadaEl.value);
+    if (!Number.isFinite(saida) || !Number.isFinite(chegada) || chegada < saida) return '';
+    const total = Math.round((chegada - saida) * 10) / 10;
+    return `KM saída: ${formatarKm(saida)} | KM chegada: ${formatarKm(chegada)} | Total: ${formatarKm(total)} km`;
+}
+
 function recolherDadosDoFormulario() {
-    let dados = { id: documentoAtualId, dataAtualizacao: new Date().toISOString(), tecnico: document.getElementById('tecnico').value, nomeClienteFinal: document.getElementById('nomeClienteFinal').value, cargo: document.getElementById('cargo').value, setor: document.getElementById('setor').value, assinaturaTecnico: padTecnico && !padTecnico.isEmpty() ? padTecnico.toDataURL() : null, assinaturaCliente: padCliente && !padCliente.isEmpty() ? padCliente.toDataURL() : null, ordens: [] };
+    let dados = { id: documentoAtualId, dataAtualizacao: new Date().toISOString(), tecnico: document.getElementById('tecnico').value, nomeClienteFinal: document.getElementById('nomeClienteFinal').value, cargo: document.getElementById('cargo').value, setor: document.getElementById('setor').value, kmSaida: document.getElementById('kmSaida')?.value.trim() || '', kmChegada: document.getElementById('kmChegada')?.value.trim() || '', totalKm: document.getElementById('kmTotal')?.value.trim() || '', assinaturaTecnico: padTecnico && !padTecnico.isEmpty() ? padTecnico.toDataURL() : null, assinaturaCliente: padCliente && !padCliente.isEmpty() ? padCliente.toDataURL() : null, ordens: [] };
     document.querySelectorAll('.os-bloco').forEach(b => {
         const id = b.getAttribute('data-id');
         let ordem = {
@@ -3048,7 +3109,8 @@ function restaurarDadosParaFormulario(doc) {
     cancelarAutoSavePendente(); restaurandoDocumento = true; formularioSujo = false;
     desbloquearEdicao(); documentoAtualId = doc.id; document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
     if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
-    if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o)); ['tecnico','nomeClienteFinal','cargo','setor'].forEach(k => document.getElementById(k).value = doc[k] || '');
+    if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o)); ['tecnico','nomeClienteFinal','cargo','setor','kmSaida','kmChegada'].forEach(k => { const el = document.getElementById(k); if (el) el.value = doc[k] || ''; });
+    atualizarTotalKm();
     switchTab('novaOs');
     setTimeout(() => {
         if(document.getElementById('canvasTecnico') && padTecnico && dataUrlImagemSegura(doc.assinaturaTecnico)) padTecnico.fromDataURL(doc.assinaturaTecnico);
@@ -3118,7 +3180,7 @@ async function confirmarAssinaturaExpandida() {
 }
 
 function toggleLock(locked) {
-    document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico select, #listaOrdensServico button, #tecnico, #nomeClienteFinal, #cargo, #setor, #btnAddOs').forEach(el => { el.disabled = locked; locked ? el.classList.add('opacity-50', 'pointer-events-none') : el.classList.remove('opacity-50', 'pointer-events-none'); });
+    document.querySelectorAll('#listaOrdensServico input, #listaOrdensServico textarea, #listaOrdensServico select, #listaOrdensServico button, #tecnico, #nomeClienteFinal, #cargo, #setor, #kmSaida, #kmChegada, #kmTotal, #btnAddOs').forEach(el => { el.disabled = locked; locked ? el.classList.add('opacity-50', 'pointer-events-none') : el.classList.remove('opacity-50', 'pointer-events-none'); });
     if(document.getElementById('lockStatus')) { document.getElementById('lockStatus').textContent = locked ? "BLOQUEADO" : "EDITÁVEL"; document.getElementById('lockStatus').className = locked ? "text-[10px] font-bold text-red-600 uppercase tracking-wider bg-red-50 px-2 py-1 rounded" : "text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-1 rounded"; }
 }
 function bloquearEdicao() { toggleLock(true); mostrarToast('Formulário selado pela Assinatura do Cliente.'); }
@@ -3145,7 +3207,8 @@ async function iniciarNovaOS(forcarDescartarRascunho = false) {
     cancelarAutoSavePendente(); salvamentoManualEmAndamento = true; restaurandoDocumento = true;
     try {
         documentoAtualId = novoIdLocal(); document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
-        if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor'].forEach(id => document.getElementById(id).value = '');
+        if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear(); adicionarBlocoOS(); document.getElementById('tecnico').value = ''; ['nomeClienteFinal','cargo','setor','kmSaida','kmChegada','kmTotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        const kmAviso = document.getElementById('kmAviso'); if (kmAviso) { kmAviso.textContent = ''; kmAviso.classList.add('hidden'); }
         desbloquearEdicao(); switchTab('novaOs'); atualizarVisibilidadeCamposPorBloco();
         // Em exclusões internas o rascunho antigo também deve sair. Ao iniciar manualmente uma nova O.S.,
         // um rascunho salvo da anterior continua disponível pela sua chave própria.
@@ -3322,6 +3385,9 @@ function adicionarBlocoOS(dados = null) {
         if (checklistRestaurado) gravarChecklistNoCampo(id, checklistRestaurado);
     }
     atualizarResumoChecklistOS(id);
+    // v90: defesa redundante — Número de OP permanece sempre opcional.
+    const campoOp = document.getElementById(`op_${id}`);
+    if (campoOp) { campoOp.required = false; campoOp.removeAttribute('required'); }
 
     if (dados) {
         ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
@@ -3932,8 +3998,18 @@ async function construirPDFBytes(onProgressCallback) {
           ];
     await reportProgress(95, "A finalizar compressão e empacotamento...");
     const fonteNormal = await masterPdf.embedFont(StandardFonts.Helvetica); const todasAsPaginas = masterPdf.getPages();
-    const textoAuditoria = `Documento gerado eletronicamente por ${document.getElementById('tecnico').value || "Não Identificado"} em ${new Date().toLocaleDateString('pt-PT')}.`;
-    todasAsPaginas.forEach((pagina, idx) => { const { width } = pagina.getSize(); pagina.drawText(textoAuditoria, { x: 15, y: 15, size: 6, font: fonteNormal, color: rgb(0.6, 0.6, 0.6) }); const textoPags = `Página ${idx + 1} de ${todasAsPaginas.length}`; pagina.drawText(textoPags, { x: width - fonteNormal.widthOfTextAtSize(textoPags, 8) - 15, y: 15, size: 8, font: fonteNormal, color: rgb(0.5, 0.5, 0.5) }); });
+    const textoAuditoria = `Documento gerado eletronicamente por ${document.getElementById('tecnico').value || "Não Identificado"} em ${new Date().toLocaleDateString('pt-BR')}.`;
+    const textoKmRodape = obterResumoKmRodape();
+    todasAsPaginas.forEach((pagina, idx) => {
+        const { width } = pagina.getSize();
+        pagina.drawText(textoAuditoria, { x: 15, y: 15, size: 6, font: fonteNormal, color: rgb(0.6, 0.6, 0.6) });
+        const textoPags = `Página ${idx + 1} de ${todasAsPaginas.length}`;
+        pagina.drawText(textoPags, { x: width - fonteNormal.widthOfTextAtSize(textoPags, 8) - 15, y: 15, size: 8, font: fonteNormal, color: rgb(0.5, 0.5, 0.5) });
+        if (textoKmRodape) {
+            const larguraKm = fonteNormal.widthOfTextAtSize(textoKmRodape, 6);
+            pagina.drawText(textoKmRodape, { x: Math.max(15, (width - larguraKm) / 2), y: 7, size: 6, font: fonteNormal, color: rgb(0.45, 0.45, 0.45) });
+        }
+    });
     const finalPDF = await masterPdf.save(); await reportProgress(100, "Concluído!"); return finalPDF;
 }
 
