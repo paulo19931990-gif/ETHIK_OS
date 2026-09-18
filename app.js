@@ -832,6 +832,8 @@ let currentZoom = 1, startZoom = 1, startDist = 0;
 let pinchStartScrollLeft = 0, pinchStartScrollTop = 0, pinchStartViewportX = 0, pinchStartViewportY = 0;
 let registosBancoHoras = [];
 let bancoHorasEdicaoId = null;
+let bancoHorasOSDataOpcoes = [];
+let bancoHorasAutoFillAnterior = null;
 let contadorOS = 0;
 
 let mediaStreamCamera = null;
@@ -868,7 +870,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 94;
+const APP_VERSION = 95;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
@@ -1275,9 +1277,7 @@ async function executarDiagnosticoApp() {
         setTxt('diagMidias', `${fotosFisicas} foto(s) Blob • ${pdfsFisicos} PDF(s) • ${thumbs} miniatura(s)`, (integridade.ok && integridadeAtual?.ok !== false) ? 'diag-ok' : 'diag-error');
         setTxt('diagEstadoAtual', estadoAtual, formularioSujo ? 'diag-warn' : 'diag-ok');
         setTxt('diagConectividade', `${navigator.onLine ? 'Online' : 'Offline'} • Service Worker ${swAtivo ? 'ativo' : 'sem controle'}`, swAtivo ? 'diag-ok' : 'diag-warn');
-        const integracaoBhClasse = ultimaIntegracaoBh?.ok === false ? 'diag-error' : 'diag-ok';
-        const integracaoBhTexto = ultimaIntegracaoBh?.data ? `${registosBancoHoras.length} lançamento(s) • última integração ${ultimaIntegracaoBh.ok === false ? 'com falha' : 'OK'} em ${new Date(ultimaIntegracaoBh.data).toLocaleString('pt-BR')}` : `${registosBancoHoras.length} lançamento(s) • sem integração recente`;
-        setTxt('diagBancoHoras', integracaoBhTexto, integracaoBhClasse);
+        setTxt('diagBancoHoras', `${registosBancoHoras.length} lançamento(s) • preenchimento manual com apoio das O.S. por data`, 'diag-ok');
 
         const listaInt = document.getElementById('diagIntegridadeLista');
         if (listaInt) {
@@ -2383,6 +2383,114 @@ async function verificarRascunhoPendente() {
     }
 }
 
+function limparAutoPreenchimentoBancoHorasAnterior() {
+    if (!bancoHorasAutoFillAnterior) return;
+    const mapa = { cliente:'bh_cliente', motivo:'bh_motivo', local:'bh_local', chegada:'bh_chegada', saida:'bh_saida' };
+    Object.entries(mapa).forEach(([campo, id]) => {
+        const el = document.getElementById(id);
+        const valorAnterior = String(bancoHorasAutoFillAnterior?.[campo] || '');
+        if (el && valorAnterior && el.value === valorAnterior) el.value = '';
+    });
+    bancoHorasAutoFillAnterior = null;
+}
+
+function esconderSugestaoOSBancoHoras() {
+    const box = document.getElementById('bh_os_helper');
+    const select = document.getElementById('bh_os_encontradas');
+    if (box) box.classList.add('hidden');
+    if (select) { select.classList.add('hidden'); select.innerHTML = ''; }
+    bancoHorasOSDataOpcoes = [];
+}
+
+async function obterOSDoHistoricoNaData(data) {
+    if (!dataISOValida(data) || typeof localforage === 'undefined') return [];
+    const historico = await obterHistoricoSalvo();
+    const encontrados = [];
+    for (const meta of (Array.isArray(historico) ? historico : [])) {
+        if (!idLocalSeguro(String(meta?.id || ''))) continue;
+        let doc = null;
+        try { doc = await localforage.getItem(`os_doc_${meta.id}`); } catch (_) { continue; }
+        if (!doc || !Array.isArray(doc.ordens)) continue;
+        doc.ordens.forEach((ordem, indice) => {
+            if (!ordem || ordem.dt !== data || ordem.cbServInterno || ordem.cbMontagemSala) return;
+            encontrados.push({
+                documentoId: String(doc.id || meta.id || ''),
+                indice,
+                osNum: String(ordem.osNum || '').trim(),
+                cliente: String(ordem.cliente || '').trim(),
+                equipamento: String(ordem.equipamento || '').trim(),
+                local: String(ordem.cidadeVisita || '').trim(), // compatibilidade com O.S. criadas na v93/v94
+                chegada: horaValida(ordem.hc) ? ordem.hc : '',
+                saida: horaValida(ordem.hs) ? ordem.hs : ''
+            });
+        });
+    }
+    return encontrados;
+}
+
+function aplicarDadosOSNoBancoHoras(opcao) {
+    if (!opcao) return;
+    limparAutoPreenchimentoBancoHorasAnterior();
+    const dados = {
+        cliente: opcao.cliente || '',
+        motivo: `Visita externa${opcao.osNum ? ` - O.S. #${opcao.osNum}` : ''}${opcao.equipamento ? ` - ${opcao.equipamento}` : ''}`,
+        local: opcao.local || '',
+        chegada: opcao.chegada || '',
+        saida: opcao.saida || ''
+    };
+    const ids = { cliente:'bh_cliente', motivo:'bh_motivo', local:'bh_local', chegada:'bh_chegada', saida:'bh_saida' };
+    Object.entries(ids).forEach(([campo,id]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        // Local só é preenchido quando a O.S. antiga já possuía cidade; nunca apaga o que o técnico digitou.
+        if (campo === 'local' && !dados.local) return;
+        el.value = dados[campo];
+    });
+    bancoHorasAutoFillAnterior = dados;
+}
+
+function aplicarOSSelecionadaBancoHoras() {
+    const select = document.getElementById('bh_os_encontradas');
+    const idx = Number(select?.value || 0);
+    const opcao = bancoHorasOSDataOpcoes[idx];
+    if (!opcao) return;
+    aplicarDadosOSNoBancoHoras(opcao);
+    const texto = document.getElementById('bh_os_helper_text');
+    if (texto) texto.textContent = `Cliente${opcao.osNum ? ` e horários da O.S. #${opcao.osNum}` : ' e horários'} preenchidos automaticamente. Você pode ajustar antes de salvar.`;
+}
+
+async function preencherBancoHorasPorData() {
+    if (bancoHorasEdicaoId) return; // editar lançamento nunca deve ser sobrescrito por sugestão automática
+    const data = document.getElementById('bh_data')?.value || '';
+    limparAutoPreenchimentoBancoHorasAnterior();
+    esconderSugestaoOSBancoHoras();
+    if (!dataISOValida(data)) return;
+    try {
+        const encontrados = await obterOSDoHistoricoNaData(data);
+        if (!encontrados.length) return;
+        bancoHorasOSDataOpcoes = encontrados;
+        const box = document.getElementById('bh_os_helper');
+        const select = document.getElementById('bh_os_encontradas');
+        const titulo = document.getElementById('bh_os_helper_title');
+        const texto = document.getElementById('bh_os_helper_text');
+        if (box) box.classList.remove('hidden');
+        if (titulo) titulo.textContent = encontrados.length === 1 ? 'O.S. encontrada nesta data' : `${encontrados.length} O.S. encontradas nesta data`;
+        if (select) {
+            select.innerHTML = encontrados.map((o,i) => `<option value="${i}">${escapeHTML(o.cliente || 'Cliente não informado')}${o.osNum ? ` • O.S. #${escapeHTML(o.osNum)}` : ''}${o.equipamento ? ` • ${escapeHTML(o.equipamento)}` : ''}</option>`).join('');
+            select.classList.toggle('hidden', encontrados.length <= 1);
+            select.value = '0';
+        }
+        aplicarDadosOSNoBancoHoras(encontrados[0]);
+        if (texto) texto.textContent = encontrados.length === 1
+            ? 'Cliente e horários foram preenchidos automaticamente. Revise os campos abaixo antes de adicionar.'
+            : 'A primeira O.S. foi preenchida. Selecione outra O.S. abaixo caso necessário.';
+    } catch (e) {
+        console.warn('Não foi possível consultar O.S. pela data para o Banco de Horas:', e);
+        registrarErroApp('preencherBancoHorasPorData', e);
+        esconderSugestaoOSBancoHoras();
+    }
+}
+
 function sanitizarRegistoBancoHoras(reg) {
     const limpo = { ...(reg || {}) };
     // v94: dados de veículo/quilometragem pertencem exclusivamente ao relatório de O.S.
@@ -2479,6 +2587,8 @@ function limparCamposBancoHorasAposGravar() {
     ['bh_cliente','bh_motivo','bh_local','bh_chegada','bh_saida'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
     });
+    bancoHorasAutoFillAnterior = null;
+    esconderSugestaoOSBancoHoras();
     const credito = document.getElementById('bh_tipo_credito'); if (credito) credito.checked = true;
     const debito = document.getElementById('bh_tipo_debito'); if (debito) debito.checked = false;
 }
@@ -2487,6 +2597,7 @@ function iniciarEdicaoRegistoHora(id) {
     const reg = registosBancoHoras.find(r => String(r.id) === String(id));
     if (!reg) { mostrarToast('Lançamento não encontrado.', true); return; }
     bancoHorasEdicaoId = String(reg.id);
+    esconderSugestaoOSBancoHoras(); bancoHorasAutoFillAnterior = null;
     document.getElementById('bh_data').value = reg.data || '';
     document.getElementById('bh_cliente').value = reg.cliente || '';
     document.getElementById('bh_motivo').value = reg.motivo || '';
@@ -3497,7 +3608,6 @@ function recolherDadosDoFormulario() {
             cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked,
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
             dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id),
-            cidadeVisita: getVal('cidadeVisita', id), integrarBancoHoras: !!document.getElementById(`integrarBh_${id}`)?.checked, integracaoBhId: getVal('integracaoBhId', id), integracaoBhCredito: !!document.getElementById(`integracaoBhCredito_${id}`)?.checked,
             anexoMediaId: document.getElementById(`anexoMediaId_${id}`)?.value || null,
             anexoBase64: document.getElementById(`anexoBase64_${id}`)?.value || null, 
             anexoNome: document.getElementById(`anexoMediaId_${id}`)?.dataset.filename || document.getElementById(`anexoBase64_${id}`)?.dataset.filename || null, 
@@ -3531,15 +3641,9 @@ function atualizarVisibilidadeCamposPorBloco() {
     document.querySelectorAll('.os-bloco').forEach(b => {
         const id = b.getAttribute('data-id'); const isInterno = document.getElementById(`cbServInterno_${id}`).checked; const isMontagem = document.getElementById(`cbMontagemSala_${id}`).checked;
         const cHoras = document.getElementById(`containerHoras_${id}`); const cDias = document.getElementById(`containerDias_${id}`); const cReagendar = document.getElementById(`containerReagendar_${id}`);
-        const cIntegracao = document.getElementById(`containerIntegracaoBh_${id}`);
         if (isMontagem) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'block'; } 
         else if (isInterno) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true; } 
         else { if(cHoras) cHoras.style.display = 'grid'; if(cDias) cDias.style.display = 'none'; if(cReagendar) cReagendar.style.display = 'block'; }
-        const podeIntegrar = !isInterno && !isMontagem;
-        if (cIntegracao) cIntegracao.style.display = podeIntegrar ? 'block' : 'none';
-        const chkIntegrar = document.getElementById(`integrarBh_${id}`);
-        if (!podeIntegrar && chkIntegrar) chkIntegrar.checked = false;
-        atualizarIntegracaoBancoHorasUI(id);
     }); atualizarVisibilidadeClienteGeral();
 }
 function atualizarVisibilidadeClienteGeral() {
@@ -3549,12 +3653,6 @@ function atualizarVisibilidadeClienteGeral() {
     if (document.getElementById('secaoClienteContainer')) { if (isInterno) { document.getElementById('secaoClienteContainer').style.display = 'none'; if(padCliente) padCliente.clear(); } else { document.getElementById('secaoClienteContainer').style.display = 'block'; setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50); } }
 }
 
-function atualizarIntegracaoBancoHorasUI(id) {
-    const chk = document.getElementById(`integrarBh_${id}`);
-    const detalhes = document.getElementById(`integracaoBhDetalhes_${id}`);
-    if (!detalhes) return;
-    detalhes.classList.toggle('hidden', !chk?.checked);
-}
 
 function abrirModalAssinatura(alvo) {
     alvoAssinaturaAtual = alvo;
@@ -3649,7 +3747,6 @@ function adicionarBlocoOS(dados = null) {
     contadorOS++;
     const id = contadorOS;
     const dataHoje = dataLocalISO();
-    const integracaoBhIdInicial = String(dados?.integracaoBhId || novoIdLocal());
 
     // Ao adicionar manualmente uma nova O.S. ao mesmo documento, herda
     // Cliente e Nº da O.S. da primeira folha. Na restauração de documentos
@@ -3776,27 +3873,6 @@ function adicionarBlocoOS(dados = null) {
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Data Final</label><input type="date" id="dtFim_${id}" value="${dataHoje}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcDias(${id})"></div>
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total Dias</label><input type="text" id="totalDias_${id}" value="1 dia(s)" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
                 </div>
-
-                <div id="containerIntegracaoBh_${id}" class="integracao-bh-card" style="display:none;">
-                    <input type="hidden" id="integracaoBhId_${id}" value="${escapeHTML(integracaoBhIdInicial)}">
-                    <label class="flex items-start gap-3 cursor-pointer">
-                        <input type="checkbox" id="integrarBh_${id}" onchange="atualizarIntegracaoBancoHorasUI(${id}); marcarFormularioAlterado();" class="mt-1 w-4 h-4 accent-blue-600">
-                        <span><span class="integracao-title block">Adicionar esta visita ao Banco de Horas ao salvar a O.S.</span><span class="integracao-help block">Usa cliente, cidade, data, chegada e saída desta visita. É opcional.</span></span>
-                    </label>
-                    <div id="integracaoBhDetalhes_${id}" class="hidden mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-[10px] font-black uppercase mb-1" style="color:var(--app-muted)">Cidade / Local</label>
-                            <input type="text" id="cidadeVisita_${id}" placeholder="Ex: Extrema - MG" class="w-full border border-blue-200 p-2.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-black uppercase mb-1" style="color:var(--app-muted)">Natureza no Banco de Horas</label>
-                            <div class="flex p-1 bg-gray-200/80 rounded-lg">
-                                <label class="flex-1 text-center cursor-pointer"><input type="radio" name="integracaoBhTipo_${id}" id="integracaoBhCredito_${id}" checked class="peer sr-only"><div class="py-2 rounded-md text-xs font-bold text-gray-500 peer-checked:bg-blue-600 peer-checked:text-white">+ Crédito</div></label>
-                                <label class="flex-1 text-center cursor-pointer"><input type="radio" name="integracaoBhTipo_${id}" id="integracaoBhDebito_${id}" class="peer sr-only"><div class="py-2 rounded-md text-xs font-bold text-gray-500 peer-checked:bg-red-500 peer-checked:text-white">- Débito</div></label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <div class="pt-4 border-t border-gray-100">
@@ -3837,13 +3913,8 @@ function adicionarBlocoOS(dados = null) {
     if (campoOp) { campoOp.required = false; campoOp.removeAttribute('required'); }
 
     if (dados) {
-        ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias','cidadeVisita'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
+        ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
         ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
-        if (document.getElementById(`integracaoBhId_${id}`)) document.getElementById(`integracaoBhId_${id}`).value = dados.integracaoBhId || integracaoBhIdInicial;
-        if (document.getElementById(`integrarBh_${id}`)) document.getElementById(`integrarBh_${id}`).checked = !!dados.integrarBancoHoras;
-        if (document.getElementById(`integracaoBhCredito_${id}`)) document.getElementById(`integracaoBhCredito_${id}`).checked = dados.integracaoBhCredito !== false;
-        if (document.getElementById(`integracaoBhDebito_${id}`)) document.getElementById(`integracaoBhDebito_${id}`).checked = dados.integracaoBhCredito === false;
-        atualizarIntegracaoBancoHorasUI(id);
         if(document.getElementById(`cbMontagemSala_${id}`)) document.getElementById(`cbMontagemSala_${id}`).checked = dados.cbMontagemSala !== undefined ? !!dados.cbMontagemSala : !!dados.cbSemGarantia;
         if (dados.anexoMediaId || (dados.anexoBase64 && dataUrlPdfSegura(dados.anexoBase64))) { const mediaEl = document.getElementById(`anexoMediaId_${id}`); const b64 = document.getElementById(`anexoBase64_${id}`); let nomeAnexo = dados.anexoNome ? String(dados.anexoNome).replace(/^Anexado:\s*/i, '').trim() : ''; if (/^Anexado$/i.test(nomeAnexo)) nomeAnexo = ''; if (dados.anexoMediaId && mediaEl) { mediaEl.value = dados.anexoMediaId; if (nomeAnexo) mediaEl.dataset.filename = nomeAnexo; } else if (b64) { b64.value = dados.anexoBase64; if (nomeAnexo) b64.dataset.filename = nomeAnexo; } definirNomeAnexo(id, nomeAnexo); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
         if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { 
@@ -3937,16 +4008,6 @@ function validarCamposObrigatorios() {
         [...b.querySelectorAll('.foto-desc')].forEach((el, indiceFoto) => {
             if (!el.value.trim()) adicionarPendencia(el, `Descrição da foto ${indiceFoto + 1} da ${nomeBloco}`, el.closest('.foto-item'));
         });
-        if (document.getElementById(`integrarBh_${id}`)?.checked) {
-            const cidade = document.getElementById(`cidadeVisita_${id}`);
-            const dataVisita = document.getElementById(`dt_${id}`);
-            const chegada = document.getElementById(`hc_${id}`);
-            const saida = document.getElementById(`hs_${id}`);
-            if (!cidade?.value?.trim()) adicionarPendencia(cidade, `Cidade/Local para Banco de Horas da ${nomeBloco}`);
-            if (!dataVisita?.value || !dataISOValida(dataVisita.value)) adicionarPendencia(dataVisita, `Data da visita para Banco de Horas da ${nomeBloco}`);
-            if (!chegada?.value || !horaValida(chegada.value)) adicionarPendencia(chegada, `Horário de chegada para Banco de Horas da ${nomeBloco}`);
-            if (!saida?.value || !horaValida(saida.value)) adicionarPendencia(saida, `Horário de saída para Banco de Horas da ${nomeBloco}`);
-        }
     });
 
     if (pendencias.length === 0) { ultimaMensagemValidacaoObrigatoria = ''; return true; }
@@ -4017,19 +4078,8 @@ async function salvarDocumento(silencioso = false) {
         // A remoção do rascunho é pós-confirmação: se falhar, não transforma um salvamento válido em falha.
         try { await removerRascunhoPersistente(dados.id); }
         catch (e) { console.warn('O.S. salva, mas o rascunho antigo não pôde ser removido:', e); registrarErroApp('removerRascunhoAposSalvar', e); }
-        let integracaoBhResultado = { ok:true, total:0 };
-        try { integracaoBhResultado = await sincronizarBancoHorasAPartirDaOS(dados); }
-        catch (e) {
-            integracaoBhResultado = { ok:false, total:0, erro:e?.message || String(e) };
-            console.warn('O.S. salva, mas a integração com Banco de Horas falhou:', e); registrarErroApp('integracaoBancoHorasOS', e);
-            try { await localforage.setItem('diagnostico_ultima_integracao_bh_v94', { ...integracaoBhResultado, data:new Date().toISOString(), documentoId:String(dados.id || '') }); } catch (_) {}
-        }
         atualizarIndicadorRascunho(`O.S. salva no Histórico: ${new Date().toLocaleTimeString('pt-BR')}`, 'historico');
-        if(!silencioso) {
-            if (integracaoBhResultado.ok && integracaoBhResultado.total > 0) mostrarToast(`O.S. salva e Banco de Horas sincronizado (${integracaoBhResultado.total} visita${integracaoBhResultado.total === 1 ? '' : 's'}).`);
-            else if (!integracaoBhResultado.ok) mostrarToast(`O.S. salva no Histórico, mas o Banco de Horas não foi sincronizado. ${integracaoBhResultado.erro || ''}`.trim(), true);
-            else mostrarToast('O.S. salva e confirmada no Histórico!');
-        }
+        if(!silencioso) mostrarToast('O.S. salva e confirmada no Histórico!');
 
         // Limpeza de mídia é manutenção e não deve desfazer um salvamento já confirmado.
         try { await limparMidiasRemovidasDoDocumento(documentoAnterior, dados); }
