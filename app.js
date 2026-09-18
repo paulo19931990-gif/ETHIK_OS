@@ -864,7 +864,7 @@ let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 91;
+const APP_VERSION = 92;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
@@ -3412,6 +3412,9 @@ function adicionarBlocoOS(dados = null) {
                 <input type="number" min="0" max="99" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" value="${escapeHTML(p.q)}" class="w-12 min-w-0 border border-gray-300 px-1 py-2 rounded-lg text-xs sm:text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
                 <input type="text" list="dbNomesPecas" onchange="autoPreencherPeca(this, 'nome')" placeholder="Nome da Peça" value="${escapeHTML(p.n)}" class="flex-1 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
                 <input type="text" list="dbCodigosPecas" onchange="autoPreencherPeca(this, 'codigo')" maxlength="25" placeholder="Código" value="${escapeHTML(p.c)}" class="w-28 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center">
+                <button type="button" onclick="removerPecaRow(this)" class="w-9 h-9 flex-none inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 transition-colors" title="Remover esta peça" aria-label="Remover esta peça">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
             `; 
             pContainer.appendChild(row); 
         }); else { addPecaRow(id); addPecaRow(id); }
@@ -3428,8 +3431,28 @@ function addPecaRow(id) {
         <input type="number" min="0" max="99" oninput="if(this.value.length>2)this.value=this.value.slice(0,2); this.value = Math.abs(this.value)" placeholder="Qtd" class="w-12 min-w-0 border border-gray-300 px-1 py-2 rounded-lg text-xs sm:text-sm q bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold">
         <input type="text" list="dbNomesPecas" onchange="autoPreencherPeca(this, 'nome')" placeholder="Nome da Peça" class="flex-1 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm n bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500">
         <input type="text" list="dbCodigosPecas" onchange="autoPreencherPeca(this, 'codigo')" maxlength="25" placeholder="Código" class="w-28 min-w-0 border border-gray-300 px-2 py-2 rounded-lg text-xs sm:text-sm c bg-gray-50 outline-none focus:ring-1 focus:ring-blue-500 font-mono text-center">
+        <button type="button" onclick="removerPecaRow(this)" class="w-9 h-9 flex-none inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 transition-colors" title="Remover esta peça" aria-label="Remover esta peça">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        </button>
     `; 
     container.appendChild(row);
+}
+
+function removerPecaRow(botao) {
+    const row = botao?.closest('.peca-row-item');
+    if (!row) return;
+    const nome = row.querySelector('.n')?.value?.trim() || '';
+    const codigo = row.querySelector('.c')?.value?.trim() || '';
+    const qtd = row.querySelector('.q')?.value?.trim() || '';
+    const preenchida = Boolean(nome || codigo || qtd);
+    if (preenchida) {
+        const identificacao = nome || codigo || 'esta peça';
+        if (!confirm(`Remover "${identificacao}" deste relatório?`)) return;
+    }
+    row.remove();
+    marcarFormularioAlterado();
+    autoSalvarRascunho();
+    mostrarToast('Peça removida do relatório.');
 }
 
 function calcH(id) {
