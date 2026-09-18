@@ -870,7 +870,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 96;
+const APP_VERSION = 97;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
@@ -2598,27 +2598,23 @@ async function preencherBancoHorasPorData() {
     if (bancoHorasEdicaoId) return; // editar lançamento nunca deve ser sobrescrito por sugestão automática
     const data = document.getElementById('bh_data')?.value || '';
     limparAutoPreenchimentoBancoHorasAnterior();
+    // v97: a consulta fica silenciosa. Nenhum quadro, seletor de O.S. ou equipamento aparece na tela.
     esconderSugestaoOSBancoHoras();
     if (!dataISOValida(data)) return;
     try {
         const encontrados = await obterOSDoHistoricoNaData(data);
         if (!encontrados.length) return;
-        bancoHorasOSDataOpcoes = encontrados;
-        const box = document.getElementById('bh_os_helper');
-        const select = document.getElementById('bh_os_encontradas');
-        const titulo = document.getElementById('bh_os_helper_title');
-        const texto = document.getElementById('bh_os_helper_text');
-        if (box) box.classList.remove('hidden');
-        if (titulo) titulo.textContent = encontrados.length === 1 ? 'Cliente encontrado nesta data' : `${encontrados.length} O.S. encontradas nesta data`;
-        if (select) {
-            select.innerHTML = encontrados.map((o,i) => `<option value="${i}">${escapeHTML(o.cliente || 'Cliente não informado')}${o.osNum ? ` • O.S. #${escapeHTML(o.osNum)}` : ''}${o.equipamento ? ` • ${escapeHTML(o.equipamento)}` : ''}</option>`).join('');
-            select.classList.toggle('hidden', encontrados.length <= 1);
-            select.value = '0';
-        }
-        aplicarDadosOSNoBancoHoras(encontrados[0]);
-        if (texto) texto.textContent = encontrados.length === 1
-            ? 'Somente o nome do cliente foi preenchido. Complete manualmente motivo, local e horários.'
-            : 'O cliente da primeira O.S. foi preenchido. Selecione outra O.S. abaixo se necessário; somente o nome será alterado.';
+        bancoHorasOSDataOpcoes = encontrados; // preservado por compatibilidade com funções antigas, sem exibição visual.
+        const clientesUnicos = [];
+        const chavesClientes = new Set();
+        encontrados.forEach(o => {
+            const cliente = String(o?.cliente || '').trim();
+            const chave = cliente.toLocaleLowerCase('pt-BR');
+            if (cliente && !chavesClientes.has(chave)) { chavesClientes.add(chave); clientesUnicos.push(o); }
+        });
+        // Se todas as O.S. da data pertencem ao mesmo cliente, preenche silenciosamente.
+        // Se houver clientes diferentes no mesmo dia, não arrisca escolher o cliente errado: o técnico preenche manualmente.
+        if (clientesUnicos.length === 1) aplicarDadosOSNoBancoHoras(clientesUnicos[0]);
     } catch (e) {
         console.warn('Não foi possível consultar O.S. pela data para o Banco de Horas:', e);
         registrarErroApp('preencherBancoHorasPorData', e);

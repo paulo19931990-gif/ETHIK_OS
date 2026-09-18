@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=96">
+    <link rel="manifest" href="./manifest.json?v=97">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=96"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=96"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=96"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=96"></script>
-    <script src="./vendor/pdf-lib.min.js?v=96"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=96"></script>
-    <script src="./vendor/localforage.min.js?v=96"></script>
-    <script src="./vendor/pdf.min.js?v=96"></script>
+    <script src="./vendor/tailwindcss.js?v=97"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=97"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=97"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=97"></script>
+    <script src="./vendor/pdf-lib.min.js?v=97"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=97"></script>
+    <script src="./vendor/localforage.min.js?v=97"></script>
+    <script src="./vendor/pdf.min.js?v=97"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=96').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=97').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=96';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=97';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=96">
+    <link rel="stylesheet" href="style.css?v=97">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -258,6 +258,10 @@
         .history-action svg { width:17px; height:17px; flex:none; }
         .history-action-neutral { color:var(--app-text); background:var(--app-surface-soft); border:1px solid var(--app-border); }
         .history-action-neutral:hover { border-color:#94a3b8; }
+        .history-action-success { color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0; }
+        .history-action-success:hover { color:#064e3b; background:#d1fae5; border-color:#6ee7b7; }
+        html[data-theme="dark"] .history-action-success { color:#6ee7b7; background:#0d2f28; border-color:#176b58; }
+        html[data-theme="dark"] .history-action-success:hover { color:#a7f3d0; background:#103a31; border-color:#2aa984; }
         .history-action-primary { color:#fff; background:linear-gradient(135deg,#4f46e5,#4338ca); border:1px solid #6366f1; }
         .history-action-primary-soft { color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; }
         html[data-theme="dark"] .history-action-primary-soft { color:#c7d2fe; background:#252654; border-color:#4f46e5; }
@@ -551,7 +555,7 @@
                     </div>
                     <div><div class="login-brand-title">Multi-OS <span style="color:#60a5fa">PRO</span></div><div class="login-brand-sub">Enterprise</div></div>
                 </div>
-                <span class="login-version">v96</span>
+                <span class="login-version">v97</span>
             </div>
 
             <div class="login-avatar-wrap">
@@ -1041,7 +1045,7 @@
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v12m0 0l-3-3m3 3l3-3M5 20h14"></path></svg> Importar Peças
                             <input type="file" accept=".json,application/json" onchange="importarBancoPecasJSON(event)" class="hidden">
                         </label>
-                        <button onclick="abrirDiagnosticoApp()" class="history-action history-action-neutral" title="Verificar salvamento, fotos, Blobs, armazenamento e erros recentes">
+                        <button onclick="abrirDiagnosticoApp()" class="history-action history-action-success" title="Verificar salvamento, fotos, Blobs, armazenamento e erros recentes">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg> Diagnóstico
                         </button>
                         <button onclick="abrirLixeira()" class="history-action history-action-warn">
@@ -1105,7 +1109,7 @@
                         <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Data</label><input type="date" id="bh_data" onchange="preencherBancoHorasPorData()" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono"></div>
                         <div><label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Cliente / Empresa</label><input type="text" id="bh_cliente" placeholder="Onde foi o serviço?" class="w-full border border-gray-300 p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium"></div>
                     </div>
-                    <div id="bh_os_helper" class="bh-os-helper hidden" aria-live="polite">
+                    <div id="bh_os_helper" class="bh-os-helper hidden" style="display:none !important" aria-hidden="true" aria-live="off">
                         <div class="bh-os-helper-head">
                             <div>
                                 <div id="bh_os_helper_title" class="bh-os-helper-title">O.S. encontrada nesta data</div>
@@ -1209,8 +1213,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=96"></script>
-    <script src="bancoPecas.js?v=96"></script>
-    <script src="app.js?v=96"></script>
+    <script src="checklists/checklists.js?v=97"></script>
+    <script src="bancoPecas.js?v=97"></script>
+    <script src="app.js?v=97"></script>
 </body>
 </html>
