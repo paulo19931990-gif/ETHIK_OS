@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=95">
+    <link rel="manifest" href="./manifest.json?v=96">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=95"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=95"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=95"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=95"></script>
-    <script src="./vendor/pdf-lib.min.js?v=95"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=95"></script>
-    <script src="./vendor/localforage.min.js?v=95"></script>
-    <script src="./vendor/pdf.min.js?v=95"></script>
+    <script src="./vendor/tailwindcss.js?v=96"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=96"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=96"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=96"></script>
+    <script src="./vendor/pdf-lib.min.js?v=96"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=96"></script>
+    <script src="./vendor/localforage.min.js?v=96"></script>
+    <script src="./vendor/pdf.min.js?v=96"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=95').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=96').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=95';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=96';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=95">
+    <link rel="stylesheet" href="style.css?v=96">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -457,7 +457,59 @@
         }
 
 
-        /* v95: preenchimento assistido do Banco de Horas a partir da data da O.S. */
+        /* v96: tela inicial de acesso local. Usa o mesmo app_pin das versões anteriores. */
+        body.login-locked { overflow:hidden !important; }
+        .login-gate {
+            position:fixed; inset:0; z-index:300; display:flex; align-items:center; justify-content:center;
+            padding:22px; overflow:auto; background:
+                radial-gradient(circle at 18% 12%, rgba(37,99,235,.20), transparent 30%),
+                radial-gradient(circle at 86% 82%, rgba(14,165,233,.12), transparent 34%),
+                linear-gradient(145deg,#07101f,#0f1b30 56%,#0b1424);
+        }
+        .login-card { width:min(100%,430px); border-radius:30px; padding:26px; color:#f8fafc;
+            background:rgba(15,27,48,.88); border:1px solid rgba(148,163,184,.22);
+            box-shadow:0 30px 90px rgba(0,0,0,.48); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
+        .login-brand { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:22px; }
+        .login-brand-main { display:flex; align-items:center; gap:12px; min-width:0; }
+        .login-brand-mark { width:54px; height:54px; border-radius:16px; display:grid; place-items:center;
+            background:linear-gradient(145deg,#2563eb,#1d4ed8); box-shadow:0 12px 30px rgba(37,99,235,.30); }
+        .login-brand-mark svg { width:27px; height:27px; }
+        .login-brand-title { font-size:1.28rem; line-height:1; font-weight:950; letter-spacing:-.025em; }
+        .login-brand-sub { margin-top:5px; color:#93a4bb; font-size:.68rem; font-weight:850; letter-spacing:.18em; text-transform:uppercase; }
+        .login-version { flex:none; padding:6px 9px; border-radius:999px; font-size:.64rem; font-weight:900; color:#bfdbfe; background:#132b4f; border:1px solid #274d7c; }
+        .login-avatar-wrap { display:flex; flex-direction:column; align-items:center; margin:4px 0 22px; }
+        .login-avatar-button { position:relative; width:112px; height:112px; border-radius:999px; padding:0; overflow:hidden;
+            border:4px solid rgba(96,165,250,.65); background:#172235; box-shadow:0 12px 34px rgba(0,0,0,.28),0 0 0 7px rgba(59,130,246,.10); }
+        .login-avatar-button img { width:100%; height:100%; object-fit:cover; display:none; }
+        .login-avatar-placeholder { position:absolute; inset:0; display:grid; place-items:center; color:#9fb0c6; }
+        .login-avatar-placeholder svg { width:45px; height:45px; }
+        .login-avatar-edit { position:absolute; right:2px; bottom:4px; width:31px; height:31px; border-radius:999px; display:grid; place-items:center;
+            background:#2563eb; border:3px solid #0f1b30; color:white; }
+        .login-avatar-edit svg { width:14px; height:14px; }
+        .login-photo-text { margin-top:11px; color:#9fb0c6; font-size:.72rem; font-weight:750; }
+        .login-heading { text-align:center; font-size:1.38rem; font-weight:950; letter-spacing:-.02em; }
+        .login-copy { max-width:330px; margin:7px auto 20px; text-align:center; color:#9fb0c6; line-height:1.5; font-size:.79rem; }
+        .login-label { display:block; margin-bottom:7px; color:#cbd5e1; font-size:.68rem; font-weight:900; letter-spacing:.09em; text-transform:uppercase; }
+        .login-password { width:100%; min-height:54px; border-radius:15px; border:1px solid #33465f; background:#0a1526; color:#fff;
+            padding:0 15px; outline:none; text-align:center; font-size:1.55rem; letter-spacing:.22em; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+        .login-password:focus { border-color:#60a5fa; box-shadow:0 0 0 4px rgba(59,130,246,.16); }
+        .login-create-grid { display:grid; grid-template-columns:1fr; gap:12px; }
+        .login-primary { width:100%; min-height:52px; margin-top:16px; border-radius:15px; border:1px solid #3b82f6; color:white;
+            background:linear-gradient(135deg,#2563eb,#1d4ed8); font-size:.82rem; font-weight:950; letter-spacing:.07em; text-transform:uppercase;
+            box-shadow:0 12px 28px rgba(37,99,235,.24); }
+        .login-primary:active { transform:translateY(1px); }
+        .login-status { min-height:20px; margin-top:12px; text-align:center; color:#fca5a5; font-size:.73rem; font-weight:800; }
+        .login-security-note { margin-top:18px; padding-top:15px; border-top:1px solid rgba(148,163,184,.16); color:#74869e; text-align:center; font-size:.66rem; line-height:1.45; }
+        html[data-theme="light"] .login-gate { background:radial-gradient(circle at 16% 8%,#dbeafe,transparent 32%),linear-gradient(145deg,#eef4fb,#dfe9f5); }
+        html[data-theme="light"] .login-card { color:#111827; background:rgba(255,255,255,.94); border-color:#d8e1ec; box-shadow:0 28px 75px rgba(15,23,42,.18); }
+        html[data-theme="light"] .login-brand-sub, html[data-theme="light"] .login-photo-text, html[data-theme="light"] .login-copy { color:#64748b; }
+        html[data-theme="light"] .login-label { color:#475569; }
+        html[data-theme="light"] .login-password { background:#f8fafc; color:#111827; border-color:#cbd5e1; }
+        html[data-theme="light"] .login-avatar-button { background:#eef2f7; border-color:#60a5fa; }
+        html[data-theme="light"] .login-avatar-edit { border-color:#fff; }
+        html[data-theme="light"] .login-security-note { color:#94a3b8; border-color:#e2e8f0; }
+
+        /* v96: Banco de Horas reaproveita somente o cliente a partir da data da O.S. */
         .bh-os-helper { border:1px solid #bfdbfe; background:#eff6ff; border-radius:14px; padding:12px 13px; }
         .bh-os-helper-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
         .bh-os-helper-title { color:#1d4ed8; font-size:.78rem; font-weight:900; }
@@ -487,6 +539,57 @@
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+
+
+    <!-- v96: Tela inicial de acesso. Sem nome de usuário; reutiliza o PIN/senha já criado. -->
+    <div id="loginGate" class="login-gate" role="dialog" aria-modal="true" aria-labelledby="loginTitulo">
+        <div class="login-card">
+            <div class="login-brand">
+                <div class="login-brand-main">
+                    <div class="login-brand-mark" aria-hidden="true">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5-2a9 9 0 11-16 0V5l8-3 8 3v3z"></path></svg>
+                    </div>
+                    <div><div class="login-brand-title">Multi-OS <span style="color:#60a5fa">PRO</span></div><div class="login-brand-sub">Enterprise</div></div>
+                </div>
+                <span class="login-version">v96</span>
+            </div>
+
+            <div class="login-avatar-wrap">
+                <button type="button" class="login-avatar-button" onclick="document.getElementById('loginFotoInput').click()" title="Adicionar ou trocar foto do técnico" aria-label="Adicionar ou trocar foto do técnico">
+                    <img id="loginFotoPreview" src="" alt="Foto do técnico">
+                    <span id="loginFotoPlaceholder" class="login-avatar-placeholder" aria-hidden="true"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.1a7.5 7.5 0 0115 0A17.93 17.93 0 0112 21.75c-2.676 0-5.216-.584-7.5-1.65z"></path></svg></span>
+                    <span class="login-avatar-edit" aria-hidden="true"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg></span>
+                </button>
+                <input id="loginFotoInput" type="file" accept="image/*" class="hidden" onchange="salvarFotoPerfilAcesso(event)">
+                <div class="login-photo-text">Toque na foto para adicionar ou trocar</div>
+            </div>
+
+            <div id="loginCarregando">
+                <h2 id="loginTitulo" class="login-heading">Preparando acesso</h2>
+                <p class="login-copy">Verificando a segurança local do aplicativo…</p>
+            </div>
+
+            <div id="loginEntrar" class="hidden">
+                <h2 class="login-heading">Bem-vindo de volta</h2>
+                <p class="login-copy">Digite a mesma senha que você já utilizava para proteger o Histórico.</p>
+                <label class="login-label" for="loginSenha">Senha de acesso</label>
+                <input id="loginSenha" type="password" inputmode="numeric" maxlength="12" autocomplete="current-password" class="login-password" placeholder="••••" onkeydown="if(event.key==='Enter'){event.preventDefault();entrarTelaAcesso();}">
+                <button type="button" class="login-primary" onclick="entrarTelaAcesso()">Entrar no aplicativo</button>
+            </div>
+
+            <div id="loginCriar" class="hidden">
+                <h2 class="login-heading">Criar senha de acesso</h2>
+                <p class="login-copy">Ainda não existe uma senha neste aparelho. Crie uma senha numérica de 4 a 12 dígitos. Ela ficará salva localmente.</p>
+                <div class="login-create-grid">
+                    <div><label class="login-label" for="loginNovaSenha">Nova senha</label><input id="loginNovaSenha" type="password" inputmode="numeric" maxlength="12" autocomplete="new-password" class="login-password" placeholder="••••"></div>
+                    <div><label class="login-label" for="loginConfirmarSenha">Confirmar senha</label><input id="loginConfirmarSenha" type="password" inputmode="numeric" maxlength="12" autocomplete="new-password" class="login-password" placeholder="••••" onkeydown="if(event.key==='Enter'){event.preventDefault();criarSenhaTelaAcesso();}"></div>
+                </div>
+                <button type="button" class="login-primary" onclick="criarSenhaTelaAcesso()">Criar senha e entrar</button>
+            </div>
+            <div id="loginStatus" class="login-status" aria-live="polite"></div>
+            <div class="login-security-note">A senha protege o acesso pela interface do Multi-OS neste dispositivo. Seus dados continuam armazenados localmente para funcionamento offline.</div>
+        </div>
+    </div>
 
     <!-- DATALISTS PARA O BANCO DE PEÇAS INTELIGENTE -->
     <datalist id="dbCodigosPecas"></datalist>
@@ -741,7 +844,7 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     Nova O.S.
                 </button>
-                <button id="btnNavHistorico" onclick="abrirAbaHistoricoSegura()" class="nav-btn border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 flex-1 flex justify-center items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 transition-all whitespace-nowrap">
+                <button id="btnNavHistorico" onclick="switchTab('historico')" class="nav-btn border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 flex-1 flex justify-center items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 transition-all whitespace-nowrap">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     Histórico
                 </button>
@@ -1006,7 +1109,7 @@
                         <div class="bh-os-helper-head">
                             <div>
                                 <div id="bh_os_helper_title" class="bh-os-helper-title">O.S. encontrada nesta data</div>
-                                <div id="bh_os_helper_text" class="bh-os-helper-text">Os dados da visita podem ser aproveitados no Banco de Horas.</div>
+                                <div id="bh_os_helper_text" class="bh-os-helper-text">Somente o nome do cliente será preenchido automaticamente. Os demais campos ficam manuais.</div>
                             </div>
                             <span class="bh-os-helper-badge">O.S.</span>
                         </div>
@@ -1106,8 +1209,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=95"></script>
-    <script src="bancoPecas.js?v=95"></script>
-    <script src="app.js?v=95"></script>
+    <script src="checklists/checklists.js?v=96"></script>
+    <script src="bancoPecas.js?v=96"></script>
+    <script src="app.js?v=96"></script>
 </body>
 </html>

@@ -870,7 +870,8 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 95;
+const APP_VERSION = 96;
+const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
@@ -1374,6 +1375,151 @@ async function verificarIntegridadeDocumento(doc) {
     const hashAtual = await calcularHashDocumento(doc);
     if (!hashAtual) return null;
     return hashAtual === doc.integridade.hash;
+}
+
+
+function setStatusTelaAcesso(texto = '', erro = false) {
+    const el = document.getElementById('loginStatus');
+    if (!el) return;
+    el.textContent = String(texto || '');
+    el.style.color = erro ? '#fca5a5' : '#93c5fd';
+}
+
+function mostrarModoTelaAcesso(modo) {
+    const carregar = document.getElementById('loginCarregando');
+    const entrar = document.getElementById('loginEntrar');
+    const criar = document.getElementById('loginCriar');
+    carregar?.classList.toggle('hidden', modo !== 'carregando');
+    entrar?.classList.toggle('hidden', modo !== 'entrar');
+    criar?.classList.toggle('hidden', modo !== 'criar');
+    setStatusTelaAcesso('');
+    setTimeout(() => {
+        if (modo === 'entrar') document.getElementById('loginSenha')?.focus();
+        if (modo === 'criar') document.getElementById('loginNovaSenha')?.focus();
+    }, 80);
+}
+
+async function carregarFotoPerfilAcesso() {
+    const img = document.getElementById('loginFotoPreview');
+    const placeholder = document.getElementById('loginFotoPlaceholder');
+    if (!img || !placeholder || typeof localforage === 'undefined') return;
+    try {
+        const foto = await localforage.getItem(LOGIN_PROFILE_PHOTO_KEY);
+        if (dataUrlImagemSegura(foto)) {
+            img.src = foto; img.style.display = 'block'; placeholder.style.display = 'none';
+        } else {
+            img.removeAttribute('src'); img.style.display = 'none'; placeholder.style.display = 'grid';
+        }
+    } catch (e) { console.warn('Não foi possível carregar a foto de acesso:', e); }
+}
+
+function reduzirFotoPerfilAcesso(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const imagem = new Image();
+        imagem.onload = () => {
+            try {
+                const max = 640;
+                const lado = Math.min(imagem.naturalWidth || imagem.width, imagem.naturalHeight || imagem.height);
+                const sx = Math.max(0, ((imagem.naturalWidth || imagem.width) - lado) / 2);
+                const sy = Math.max(0, ((imagem.naturalHeight || imagem.height) - lado) / 2);
+                const destino = Math.min(max, lado || max);
+                const canvas = document.createElement('canvas'); canvas.width = destino; canvas.height = destino;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('Canvas indisponível');
+                ctx.drawImage(imagem, sx, sy, lado, lado, 0, 0, destino, destino);
+                resolve(canvas.toDataURL('image/jpeg', 0.82));
+            } catch (e) { reject(e); }
+        };
+        imagem.onerror = () => reject(new Error('Imagem inválida'));
+        imagem.src = dataUrl;
+    });
+}
+
+async function salvarFotoPerfilAcesso(event) {
+    const input = event?.target;
+    const file = input?.files?.[0];
+    if (!file) return;
+    try {
+        if (!file.type?.startsWith('image/')) throw new Error('Selecione uma imagem válida.');
+        if (file.size > 8 * 1024 * 1024) throw new Error('A foto deve ter no máximo 8 MB.');
+        const original = await new Promise((resolve, reject) => {
+            const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error || new Error('Falha ao ler a foto')); reader.readAsDataURL(file);
+        });
+        if (!dataUrlImagemSegura(original)) throw new Error('Formato de imagem não suportado.');
+        const reduzida = await reduzirFotoPerfilAcesso(original);
+        await localforage.setItem(LOGIN_PROFILE_PHOTO_KEY, reduzida);
+        await carregarFotoPerfilAcesso();
+        setStatusTelaAcesso('Foto salva neste aparelho.');
+    } catch (e) {
+        console.error('Falha ao salvar foto de acesso:', e);
+        setStatusTelaAcesso(e?.message || 'Não foi possível salvar a foto.', true);
+    } finally { if (input) input.value = ''; }
+}
+
+async function inicializarTelaAcesso() {
+    const gate = document.getElementById('loginGate');
+    if (!gate) return;
+    document.body.classList.add('login-locked');
+    mostrarModoTelaAcesso('carregando');
+    if (typeof localforage === 'undefined') {
+        setStatusTelaAcesso('Armazenamento local indisponível. Não é possível validar a senha.', true);
+        return;
+    }
+    try {
+        await carregarFotoPerfilAcesso();
+        const pinSalvo = await localforage.getItem('app_pin');
+        mostrarModoTelaAcesso(pinSalvo ? 'entrar' : 'criar');
+    } catch (e) {
+        console.error('Falha ao preparar tela de acesso:', e);
+        setStatusTelaAcesso('Não foi possível preparar o acesso local.', true);
+    }
+}
+
+function liberarTelaAcesso() {
+    const gate = document.getElementById('loginGate');
+    if (gate) { gate.classList.add('hidden'); gate.setAttribute('aria-hidden','true'); }
+    document.body.classList.remove('login-locked');
+    const senha = document.getElementById('loginSenha'); if (senha) senha.value = '';
+    const nova = document.getElementById('loginNovaSenha'); if (nova) nova.value = '';
+    const conf = document.getElementById('loginConfirmarSenha'); if (conf) conf.value = '';
+}
+
+async function entrarTelaAcesso() {
+    const digitado = String(document.getElementById('loginSenha')?.value || '').trim();
+    if (!digitado) { setStatusTelaAcesso('Digite sua senha.', true); return; }
+    try {
+        const pinSalvo = await localforage.getItem('app_pin');
+        if (!pinSalvo) { mostrarModoTelaAcesso('criar'); return; }
+        if (!(await verificarRegistroPin(digitado, pinSalvo))) {
+            setStatusTelaAcesso('Senha incorreta. Tente novamente.', true);
+            const el = document.getElementById('loginSenha'); if (el) { el.value = ''; el.focus(); }
+            return;
+        }
+        // Compatibilidade: migra PIN antigo em texto simples para o registro protegido atual.
+        if (typeof pinSalvo === 'string' || pinSalvo?.v === 1) await localforage.setItem('app_pin', await criarRegistroPin(digitado));
+        liberarTelaAcesso();
+    } catch (e) {
+        console.error('Falha ao validar senha inicial:', e);
+        setStatusTelaAcesso('Não foi possível validar a senha agora.', true);
+    }
+}
+
+async function criarSenhaTelaAcesso() {
+    const senha = String(document.getElementById('loginNovaSenha')?.value || '').trim();
+    const confirmar = String(document.getElementById('loginConfirmarSenha')?.value || '').trim();
+    if (!/^\d{4,12}$/.test(senha)) { setStatusTelaAcesso('Use uma senha numérica de 4 a 12 dígitos.', true); return; }
+    if (senha !== confirmar) { setStatusTelaAcesso('As duas senhas não coincidem.', true); return; }
+    try {
+        // Evita substituir silenciosamente uma senha que tenha aparecido entre a abertura e a confirmação.
+        const existente = await localforage.getItem('app_pin');
+        if (existente) { mostrarModoTelaAcesso('entrar'); setStatusTelaAcesso('Já existe uma senha neste aparelho. Digite-a para entrar.', true); return; }
+        await localforage.setItem('app_pin', await criarRegistroPin(senha));
+        liberarTelaAcesso();
+        mostrarToast('Senha de acesso criada e salva neste aparelho.');
+    } catch (e) {
+        console.error('Falha ao criar senha inicial:', e);
+        setStatusTelaAcesso('Não foi possível guardar a senha.', true);
+    }
 }
 
 function bytesParaBase64(bytes) {
@@ -1937,9 +2083,8 @@ function mostrarToast(mensagem, isErro = false) {
 }
 
 async function abrirAbaHistoricoSegura() {
-    let pinSalvo = await localforage.getItem('app_pin');
-    if (!pinSalvo) { document.getElementById('inputNovoPin').value = ''; document.getElementById('modalCriarPin').classList.remove('hidden'); } 
-    else { document.getElementById('inputDigitarPin').value = ''; document.getElementById('modalDigitarPin').classList.remove('hidden'); }
+    // v96: a senha já é validada na abertura do aplicativo; o Histórico não pede uma segunda senha.
+    await switchTab('historico');
 }
 async function salvarNovoPin() {
     const novoPin = document.getElementById('inputNovoPin').value.trim();
@@ -2197,6 +2342,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await iniciarBancoPecas(); // Inicializa o banco de dados e atualiza as HTML datalists
     
     if (typeof localforage !== 'undefined') await carregarLogoDoArmazenamento();
+    await inicializarTelaAcesso();
     
     const cTec = document.getElementById('canvasTecnico'); const cCli = document.getElementById('canvasCliente'); const cExp = document.getElementById('canvasExpandido');
     if (typeof SignaturePad !== 'undefined') {
@@ -2431,22 +2577,11 @@ async function obterOSDoHistoricoNaData(data) {
 function aplicarDadosOSNoBancoHoras(opcao) {
     if (!opcao) return;
     limparAutoPreenchimentoBancoHorasAnterior();
-    const dados = {
-        cliente: opcao.cliente || '',
-        motivo: `Visita externa${opcao.osNum ? ` - O.S. #${opcao.osNum}` : ''}${opcao.equipamento ? ` - ${opcao.equipamento}` : ''}`,
-        local: opcao.local || '',
-        chegada: opcao.chegada || '',
-        saida: opcao.saida || ''
-    };
-    const ids = { cliente:'bh_cliente', motivo:'bh_motivo', local:'bh_local', chegada:'bh_chegada', saida:'bh_saida' };
-    Object.entries(ids).forEach(([campo,id]) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        // Local só é preenchido quando a O.S. antiga já possuía cidade; nunca apaga o que o técnico digitou.
-        if (campo === 'local' && !dados.local) return;
-        el.value = dados[campo];
-    });
-    bancoHorasAutoFillAnterior = dados;
+    const cliente = String(opcao.cliente || '').trim();
+    const campoCliente = document.getElementById('bh_cliente');
+    if (campoCliente && cliente) campoCliente.value = cliente;
+    // v96: somente o nome do cliente é reaproveitado. Motivo, local e horários permanecem manuais.
+    bancoHorasAutoFillAnterior = cliente ? { cliente } : null;
 }
 
 function aplicarOSSelecionadaBancoHoras() {
@@ -2456,7 +2591,7 @@ function aplicarOSSelecionadaBancoHoras() {
     if (!opcao) return;
     aplicarDadosOSNoBancoHoras(opcao);
     const texto = document.getElementById('bh_os_helper_text');
-    if (texto) texto.textContent = `Cliente${opcao.osNum ? ` e horários da O.S. #${opcao.osNum}` : ' e horários'} preenchidos automaticamente. Você pode ajustar antes de salvar.`;
+    if (texto) texto.textContent = `Cliente${opcao.osNum ? ` da O.S. #${opcao.osNum}` : ''} preenchido automaticamente. Motivo, local e horários continuam para preenchimento manual.`;
 }
 
 async function preencherBancoHorasPorData() {
@@ -2474,7 +2609,7 @@ async function preencherBancoHorasPorData() {
         const titulo = document.getElementById('bh_os_helper_title');
         const texto = document.getElementById('bh_os_helper_text');
         if (box) box.classList.remove('hidden');
-        if (titulo) titulo.textContent = encontrados.length === 1 ? 'O.S. encontrada nesta data' : `${encontrados.length} O.S. encontradas nesta data`;
+        if (titulo) titulo.textContent = encontrados.length === 1 ? 'Cliente encontrado nesta data' : `${encontrados.length} O.S. encontradas nesta data`;
         if (select) {
             select.innerHTML = encontrados.map((o,i) => `<option value="${i}">${escapeHTML(o.cliente || 'Cliente não informado')}${o.osNum ? ` • O.S. #${escapeHTML(o.osNum)}` : ''}${o.equipamento ? ` • ${escapeHTML(o.equipamento)}` : ''}</option>`).join('');
             select.classList.toggle('hidden', encontrados.length <= 1);
@@ -2482,8 +2617,8 @@ async function preencherBancoHorasPorData() {
         }
         aplicarDadosOSNoBancoHoras(encontrados[0]);
         if (texto) texto.textContent = encontrados.length === 1
-            ? 'Cliente e horários foram preenchidos automaticamente. Revise os campos abaixo antes de adicionar.'
-            : 'A primeira O.S. foi preenchida. Selecione outra O.S. abaixo caso necessário.';
+            ? 'Somente o nome do cliente foi preenchido. Complete manualmente motivo, local e horários.'
+            : 'O cliente da primeira O.S. foi preenchido. Selecione outra O.S. abaixo se necessário; somente o nome será alterado.';
     } catch (e) {
         console.warn('Não foi possível consultar O.S. pela data para o Banco de Horas:', e);
         registrarErroApp('preencherBancoHorasPorData', e);
