@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=92">
+    <link rel="manifest" href="./manifest.json?v=94">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=92"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=92"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=92"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=92"></script>
-    <script src="./vendor/pdf-lib.min.js?v=92"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=92"></script>
-    <script src="./vendor/localforage.min.js?v=92"></script>
-    <script src="./vendor/pdf.min.js?v=92"></script>
+    <script src="./vendor/tailwindcss.js?v=94"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=94"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=94"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=94"></script>
+    <script src="./vendor/pdf-lib.min.js?v=94"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=94"></script>
+    <script src="./vendor/localforage.min.js?v=94"></script>
+    <script src="./vendor/pdf.min.js?v=94"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=92').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=94').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=92';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=94';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=92">
+    <link rel="stylesheet" href="style.css?v=94">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -320,6 +320,68 @@
         .history-open-btn { height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; gap:7px; color:white; background:linear-gradient(135deg,#2563eb,#1d4ed8); font-size:.78rem; font-weight:900; text-transform:uppercase; letter-spacing:.03em; box-shadow:0 5px 14px rgba(37,99,235,.2); }
         .history-open-btn svg { width:16px; height:16px; }
         .history-empty { background:var(--app-surface); border:1px dashed var(--app-border); color:var(--app-muted); border-radius:16px; padding:34px 18px; text-align:center; font-weight:700; }
+        /* v94: filtros avançados + resumo operacional dos cartões do Histórico. */
+        .history-filter-panel { margin:-3px 0 14px; background:var(--app-surface); border:1px solid var(--app-border); border-radius:14px; box-shadow:var(--app-shadow); overflow:hidden; }
+        .history-filter-panel summary { list-style:none; cursor:pointer; padding:12px 14px; font-size:.78rem; font-weight:900; color:var(--app-text); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .history-filter-panel summary::-webkit-details-marker { display:none; }
+        .history-filter-panel summary::after { content:'Filtros'; font-size:.65rem; color:var(--app-muted); border:1px solid var(--app-border); border-radius:999px; padding:4px 8px; background:var(--app-surface-soft); }
+        .history-filter-grid { border-top:1px solid var(--app-border); padding:12px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+        .history-filter-grid label { display:block; margin:0 0 5px; color:var(--app-muted); font-size:.64rem; font-weight:900; text-transform:uppercase; letter-spacing:.04em; }
+        .history-filter-grid input { width:100%; height:40px; border:1px solid var(--app-border); border-radius:10px; background:var(--app-input); color:var(--app-text); padding:0 10px; outline:none; font-size:.78rem; }
+        .history-filter-grid input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.13); }
+        .history-filter-actions { padding:0 12px 12px; display:flex; justify-content:flex-end; }
+        .history-filter-actions button { min-height:36px; padding:7px 12px; border-radius:10px; border:1px solid var(--app-border); background:var(--app-surface-soft); color:var(--app-text); font-size:.72rem; font-weight:900; }
+        .history-technician { margin-top:6px; color:var(--app-muted); font-size:.7rem; font-weight:700; }
+        .history-badges { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+        .history-badge { display:inline-flex; align-items:center; min-height:24px; padding:4px 8px; border-radius:999px; background:var(--app-surface-soft); border:1px solid var(--app-border); color:var(--app-muted); font-size:.63rem; font-weight:850; }
+        html[data-theme="dark"] .history-filter-panel summary::after { color:#cbd5e1; background:#172235; border-color:#33465f; }
+
+        /* v94: estado de salvamento, integridade de mídia, diagnóstico e histórico avançado. */
+        .save-state-strip { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+        .state-pill { display:inline-flex; align-items:center; gap:6px; min-height:30px; padding:6px 10px; border-radius:999px; font-size:.69rem; font-weight:900; line-height:1.15; border:1px solid var(--app-border); background:var(--app-surface); color:var(--app-muted); box-shadow:0 2px 8px rgba(15,23,42,.05); }
+        .state-pill::before { content:''; width:8px; height:8px; border-radius:999px; flex:none; background:#94a3b8; box-shadow:0 0 0 3px rgba(148,163,184,.12); }
+        .state-pill[data-state="edicao"] { color:#b45309; border-color:#fcd34d; background:#fffbeb; }
+        .state-pill[data-state="edicao"]::before { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.15); }
+        .state-pill[data-state="rascunho"] { color:#1d4ed8; border-color:#bfdbfe; background:#eff6ff; }
+        .state-pill[data-state="rascunho"]::before { background:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.15); }
+        .state-pill[data-state="historico"], .state-pill[data-state="ok"] { color:#047857; border-color:#a7f3d0; background:#ecfdf5; }
+        .state-pill[data-state="historico"]::before, .state-pill[data-state="ok"]::before { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.15); }
+        .state-pill[data-state="erro"] { color:#b91c1c; border-color:#fecaca; background:#fef2f2; }
+        .state-pill[data-state="erro"]::before { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.15); }
+        html[data-theme="dark"] .state-pill { background:#111c2d; border-color:#33465f; color:#cbd5e1; box-shadow:none; }
+        html[data-theme="dark"] .state-pill[data-state="edicao"] { color:#fcd34d; background:#35290f; border-color:#755f1a; }
+        html[data-theme="dark"] .state-pill[data-state="rascunho"] { color:#93c5fd; background:#10233c; border-color:#315681; }
+        html[data-theme="dark"] .state-pill[data-state="historico"], html[data-theme="dark"] .state-pill[data-state="ok"] { color:#6ee7b7; background:#0d2f28; border-color:#176b58; }
+        html[data-theme="dark"] .state-pill[data-state="erro"] { color:#fca5a5; background:#3a1c25; border-color:#6f2836; }
+
+        .diag-shell { max-width:820px; width:100%; max-height:92vh; display:flex; flex-direction:column; background:var(--app-bg); color:var(--app-text); border:1px solid var(--app-border); border-radius:22px; overflow:hidden; box-shadow:0 28px 70px rgba(0,0,0,.34); }
+        .diag-head, .diag-foot { background:var(--app-surface); border-color:var(--app-border); }
+        .diag-head { padding:16px 18px; border-bottom:1px solid var(--app-border); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+        .diag-body { padding:15px; overflow-y:auto; }
+        .diag-overall { border:1px solid var(--app-border); background:var(--app-surface); border-radius:16px; padding:13px 14px; margin-bottom:12px; }
+        .diag-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+        .diag-card { background:var(--app-surface); border:1px solid var(--app-border); border-radius:14px; padding:12px; min-width:0; }
+        .diag-label { color:var(--app-muted); text-transform:uppercase; letter-spacing:.06em; font-size:.62rem; font-weight:900; }
+        .diag-value { color:var(--app-text); margin-top:5px; font-weight:900; font-size:.88rem; overflow-wrap:anywhere; }
+        .diag-section { margin-top:12px; background:var(--app-surface); border:1px solid var(--app-border); border-radius:14px; padding:13px; }
+        .diag-section-title { color:var(--app-text); font-size:.78rem; font-weight:900; text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px; }
+        .diag-list { display:flex; flex-direction:column; gap:7px; color:var(--app-muted); font-size:.75rem; font-weight:650; }
+        .diag-row { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; border-top:1px solid var(--app-border); padding-top:7px; }
+        .diag-row:first-child { border-top:0; padding-top:0; }
+        .diag-ok { color:#059669; } .diag-warn { color:#d97706; } .diag-error { color:#dc2626; }
+        html[data-theme="dark"] .diag-ok { color:#6ee7b7; } html[data-theme="dark"] .diag-warn { color:#fcd34d; } html[data-theme="dark"] .diag-error { color:#fca5a5; }
+        .diag-foot { padding:12px 15px; border-top:1px solid var(--app-border); display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+        .diag-btn { min-height:40px; padding:9px 13px; border-radius:11px; font-size:.73rem; font-weight:900; border:1px solid var(--app-border); background:var(--app-surface-soft); color:var(--app-text); }
+        .diag-btn-primary { color:#fff; background:#2563eb; border-color:#2563eb; }
+
+        .integracao-bh-card { margin-top:12px; border:1px solid #bfdbfe; background:#eff6ff; border-radius:13px; padding:12px; }
+        .integracao-bh-card .integracao-title { color:#1e40af; font-size:.75rem; font-weight:900; }
+        .integracao-bh-card .integracao-help { color:#64748b; font-size:.68rem; margin-top:2px; }
+        html[data-theme="dark"] .integracao-bh-card { background:#10233c; border-color:#315681; }
+        html[data-theme="dark"] .integracao-bh-card .integracao-title { color:#bfdbfe; }
+        html[data-theme="dark"] .integracao-bh-card .integracao-help { color:#94a3b8; }
+        html[data-theme="dark"] #modalDiagnostico { color-scheme:dark; }
+        @media (max-width:640px) { .diag-grid { grid-template-columns:1fr; } .save-state-strip { width:100%; } .state-pill { flex:1 1 auto; justify-content:center; text-align:center; } }
 
         /* v81: acabamento consistente do modo escuro em toda a interface.
            PDFs continuam brancos; a área de assinatura usa papel cinza claro só na tela. */
@@ -388,7 +450,7 @@
 
         /* Modais de PIN/backup/checklist acompanham o tema, sem interferir na assinatura expandida. */
         html[data-theme="dark"] #modalCriarPin > div,
-        html[data-theme="dark"] #modalValidarPin > div,
+        html[data-theme="dark"] #modalDigitarPin > div,
         html[data-theme="dark"] #modalExportar > div {
             background:#111c2d !important;
             border:1px solid #2a3b52;
@@ -400,6 +462,7 @@
             .history-subtitle { max-width:220px; }
             .history-logo-action { padding:9px 10px; font-size:.72rem; }
             .history-toolbar { grid-template-columns:1fr; }
+            .history-filter-grid { grid-template-columns:1fr; }
             .history-actions-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
         }
         @media (max-width: 380px) {
@@ -566,6 +629,43 @@
         </div>
     </div>
 
+    <!-- MODAL: Central de Diagnóstico v94 -->
+    <div id="modalDiagnostico" class="hidden fixed inset-0 bg-gray-900/90 z-[145] backdrop-blur-sm p-3 sm:p-6 flex items-center justify-center">
+        <div class="diag-shell">
+            <div class="diag-head">
+                <div>
+                    <h3 class="font-black text-lg">Central de Diagnóstico</h3>
+                    <p class="text-xs" style="color:var(--app-muted)">Verifica salvamento, fotos/Blobs, armazenamento e erros do aplicativo.</p>
+                </div>
+                <button type="button" onclick="fecharDiagnosticoApp()" class="diag-btn" aria-label="Fechar diagnóstico">Fechar</button>
+            </div>
+            <div class="diag-body">
+                <div id="diagOverall" class="diag-overall"><strong>Preparando diagnóstico...</strong></div>
+                <div class="diag-grid">
+                    <div class="diag-card"><div class="diag-label">Versão / Cache</div><div id="diagVersao" class="diag-value">—</div></div>
+                    <div class="diag-card"><div class="diag-label">Armazenamento</div><div id="diagStorage" class="diag-value">—</div></div>
+                    <div class="diag-card"><div class="diag-label">O.S. / Rascunhos</div><div id="diagDocumentos" class="diag-value">—</div></div>
+                    <div class="diag-card"><div class="diag-label">Fotos / Anexos</div><div id="diagMidias" class="diag-value">—</div></div>
+                    <div class="diag-card"><div class="diag-label">Estado atual</div><div id="diagEstadoAtual" class="diag-value">—</div></div>
+                    <div class="diag-card"><div class="diag-label">Conectividade</div><div id="diagConectividade" class="diag-value">—</div></div>
+                    <div class="diag-card"><div class="diag-label">Banco de Horas</div><div id="diagBancoHoras" class="diag-value">—</div></div>
+                </div>
+                <div class="diag-section">
+                    <div class="diag-section-title">Integridade das mídias</div>
+                    <div id="diagIntegridadeLista" class="diag-list"><div>Verificando...</div></div>
+                </div>
+                <div class="diag-section">
+                    <div class="diag-section-title">Últimos erros registrados</div>
+                    <div id="diagErrosLista" class="diag-list"><div>Nenhum erro carregado.</div></div>
+                </div>
+            </div>
+            <div class="diag-foot">
+                <button type="button" onclick="copiarDiagnosticoApp()" class="diag-btn">Copiar resumo</button>
+                <button type="button" onclick="executarDiagnosticoApp()" class="diag-btn diag-btn-primary">Verificar novamente</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: Checklist Preventiva -->
     <div id="modalChecklist" class="hidden fixed inset-0 bg-gray-900/90 z-[130] backdrop-blur-sm">
         <div class="w-full h-full bg-gray-50 flex flex-col sm:max-w-4xl sm:h-[96vh] sm:my-[2vh] sm:mx-auto sm:rounded-2xl sm:overflow-hidden shadow-2xl">
@@ -648,7 +748,10 @@
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1">
                     <h2 class="text-2xl font-black text-gray-900 tracking-tight">Relatório de Serviço</h2>
                     <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-                        <span id="autoSaveIndicator" class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100"></span>
+                        <div id="saveStateStrip" class="save-state-strip" aria-live="polite">
+                            <span id="autoSaveIndicator" class="state-pill" data-state="edicao">Nova O.S. — ainda não salva</span>
+                            <span id="mediaIntegrityIndicator" class="state-pill" data-state="ok">Mídias: nenhuma</span>
+                        </div>
                         <button type="button" onclick="iniciarNovaOS()" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wide shadow-md shadow-blue-500/20 transition-colors" title="Guardar o trabalho atual como rascunho, se necessário, e iniciar outra O.S.">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                             Nova O.S.
@@ -785,6 +888,21 @@
                     </select>
                 </div>
 
+                <details class="history-filter-panel">
+                    <summary>Filtros avançados das O.S. salvas</summary>
+                    <div class="history-filter-grid">
+                        <div><label>Técnico</label><input id="histFiltroTecnico" type="text" oninput="filtrarHistorico()" placeholder="Nome do técnico"></div>
+                        <div><label>Cliente</label><input id="histFiltroCliente" type="text" oninput="filtrarHistorico()" placeholder="Cliente / empresa"></div>
+                        <div><label>Equipamento</label><input id="histFiltroEquipamento" type="text" oninput="filtrarHistorico()" placeholder="Equipamento"></div>
+                        <div><label>Nº de Série</label><input id="histFiltroSerie" type="text" oninput="filtrarHistorico()" placeholder="Número de série"></div>
+                        <div><label>Número de OP</label><input id="histFiltroOp" type="text" oninput="filtrarHistorico()" placeholder="OP"></div>
+                        <div><label>Número da O.S.</label><input id="histFiltroOs" type="text" oninput="filtrarHistorico()" placeholder="O.S."></div>
+                        <div><label>Data inicial</label><input id="histFiltroDataInicio" type="date" onchange="filtrarHistorico()"></div>
+                        <div><label>Data final</label><input id="histFiltroDataFim" type="date" onchange="filtrarHistorico()"></div>
+                    </div>
+                    <div class="history-filter-actions"><button type="button" onclick="limparFiltrosHistorico()">Limpar filtros</button></div>
+                </details>
+
                 <section class="history-panel" aria-label="Ações de dados">
                     <div class="history-panel-title">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path></svg>
@@ -805,6 +923,9 @@
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v12m0 0l-3-3m3 3l3-3M5 20h14"></path></svg> Importar Peças
                             <input type="file" accept=".json,application/json" onchange="importarBancoPecasJSON(event)" class="hidden">
                         </label>
+                        <button onclick="abrirDiagnosticoApp()" class="history-action history-action-neutral" title="Verificar salvamento, fotos, Blobs, armazenamento e erros recentes">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg> Diagnóstico
+                        </button>
                         <button onclick="abrirLixeira()" class="history-action history-action-warn">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg> Lixeira
                         </button>
@@ -960,8 +1081,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=92"></script>
-    <script src="bancoPecas.js?v=92"></script>
-    <script src="app.js?v=92"></script>
+    <script src="checklists/checklists.js?v=94"></script>
+    <script src="bancoPecas.js?v=94"></script>
+    <script src="app.js?v=94"></script>
 </body>
 </html>

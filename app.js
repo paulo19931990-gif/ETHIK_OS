@@ -862,9 +862,13 @@ let previewAssinaturaAtualizacaoPendente = false;
 let previewPdfSujoPorAssinatura = false;
 let toastTimeoutId = null;
 let limpezaMidiaEmAndamento = false;
+let integridadeMidiasTimer = null;
+let ultimaVerificacaoMidiasTs = 0;
+let ultimoResultadoIntegridadeMidias = null;
+let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 92;
+const APP_VERSION = 94;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
@@ -1184,8 +1188,10 @@ function cancelarAutoSavePendente() {
 function marcarFormularioAlterado() {
     if (restaurandoDocumento) return;
     formularioSujo = true;
+    atualizarIndicadorRascunho('Alterações aguardando proteção', 'edicao');
     cancelarAutoSavePendente();
     timeoutRascunho = setTimeout(autoSalvarRascunho, 3000);
+    agendarVerificacaoIntegridadeAtual(1200, false);
 }
 
 async function solicitarPersistenciaArmazenamento() {
@@ -1206,6 +1212,128 @@ async function registrarErroApp(origem, erro) {
 
 window.addEventListener('error', e => registrarErroApp('window.error', e.error || e.message));
 window.addEventListener('unhandledrejection', e => registrarErroApp('unhandledrejection', e.reason));
+
+function formatarBytesDiagnostico(bytes) {
+    const n = Number(bytes || 0);
+    if (!Number.isFinite(n) || n <= 0) return '0 MB';
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function fecharDiagnosticoApp() {
+    document.getElementById('modalDiagnostico')?.classList.add('hidden');
+}
+
+async function abrirDiagnosticoApp() {
+    const modal = document.getElementById('modalDiagnostico');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    await executarDiagnosticoApp();
+}
+
+async function executarDiagnosticoApp() {
+    const setTxt = (id, txt, classe = '') => {
+        const el = document.getElementById(id); if (!el) return;
+        el.textContent = txt; el.classList.remove('diag-ok','diag-warn','diag-error'); if (classe) el.classList.add(classe);
+    };
+    const geral = document.getElementById('diagOverall');
+    if (geral) geral.innerHTML = '<strong>Verificando dados locais...</strong><div style="font-size:.72rem;color:var(--app-muted);margin-top:4px">Nenhum dado será apagado durante o diagnóstico.</div>';
+    try {
+        if (typeof localforage === 'undefined') throw new Error('Armazenamento local indisponível');
+        const [historico, rascunhos, keys, erros, ultimaValidacao, ultimaIntegracaoBh] = await Promise.all([
+            obterHistoricoSalvo(),
+            listarRascunhosPersistentes(),
+            localforage.keys(),
+            localforage.getItem('diagnostico_erros_v68'),
+            localforage.getItem('diagnostico_ultima_validacao_v88'),
+            localforage.getItem('diagnostico_ultima_integracao_bh_v94').then(v => v || localforage.getItem('diagnostico_ultima_integracao_bh_v93'))
+        ]);
+        const fotosFisicas = keys.filter(k => k.startsWith(MEDIA_PHOTO_PREFIX)).length;
+        const pdfsFisicos = keys.filter(k => k.startsWith(MEDIA_PDF_PREFIX)).length;
+        const thumbs = keys.filter(k => k.startsWith(MEDIA_THUMB_PREFIX)).length;
+        let uso = 0, quota = 0, persistente = false;
+        try { const est = await navigator.storage?.estimate?.(); uso = Number(est?.usage || 0); quota = Number(est?.quota || 0); } catch (_) {}
+        try { persistente = !!(await navigator.storage?.persisted?.()); } catch (_) {}
+        let cachesApp = [];
+        try { cachesApp = (await caches.keys()).filter(k => k.startsWith('multios-pro-')); } catch (_) {}
+        const swAtivo = !!navigator.serviceWorker?.controller;
+        const integridade = await verificarIntegridadeTodasMidias();
+        const integridadeAtual = await verificarIntegridadeMidiasAtual(true);
+
+        let estadoAtual = 'Nova O.S. / em edição';
+        let docSalvo = null, draftAtual = null;
+        try { docSalvo = idLocalSeguro(String(documentoAtualId || '')) ? await localforage.getItem(`os_doc_${documentoAtualId}`) : null; } catch (_) {}
+        try { draftAtual = await obterRascunhoDocumento(documentoAtualId); } catch (_) {}
+        if (docSalvo && !formularioSujo) estadoAtual = 'O.S. confirmada no Histórico';
+        else if (draftAtual) estadoAtual = formularioSujo ? 'Alterada; rascunho anterior existe' : 'Rascunho protegido';
+        else if (formularioSujo) estadoAtual = 'Alterações aguardando rascunho';
+
+        setTxt('diagVersao', `v${APP_VERSION} • ${cachesApp.length ? cachesApp.join(', ') : 'cache não identificado'}`, swAtivo ? 'diag-ok' : 'diag-warn');
+        setTxt('diagStorage', `${formatarBytesDiagnostico(uso)} usados${quota ? ` de ${formatarBytesDiagnostico(quota)}` : ''} • ${persistente ? 'persistente' : 'persistência não confirmada'}`, persistente ? 'diag-ok' : 'diag-warn');
+        const metadadosV94 = historico.filter(m => Number(m?.metaVersao || 0) >= 94).length;
+        setTxt('diagDocumentos', `${historico.length} O.S. • ${rascunhos.length} rascunho(s) • índice avançado ${metadadosV94}/${historico.length}`, metadadosV94 === historico.length ? 'diag-ok' : 'diag-warn');
+        setTxt('diagMidias', `${fotosFisicas} foto(s) Blob • ${pdfsFisicos} PDF(s) • ${thumbs} miniatura(s)`, (integridade.ok && integridadeAtual?.ok !== false) ? 'diag-ok' : 'diag-error');
+        setTxt('diagEstadoAtual', estadoAtual, formularioSujo ? 'diag-warn' : 'diag-ok');
+        setTxt('diagConectividade', `${navigator.onLine ? 'Online' : 'Offline'} • Service Worker ${swAtivo ? 'ativo' : 'sem controle'}`, swAtivo ? 'diag-ok' : 'diag-warn');
+        const integracaoBhClasse = ultimaIntegracaoBh?.ok === false ? 'diag-error' : 'diag-ok';
+        const integracaoBhTexto = ultimaIntegracaoBh?.data ? `${registosBancoHoras.length} lançamento(s) • última integração ${ultimaIntegracaoBh.ok === false ? 'com falha' : 'OK'} em ${new Date(ultimaIntegracaoBh.data).toLocaleString('pt-BR')}` : `${registosBancoHoras.length} lançamento(s) • sem integração recente`;
+        setTxt('diagBancoHoras', integracaoBhTexto, integracaoBhClasse);
+
+        const listaInt = document.getElementById('diagIntegridadeLista');
+        if (listaInt) {
+            const itens = [];
+            if (integridadeAtual) itens.push(`<div class="diag-row"><span>Formulário atual</span><strong class="${integridadeAtual.ok ? 'diag-ok' : 'diag-error'}">${integridadeAtual.protegidas}/${integridadeAtual.total} ${integridadeAtual.ok ? 'OK' : 'ATENÇÃO'}</strong></div>`);
+            itens.push(`<div class="diag-row"><span>Histórico + rascunhos</span><strong>${integridade.protegidas}/${integridade.total}</strong></div>`);
+            if (integridade.ok && integridadeAtual?.ok !== false) itens.push('<div class="diag-row"><span>Todas as fotos e anexos referenciados foram encontrados.</span><strong class="diag-ok">OK</strong></div>');
+            else {
+                (integridadeAtual?.faltantes || []).slice(0, 4).forEach(f => itens.push(`<div class="diag-row"><span>Formulário atual: ${escapeHTML(f)}</span><strong class="diag-error">FALTANDO</strong></div>`));
+                integridade.faltantes.slice(0, 8).forEach(f => itens.push(`<div class="diag-row"><span>${escapeHTML(f)}</span><strong class="diag-error">FALTANDO</strong></div>`));
+            }
+            const excedentes = Math.max(0, (integridade.faltantes.length - 8)) + Math.max(0, ((integridadeAtual?.faltantes?.length || 0) - 4));
+            if (excedentes) itens.push(`<div class="diag-row"><span>Outras ocorrências</span><strong class="diag-error">+${excedentes}</strong></div>`);
+            if (ultimaValidacao?.data) itens.push(`<div class="diag-row"><span>Última validação bloqueada</span><strong>${escapeHTML(new Date(ultimaValidacao.data).toLocaleString('pt-BR'))}</strong></div>`);
+            listaInt.innerHTML = itens.join('');
+        }
+
+        const listaErros = document.getElementById('diagErrosLista');
+        const errosLista = Array.isArray(erros) ? erros.slice(0, 5) : [];
+        if (listaErros) {
+            listaErros.innerHTML = errosLista.length ? errosLista.map(e => `<div class="diag-row"><span><strong>${escapeHTML(e.origem || 'erro')}</strong><br>${escapeHTML(e.mensagem || '')}</span><span>${e.data ? escapeHTML(new Date(e.data).toLocaleString('pt-BR')) : ''}</span></div>`).join('') : '<div class="diag-row"><span>Nenhum erro recente registrado.</span><strong class="diag-ok">OK</strong></div>';
+        }
+
+        const midiasOk = integridade.ok && integridadeAtual?.ok !== false;
+        const geralOk = midiasOk && swAtivo;
+        if (geral) geral.innerHTML = geralOk
+            ? '<strong class="diag-ok">✓ Diagnóstico concluído: dados principais íntegros.</strong><div style="font-size:.72rem;color:var(--app-muted);margin-top:4px">Fotos/Blobs referenciados foram verificados sem apagar ou alterar dados.</div>'
+            : `<strong class="${midiasOk ? 'diag-warn' : 'diag-error'}">${midiasOk ? '⚠ Diagnóstico concluído com atenção.' : '⚠ Foram encontradas mídias ausentes.'}</strong><div style="font-size:.72rem;color:var(--app-muted);margin-top:4px">Consulte os detalhes abaixo antes de excluir rascunhos ou dados.</div>`;
+
+        ultimoResumoDiagnostico = [
+            `Multi-OS Pro v${APP_VERSION}`,
+            `Estado: ${estadoAtual}`,
+            `Service Worker: ${swAtivo ? 'ativo' : 'sem controle'}`,
+            `Armazenamento: ${formatarBytesDiagnostico(uso)}${quota ? ` / ${formatarBytesDiagnostico(quota)}` : ''}`,
+            `O.S.: ${historico.length} | Rascunhos: ${rascunhos.length}`,
+            `Blobs: ${fotosFisicas} fotos | ${pdfsFisicos} PDFs`,
+            `Integridade atual: ${integridadeAtual?.protegidas || 0}/${integridadeAtual?.total || 0} | Histórico/rascunhos: ${integridade.protegidas}/${integridade.total} | faltantes: ${integridade.faltantes.length + (integridadeAtual?.faltantes?.length || 0)}`,
+            `Erros recentes: ${errosLista.length}`
+        ].join('\n');
+    } catch (e) {
+        console.error('Falha no diagnóstico:', e); registrarErroApp('executarDiagnosticoApp', e);
+        if (geral) geral.innerHTML = `<strong class="diag-error">Não foi possível concluir o diagnóstico.</strong><div style="font-size:.72rem;color:var(--app-muted);margin-top:4px">${escapeHTML(e?.message || String(e))}</div>`;
+    }
+}
+
+async function copiarDiagnosticoApp() {
+    if (!ultimoResumoDiagnostico) { await executarDiagnosticoApp(); }
+    if (!ultimoResumoDiagnostico) return;
+    try {
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(ultimoResumoDiagnostico);
+        else {
+            const ta = document.createElement('textarea'); ta.value = ultimoResumoDiagnostico; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+        }
+        mostrarToast('Resumo do diagnóstico copiado.');
+    } catch (e) { mostrarToast('Não foi possível copiar o diagnóstico.', true); }
+}
 
 function serializarCanonico(valor) {
     if (Array.isArray(valor)) return '[' + valor.map(serializarCanonico).join(',') + ']';
@@ -1311,6 +1439,137 @@ async function obterBlobMidia(prefixo, mediaId) {
         console.error('Falha ao ler mídia:', e);
         return null;
     }
+}
+
+async function verificarIntegridadeMidiasDocumento(doc, opcoes = {}) {
+    const resultado = {
+        contexto: String(opcoes.contexto || 'documento'),
+        documentoId: String(doc?.id || ''),
+        total: 0,
+        protegidas: 0,
+        faltantes: [],
+        verificadaEm: new Date().toISOString(),
+        ok: true
+    };
+    if (!doc || !Array.isArray(doc.ordens)) return resultado;
+
+    for (let oi = 0; oi < doc.ordens.length; oi++) {
+        const ordem = doc.ordens[oi] || {};
+        const nomeOs = String(ordem.osNum || '').trim() || `posição ${oi + 1}`;
+        const fotos = Array.isArray(ordem.fotos) ? ordem.fotos : [];
+        for (let fi = 0; fi < fotos.length; fi++) {
+            const foto = fotos[fi] || {};
+            resultado.total++;
+            let ok = false;
+            if (foto.mediaId) {
+                const blob = await obterBlobMidia(MEDIA_PHOTO_PREFIX, foto.mediaId);
+                ok = blob instanceof Blob && blob.size > 0;
+            } else if (foto.b64) {
+                ok = dataUrlImagemSegura(foto.b64);
+            }
+            if (ok) resultado.protegidas++;
+            else resultado.faltantes.push(`Foto ${fi + 1} da O.S. ${nomeOs}`);
+        }
+
+        if (ordem.anexoMediaId || ordem.anexoBase64) {
+            resultado.total++;
+            let ok = false;
+            if (ordem.anexoMediaId) {
+                const blob = await obterBlobMidia(MEDIA_PDF_PREFIX, ordem.anexoMediaId);
+                ok = blob instanceof Blob && blob.size > 0;
+            } else if (ordem.anexoBase64) {
+                ok = dataUrlPdfSegura(ordem.anexoBase64);
+            }
+            if (ok) resultado.protegidas++;
+            else resultado.faltantes.push(`PDF anexo da O.S. ${nomeOs}`);
+        }
+    }
+    resultado.ok = resultado.faltantes.length === 0;
+    if (opcoes.registrar && typeof localforage !== 'undefined') {
+        try { await localforage.setItem('diagnostico_ultima_integridade_midias_v93', resultado); } catch (_) {}
+    }
+    return resultado;
+}
+
+function criarSnapshotMidiasFormulario() {
+    const doc = { id:String(documentoAtualId || ''), ordens:[] };
+    document.querySelectorAll('.os-bloco').forEach(b => {
+        const id = b.getAttribute('data-id');
+        const ordem = {
+            osNum: getVal('osNum', id),
+            anexoMediaId: document.getElementById(`anexoMediaId_${id}`)?.value || null,
+            anexoBase64: document.getElementById(`anexoBase64_${id}`)?.value || null,
+            fotos: []
+        };
+        b.querySelectorAll('.foto-item').forEach(fItem => {
+            const mediaId = fItem.querySelector('.foto-media-id')?.value || '';
+            const b64 = fItem.querySelector('.foto-b64')?.value || '';
+            ordem.fotos.push(mediaId ? { mediaId } : { b64 });
+        });
+        doc.ordens.push(ordem);
+    });
+    return doc;
+}
+
+async function verificarIntegridadeMidiasAtual(forcar = false) {
+    if (typeof localforage === 'undefined' || !document.querySelector('.os-bloco')) return null;
+    const agora = Date.now();
+    if (!forcar && ultimoResultadoIntegridadeMidias && agora - ultimaVerificacaoMidiasTs < 7000) return ultimoResultadoIntegridadeMidias;
+    try {
+        const doc = criarSnapshotMidiasFormulario();
+        const anterior = ultimoResultadoIntegridadeMidias;
+        const resultado = await verificarIntegridadeMidiasDocumento(doc, { contexto: 'formulario_atual', registrar: true });
+        ultimaVerificacaoMidiasTs = Date.now();
+        ultimoResultadoIntegridadeMidias = resultado;
+        atualizarIndicadorIntegridadeMidias(resultado);
+        const chaveAnterior = anterior?.ok === false ? anterior.faltantes.join('|') : '';
+        const chaveAtual = resultado.ok ? '' : resultado.faltantes.join('|');
+        if (!resultado.ok && chaveAtual !== chaveAnterior) registrarErroApp('integridadeMidiasAtual', new Error(resultado.faltantes.join(' | ')));
+        return resultado;
+    } catch (e) {
+        console.error('Falha ao verificar integridade das mídias:', e);
+        registrarErroApp('verificarIntegridadeMidiasAtual', e);
+        const falha = { ok:false, total:0, protegidas:0, faltantes:['Não foi possível verificar as mídias.'] };
+        atualizarIndicadorIntegridadeMidias(falha);
+        return falha;
+    }
+}
+
+function agendarVerificacaoIntegridadeAtual(atrasoMs = 900, forcar = false) {
+    if (integridadeMidiasTimer) clearTimeout(integridadeMidiasTimer);
+    integridadeMidiasTimer = setTimeout(() => {
+        integridadeMidiasTimer = null;
+        void verificarIntegridadeMidiasAtual(forcar);
+    }, Math.max(0, atrasoMs));
+}
+
+async function verificarIntegridadeTodasMidias() {
+    const resumo = { documentos:0, rascunhos:0, total:0, protegidas:0, faltantes:[], ok:true };
+    if (typeof localforage === 'undefined') { resumo.ok = false; resumo.faltantes.push('Armazenamento local indisponível.'); return resumo; }
+    const vistos = new Set();
+    const verificar = async (doc, tipo) => {
+        if (!doc?.id || !Array.isArray(doc.ordens)) return;
+        const chave = `${tipo}:${doc.id}`;
+        if (vistos.has(chave)) return;
+        vistos.add(chave);
+        const r = await verificarIntegridadeMidiasDocumento(doc, { contexto: tipo, registrar:false });
+        if (tipo === 'historico') resumo.documentos++; else resumo.rascunhos++;
+        resumo.total += r.total; resumo.protegidas += r.protegidas;
+        r.faltantes.forEach(x => resumo.faltantes.push(`${tipo === 'historico' ? 'Histórico' : 'Rascunho'} ${doc.id}: ${x}`));
+    };
+
+    const hist = await obterHistoricoSalvo();
+    for (const meta of hist) {
+        if (!idLocalSeguro(String(meta?.id || ''))) continue;
+        const doc = await localforage.getItem(`os_doc_${meta.id}`);
+        if (!doc) resumo.faltantes.push(`Documento ${meta.id} não pôde ser lido.`);
+        else await verificar(doc, 'historico');
+    }
+    const drafts = await listarRascunhosPersistentes();
+    for (const d of drafts) await verificar(d, 'rascunho');
+    resumo.ok = resumo.faltantes.length === 0;
+    try { await localforage.setItem('diagnostico_integridade_completa_v93', { ...resumo, verificadaEm:new Date().toISOString() }); } catch (_) {}
+    return resumo;
 }
 
 
@@ -1584,11 +1843,51 @@ async function lerLogotipo(event) {
 }
 
 function gerarMetadadosResumo(doc) {
+    const ordens = Array.isArray(doc?.ordens) ? doc.ordens : [];
+    const primeira = ordens[0] || {};
+    const valoresUnicos = (campo) => [...new Set(ordens.map(o => String(o?.[campo] || '').trim()).filter(Boolean))];
+    const datasServico = [];
+    ordens.forEach(o => {
+        [o?.dt, o?.dtInicio, o?.dtFim].forEach(v => { if (dataISOValida(String(v || ''))) datasServico.push(String(v)); });
+    });
+    datasServico.sort();
+    const totalFotos = ordens.reduce((s, o) => s + (Array.isArray(o?.fotos) ? o.fotos.length : 0), 0);
+    const totalPecas = ordens.reduce((s, o) => s + (Array.isArray(o?.pecas) ? o.pecas.filter(p => p && (p.q || p.n || p.c)).length : 0), 0);
+    const totalChecklists = ordens.reduce((s, o) => s + (o?.checklist?.modeloId ? 1 : 0), 0);
+    const totalAnexosPdf = ordens.reduce((s, o) => s + (o?.anexoMediaId || o?.anexoBase64 ? 1 : 0), 0);
     return {
+        metaVersao: 94,
         id: doc.id, dataAtualizacao: doc.dataAtualizacao,
-        clienteEmpresa: doc.ordens && doc.ordens[0] ? doc.ordens[0].cliente : 'Desconhecido', nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
-        osNumResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].osNum : 'Sem OS', equipamentoResumo: doc.ordens && doc.ordens[0] ? doc.ordens[0].equipamento : ''
+        clienteEmpresa: primeira.cliente || 'Desconhecido', nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
+        tecnicoResumo: String(doc.tecnico || '').trim(),
+        osNumResumo: primeira.osNum || 'Sem OS', equipamentoResumo: primeira.equipamento || '',
+        clientesPesquisa: valoresUnicos('cliente').join(' | '),
+        osNumsPesquisa: valoresUnicos('osNum').join(' | '),
+        equipamentosPesquisa: valoresUnicos('equipamento').join(' | '),
+        seriesPesquisa: valoresUnicos('serie').join(' | '),
+        opsPesquisa: valoresUnicos('op').join(' | '),
+        datasServico,
+        dataServicoInicio: datasServico[0] || '', dataServicoFim: datasServico[datasServico.length - 1] || '',
+        totalOrdens: ordens.length, totalFotos, totalPecas, totalChecklists, totalAnexosPdf
     };
+}
+
+async function garantirMetadadosHistoricoV94(historicoMeta) {
+    if (!Array.isArray(historicoMeta) || !historicoMeta.length) return Array.isArray(historicoMeta) ? historicoMeta : [];
+    let alterou = false;
+    const atualizado = [];
+    for (const meta of historicoMeta) {
+        if (!meta || !idLocalSeguro(String(meta.id || ''))) continue;
+        if (Number(meta.metaVersao || 0) >= 94) { atualizado.push(meta); continue; }
+        const doc = await localforage.getItem(`os_doc_${meta.id}`);
+        if (doc?.ordens) { atualizado.push(gerarMetadadosResumo(doc)); alterou = true; }
+        else atualizado.push(meta);
+    }
+    if (alterou) {
+        try { await gravarHistoricoSalvo(atualizado); }
+        catch (e) { console.warn('Não foi possível atualizar os metadados avançados do Histórico:', e); }
+    }
+    return atualizado;
 }
 
 async function obterHistoricoSalvo() {
@@ -1753,7 +2052,7 @@ function importarBackupJSON(event) {
 
             const novoBancoHoras = [...bancoHorasAnterior];
             for (const reg of normalizado.bancoHoras) {
-                const normalizadoReg = { ...reg, balancoFinal: Number(reg.balancoFinal) };
+                const normalizadoReg = sanitizarRegistoBancoHoras({ ...reg, balancoFinal: Number(reg.balancoFinal) });
                 const idx = novoBancoHoras.findIndex(r => r.id === normalizadoReg.id);
                 if (idx >= 0) novoBancoHoras[idx] = normalizadoReg; else novoBancoHoras.push(normalizadoReg);
             }
@@ -1968,7 +2267,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (typeof localforage !== 'undefined') {
         try {
             const nomeSalvo = await localforage.getItem('bh_nome_tecnico_salvo'); if (nomeSalvo && document.getElementById('bh_nome_tecnico')) document.getElementById('bh_nome_tecnico').value = nomeSalvo;
-            const horasSalvas = await localforage.getItem('banco_horas_data'); if (Array.isArray(horasSalvas)) registosBancoHoras = horasSalvas.filter(validarRegistoBancoHorasLegado).map(r => ({...r, balancoFinal: Number(r.balancoFinal)}));
+            const horasSalvas = await localforage.getItem('banco_horas_data');
+            if (Array.isArray(horasSalvas)) {
+                const tinhaDadosVeiculo = horasSalvas.some(r => r && ('placaVeiculo' in r || 'kmSaida' in r || 'kmChegada' in r || 'totalKm' in r));
+                registosBancoHoras = horasSalvas.filter(validarRegistoBancoHorasLegado).map(r => sanitizarRegistoBancoHoras({...r, balancoFinal: Number(r.balancoFinal)}));
+                if (tinhaDadosVeiculo) await persistirBancoHorasSeguro(registosBancoHoras);
+            }
         } catch(e) { console.error('Falha ao carregar banco de horas:', e); registrarErroApp('carregarBancoHoras', e); mostrarToast('Falha ao ler o banco de horas. Nenhum dado foi substituído.', true); }
     } else {
         mostrarToast('Armazenamento local indisponível. Salvar e histórico não funcionarão nesta sessão.', true);
@@ -1989,9 +2293,47 @@ function atualizarIndicadorRascunho(texto, estado = 'rascunho') {
     if (!indicador) return;
     indicador.textContent = texto || '';
     indicador.dataset.estado = estado;
+    indicador.dataset.state = estado;
     indicador.title = estado === 'historico'
         ? 'Esta O.S. foi gravada oficialmente no Histórico.'
-        : (estado === 'erro' ? 'O rascunho local não pôde ser gravado.' : 'Rascunho local de segurança; ainda não é o salvamento oficial no Histórico.');
+        : (estado === 'erro'
+            ? 'O trabalho precisa de atenção: houve falha de proteção/salvamento.'
+            : (estado === 'edicao'
+                ? 'Existem alterações que ainda aguardam o próximo rascunho automático.'
+                : 'Rascunho local de segurança; ainda não é o salvamento oficial no Histórico.'));
+}
+
+function atualizarIndicadorIntegridadeMidias(resultado = null) {
+    const indicador = document.getElementById('mediaIntegrityIndicator');
+    if (!indicador) return;
+    if (!resultado) { indicador.textContent = 'Mídias: aguardando'; indicador.dataset.state = 'rascunho'; return; }
+    if (resultado.total === 0) { indicador.textContent = 'Mídias: nenhuma'; indicador.dataset.state = 'ok'; indicador.title = 'Nenhuma foto ou anexo foi adicionado nesta O.S.'; return; }
+    if (resultado.ok) {
+        indicador.textContent = `Mídias protegidas: ${resultado.protegidas}/${resultado.total}`;
+        indicador.dataset.state = 'ok';
+        indicador.title = 'Todas as fotos e anexos referenciados foram encontrados no armazenamento local.';
+    } else {
+        indicador.textContent = `ATENÇÃO: ${resultado.faltantes.length} mídia(s) ausente(s)`;
+        indicador.dataset.state = 'erro';
+        indicador.title = resultado.faltantes.slice(0, 3).join(' • ');
+    }
+}
+
+async function atualizarEstadoSalvamentoAtual() {
+    if (formularioSujo) { atualizarIndicadorRascunho('Alterações aguardando proteção', 'edicao'); return; }
+    if (typeof localforage === 'undefined' || !idLocalSeguro(String(documentoAtualId || ''))) { atualizarIndicadorRascunho('Nova O.S. — ainda não salva', 'edicao'); return; }
+    try {
+        const [salvo, draft] = await Promise.all([
+            localforage.getItem(`os_doc_${documentoAtualId}`),
+            obterRascunhoDocumento(documentoAtualId)
+        ]);
+        const tsSalvo = Date.parse(salvo?.dataAtualizacao || '') || 0;
+        const tsDraft = Date.parse(draft?.dataAtualizacao || '') || 0;
+        if (draft && (!salvo || tsDraft > tsSalvo)) atualizarIndicadorRascunho('Rascunho protegido', 'rascunho');
+        else if (salvo) atualizarIndicadorRascunho('O.S. salva no Histórico', 'historico');
+        else if (draft) atualizarIndicadorRascunho('Rascunho protegido', 'rascunho');
+        else atualizarIndicadorRascunho('Nova O.S. — ainda não salva', 'edicao');
+    } catch (_) { atualizarIndicadorRascunho('Estado de salvamento não confirmado', 'erro'); }
 }
 
 async function protegerRascunhoAtualAntesDeValidar() {
@@ -1999,7 +2341,8 @@ async function protegerRascunhoAtualAntesDeValidar() {
     try {
         const dados = recolherDadosDoFormulario();
         await salvarRascunhoPersistente(dados, true);
-        atualizarIndicadorRascunho(`Rascunho protegido localmente: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
+        atualizarIndicadorRascunho(`Rascunho protegido: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
+        agendarVerificacaoIntegridadeAtual(150, true);
         return true;
     } catch (e) {
         console.error('Falha ao proteger rascunho antes da validação:', e);
@@ -2018,7 +2361,8 @@ async function autoSalvarRascunho(forcar = false) {
     try {
         const dados = recolherDadosDoFormulario();
         await salvarRascunhoPersistente(dados, true);
-        atualizarIndicadorRascunho(`Rascunho salvo localmente: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
+        atualizarIndicadorRascunho(`Rascunho protegido: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
+        agendarVerificacaoIntegridadeAtual(250, true);
         return true;
     } catch(e) {
         console.error('Falha no auto-salvamento:', e); registrarErroApp('autoSalvarRascunho', e);
@@ -2039,15 +2383,67 @@ async function verificarRascunhoPendente() {
     }
 }
 
+function sanitizarRegistoBancoHoras(reg) {
+    const limpo = { ...(reg || {}) };
+    // v94: dados de veículo/quilometragem pertencem exclusivamente ao relatório de O.S.
+    // O Banco de Horas recebe somente data, cliente, cidade/local e horários (mais vínculo da O.S.).
+    delete limpo.placaVeiculo;
+    delete limpo.kmSaida;
+    delete limpo.kmChegada;
+    delete limpo.totalKm;
+    return limpo;
+}
+
 async function persistirBancoHorasSeguro(novosRegistos) {
     try {
         if (!Array.isArray(novosRegistos)) throw new Error('Banco de horas inválido');
+        const limpos = novosRegistos.map(sanitizarRegistoBancoHoras);
         const anterior = await localforage.getItem('banco_horas_data');
         if (Array.isArray(anterior)) await localforage.setItem('banco_horas_recovery_v66', anterior);
-        await localforage.setItem('banco_horas_data', novosRegistos);
-        registosBancoHoras = novosRegistos;
+        await localforage.setItem('banco_horas_data', limpos);
+        registosBancoHoras = limpos;
         return true;
     } catch(e) { console.error('Falha ao salvar banco de horas:', e); registrarErroApp('bancoHoras', e); mostrarToast('Não foi possível salvar o banco de horas. Os dados anteriores foram mantidos.', true); return false; }
+}
+
+async function sincronizarBancoHorasAPartirDaOS(dados) {
+    const ordens = Array.isArray(dados?.ordens) ? dados.ordens.filter(o => o && o.integrarBancoHoras && !o.cbServInterno && !o.cbMontagemSala) : [];
+    if (!ordens.length) return { ok:true, total:0, atualizados:0, criados:0 };
+    let novos = Array.isArray(registosBancoHoras) ? [...registosBancoHoras] : [];
+    let atualizados = 0, criados = 0;
+
+    for (const ordem of ordens) {
+        const integracaoId = String(ordem.integracaoBhId || '');
+        if (!idLocalSeguro(integracaoId)) throw new Error(`Identificador de integração inválido na O.S. ${ordem.osNum || ''}`.trim());
+        if (!dataISOValida(ordem.dt) || !horaValida(ordem.hc) || !horaValida(ordem.hs)) throw new Error(`Data/horário inválido para integrar a O.S. ${ordem.osNum || ''} ao Banco de Horas.`.trim());
+        const cidade = String(ordem.cidadeVisita || '').trim();
+        if (!cidade) throw new Error(`Informe a cidade/local da O.S. ${ordem.osNum || ''} para integrar ao Banco de Horas.`.trim());
+        const isCredito = ordem.integracaoBhCredito !== false;
+        const reg = {
+            id: '',
+            data: ordem.dt,
+            cliente: String(ordem.cliente || '').trim(),
+            motivo: `Visita externa${ordem.osNum ? ` - O.S. #${ordem.osNum}` : ''}`,
+            local: cidade,
+            chegada: ordem.hc,
+            saida: ordem.hs,
+            isCredito,
+            balancoFinal: calcularMinsDesvio(ordem.hc, ordem.hs, isCredito),
+            origemIntegracaoId: integracaoId,
+            origemDocumentoId: String(dados.id || ''),
+            origemOsNum: String(ordem.osNum || ''),
+            origemTipo: 'os'
+        };
+        const idx = novos.findIndex(r => String(r?.origemIntegracaoId || '') === integracaoId);
+        if (idx >= 0) { reg.id = novos[idx].id; novos[idx] = sanitizarRegistoBancoHoras({ ...novos[idx], ...reg }); atualizados++; }
+        else { reg.id = novoIdLocal(); novos.push(sanitizarRegistoBancoHoras(reg)); criados++; }
+    }
+    novos.sort((a,b) => new Date(a.data) - new Date(b.data));
+    const ok = await persistirBancoHorasSeguro(novos);
+    if (!ok) throw new Error('Falha ao persistir integração com o Banco de Horas.');
+    const resultado = { ok:true, total:ordens.length, atualizados, criados, data:new Date().toISOString(), documentoId:String(dados.id || '') };
+    try { await localforage.setItem('diagnostico_ultima_integracao_bh_v94', resultado); } catch (_) {}
+    return resultado;
 }
 
 function formatarMins(minsTotais) {
@@ -2206,7 +2602,7 @@ function renderTabelaBancoHoras() {
             html += `
             <tr class="${emEdicao ? 'bg-blue-50/80' : 'hover:bg-blue-50/50'} transition-colors">
                 <td class="p-4 font-semibold text-gray-700 whitespace-nowrap">${reg.data.split('-').reverse().join('/')}</td>
-                <td class="p-4"><div class="font-bold text-gray-900">${escapeHTML(reg.cliente || '-')}</div><div class="text-xs text-gray-500 mt-0.5">${escapeHTML(reg.local || '-')} | ${escapeHTML(reg.motivo || '-')}</div></td>
+                <td class="p-4"><div class="font-bold text-gray-900">${escapeHTML(reg.cliente || '-')}</div><div class="text-xs text-gray-500 mt-0.5">${escapeHTML(reg.local || '-')} | ${escapeHTML(reg.motivo || '-')}</div>${reg.origemTipo === 'os' ? `<div class="text-[10px] font-bold text-blue-600 mt-1">Vinculado à O.S.${reg.origemOsNum ? ` #${escapeHTML(reg.origemOsNum)}` : ''}</div>` : ''}</td>
                 <td class="p-4 font-mono text-gray-600 text-center whitespace-nowrap">${reg.chegada} - ${reg.saida}</td>
                 <td class="p-4 text-right font-mono font-black ${corBal} text-base whitespace-nowrap">${textoBalanco}</td>
                 <td class="p-4 text-center whitespace-nowrap"><div class="inline-flex items-center gap-1">
@@ -3100,7 +3496,8 @@ function recolherDadosDoFormulario() {
             cliente: getVal('cliente', id), osNum: getVal('osNum', id), equipamento: getVal('equipamento', id), modelo: getVal('modelo', id), serie: getVal('serie', id), tag: getVal('tag', id), op: getVal('op', id),
             cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked,
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
-            dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id), 
+            dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id),
+            cidadeVisita: getVal('cidadeVisita', id), integrarBancoHoras: !!document.getElementById(`integrarBh_${id}`)?.checked, integracaoBhId: getVal('integracaoBhId', id), integracaoBhCredito: !!document.getElementById(`integracaoBhCredito_${id}`)?.checked,
             anexoMediaId: document.getElementById(`anexoMediaId_${id}`)?.value || null,
             anexoBase64: document.getElementById(`anexoBase64_${id}`)?.value || null, 
             anexoNome: document.getElementById(`anexoMediaId_${id}`)?.dataset.filename || document.getElementById(`anexoBase64_${id}`)?.dataset.filename || null, 
@@ -3124,6 +3521,8 @@ function restaurarDadosParaFormulario(doc) {
         if(document.getElementById('canvasTecnico') && padTecnico && dataUrlImagemSegura(doc.assinaturaTecnico)) padTecnico.fromDataURL(doc.assinaturaTecnico);
         if(document.getElementById('canvasCliente') && padCliente && dataUrlImagemSegura(doc.assinaturaCliente)) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); }
         atualizarVisibilidadeCamposPorBloco(); restaurandoDocumento = false; formularioSujo = false;
+        void atualizarEstadoSalvamentoAtual();
+        agendarVerificacaoIntegridadeAtual(250, true);
     }, 100);
 }
 
@@ -3132,9 +3531,15 @@ function atualizarVisibilidadeCamposPorBloco() {
     document.querySelectorAll('.os-bloco').forEach(b => {
         const id = b.getAttribute('data-id'); const isInterno = document.getElementById(`cbServInterno_${id}`).checked; const isMontagem = document.getElementById(`cbMontagemSala_${id}`).checked;
         const cHoras = document.getElementById(`containerHoras_${id}`); const cDias = document.getElementById(`containerDias_${id}`); const cReagendar = document.getElementById(`containerReagendar_${id}`);
+        const cIntegracao = document.getElementById(`containerIntegracaoBh_${id}`);
         if (isMontagem) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'block'; } 
         else if (isInterno) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true; } 
         else { if(cHoras) cHoras.style.display = 'grid'; if(cDias) cDias.style.display = 'none'; if(cReagendar) cReagendar.style.display = 'block'; }
+        const podeIntegrar = !isInterno && !isMontagem;
+        if (cIntegracao) cIntegracao.style.display = podeIntegrar ? 'block' : 'none';
+        const chkIntegrar = document.getElementById(`integrarBh_${id}`);
+        if (!podeIntegrar && chkIntegrar) chkIntegrar.checked = false;
+        atualizarIntegracaoBancoHorasUI(id);
     }); atualizarVisibilidadeClienteGeral();
 }
 function atualizarVisibilidadeClienteGeral() {
@@ -3142,6 +3547,13 @@ function atualizarVisibilidadeClienteGeral() {
     const controleKm = document.getElementById('controleKmContainer');
     if (controleKm) controleKm.style.display = isInterno ? 'none' : 'block';
     if (document.getElementById('secaoClienteContainer')) { if (isInterno) { document.getElementById('secaoClienteContainer').style.display = 'none'; if(padCliente) padCliente.clear(); } else { document.getElementById('secaoClienteContainer').style.display = 'block'; setTimeout(() => { resizeCanvasSeguro(document.getElementById('canvasCliente'), padCliente); }, 50); } }
+}
+
+function atualizarIntegracaoBancoHorasUI(id) {
+    const chk = document.getElementById(`integrarBh_${id}`);
+    const detalhes = document.getElementById(`integracaoBhDetalhes_${id}`);
+    if (!detalhes) return;
+    detalhes.classList.toggle('hidden', !chk?.checked);
 }
 
 function abrirModalAssinatura(alvo) {
@@ -3224,7 +3636,10 @@ async function iniciarNovaOS(forcarDescartarRascunho = false) {
         // um rascunho salvo da anterior continua disponível pela sua chave própria.
         if (forcarDescartarRascunho && typeof localforage !== 'undefined') await removerRascunhoPersistente(idAnterior);
         if (document.getElementById('buscaHistorico')) document.getElementById('buscaHistorico').value = '';
-        formularioSujo = false; if(document.getElementById('autoSaveIndicator')) document.getElementById('autoSaveIndicator').textContent = '';
+        formularioSujo = false;
+        atualizarIndicadorRascunho('Nova O.S. — ainda não salva', 'edicao');
+        atualizarIndicadorIntegridadeMidias({ ok:true, total:0, protegidas:0, faltantes:[] });
+        ultimoResultadoIntegridadeMidias = null; ultimaVerificacaoMidiasTs = 0;
         return true;
     } catch(e) { console.error(e); mostrarToast('Não foi possível iniciar uma nova O.S. com segurança.', true); return false; }
     finally { restaurandoDocumento = false; salvamentoManualEmAndamento = false; }
@@ -3234,6 +3649,7 @@ function adicionarBlocoOS(dados = null) {
     contadorOS++;
     const id = contadorOS;
     const dataHoje = dataLocalISO();
+    const integracaoBhIdInicial = String(dados?.integracaoBhId || novoIdLocal());
 
     // Ao adicionar manualmente uma nova O.S. ao mesmo documento, herda
     // Cliente e Nº da O.S. da primeira folha. Na restauração de documentos
@@ -3360,6 +3776,27 @@ function adicionarBlocoOS(dados = null) {
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Data Final</label><input type="date" id="dtFim_${id}" value="${dataHoje}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcDias(${id})"></div>
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total Dias</label><input type="text" id="totalDias_${id}" value="1 dia(s)" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
                 </div>
+
+                <div id="containerIntegracaoBh_${id}" class="integracao-bh-card" style="display:none;">
+                    <input type="hidden" id="integracaoBhId_${id}" value="${escapeHTML(integracaoBhIdInicial)}">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" id="integrarBh_${id}" onchange="atualizarIntegracaoBancoHorasUI(${id}); marcarFormularioAlterado();" class="mt-1 w-4 h-4 accent-blue-600">
+                        <span><span class="integracao-title block">Adicionar esta visita ao Banco de Horas ao salvar a O.S.</span><span class="integracao-help block">Usa cliente, cidade, data, chegada e saída desta visita. É opcional.</span></span>
+                    </label>
+                    <div id="integracaoBhDetalhes_${id}" class="hidden mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-black uppercase mb-1" style="color:var(--app-muted)">Cidade / Local</label>
+                            <input type="text" id="cidadeVisita_${id}" placeholder="Ex: Extrema - MG" class="w-full border border-blue-200 p-2.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-black uppercase mb-1" style="color:var(--app-muted)">Natureza no Banco de Horas</label>
+                            <div class="flex p-1 bg-gray-200/80 rounded-lg">
+                                <label class="flex-1 text-center cursor-pointer"><input type="radio" name="integracaoBhTipo_${id}" id="integracaoBhCredito_${id}" checked class="peer sr-only"><div class="py-2 rounded-md text-xs font-bold text-gray-500 peer-checked:bg-blue-600 peer-checked:text-white">+ Crédito</div></label>
+                                <label class="flex-1 text-center cursor-pointer"><input type="radio" name="integracaoBhTipo_${id}" id="integracaoBhDebito_${id}" class="peer sr-only"><div class="py-2 rounded-md text-xs font-bold text-gray-500 peer-checked:bg-red-500 peer-checked:text-white">- Débito</div></label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="pt-4 border-t border-gray-100">
@@ -3400,8 +3837,13 @@ function adicionarBlocoOS(dados = null) {
     if (campoOp) { campoOp.required = false; campoOp.removeAttribute('required'); }
 
     if (dados) {
-        ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
+        ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias','cidadeVisita'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
         ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
+        if (document.getElementById(`integracaoBhId_${id}`)) document.getElementById(`integracaoBhId_${id}`).value = dados.integracaoBhId || integracaoBhIdInicial;
+        if (document.getElementById(`integrarBh_${id}`)) document.getElementById(`integrarBh_${id}`).checked = !!dados.integrarBancoHoras;
+        if (document.getElementById(`integracaoBhCredito_${id}`)) document.getElementById(`integracaoBhCredito_${id}`).checked = dados.integracaoBhCredito !== false;
+        if (document.getElementById(`integracaoBhDebito_${id}`)) document.getElementById(`integracaoBhDebito_${id}`).checked = dados.integracaoBhCredito === false;
+        atualizarIntegracaoBancoHorasUI(id);
         if(document.getElementById(`cbMontagemSala_${id}`)) document.getElementById(`cbMontagemSala_${id}`).checked = dados.cbMontagemSala !== undefined ? !!dados.cbMontagemSala : !!dados.cbSemGarantia;
         if (dados.anexoMediaId || (dados.anexoBase64 && dataUrlPdfSegura(dados.anexoBase64))) { const mediaEl = document.getElementById(`anexoMediaId_${id}`); const b64 = document.getElementById(`anexoBase64_${id}`); let nomeAnexo = dados.anexoNome ? String(dados.anexoNome).replace(/^Anexado:\s*/i, '').trim() : ''; if (/^Anexado$/i.test(nomeAnexo)) nomeAnexo = ''; if (dados.anexoMediaId && mediaEl) { mediaEl.value = dados.anexoMediaId; if (nomeAnexo) mediaEl.dataset.filename = nomeAnexo; } else if (b64) { b64.value = dados.anexoBase64; if (nomeAnexo) b64.dataset.filename = nomeAnexo; } definirNomeAnexo(id, nomeAnexo); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
         if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { 
@@ -3495,6 +3937,16 @@ function validarCamposObrigatorios() {
         [...b.querySelectorAll('.foto-desc')].forEach((el, indiceFoto) => {
             if (!el.value.trim()) adicionarPendencia(el, `Descrição da foto ${indiceFoto + 1} da ${nomeBloco}`, el.closest('.foto-item'));
         });
+        if (document.getElementById(`integrarBh_${id}`)?.checked) {
+            const cidade = document.getElementById(`cidadeVisita_${id}`);
+            const dataVisita = document.getElementById(`dt_${id}`);
+            const chegada = document.getElementById(`hc_${id}`);
+            const saida = document.getElementById(`hs_${id}`);
+            if (!cidade?.value?.trim()) adicionarPendencia(cidade, `Cidade/Local para Banco de Horas da ${nomeBloco}`);
+            if (!dataVisita?.value || !dataISOValida(dataVisita.value)) adicionarPendencia(dataVisita, `Data da visita para Banco de Horas da ${nomeBloco}`);
+            if (!chegada?.value || !horaValida(chegada.value)) adicionarPendencia(chegada, `Horário de chegada para Banco de Horas da ${nomeBloco}`);
+            if (!saida?.value || !horaValida(saida.value)) adicionarPendencia(saida, `Horário de saída para Banco de Horas da ${nomeBloco}`);
+        }
     });
 
     if (pendencias.length === 0) { ultimaMensagemValidacaoObrigatoria = ''; return true; }
@@ -3538,6 +3990,9 @@ async function salvarDocumento(silencioso = false) {
     try {
         await aprenderPecasDaOS();
         dados = recolherDadosDoFormulario();
+        const integridadeMidias = await verificarIntegridadeMidiasDocumento(dados, { contexto:'salvamento_oficial', registrar:true });
+        ultimoResultadoIntegridadeMidias = integridadeMidias; ultimaVerificacaoMidiasTs = Date.now(); atualizarIndicadorIntegridadeMidias(integridadeMidias);
+        if (!integridadeMidias.ok) throw new Error(`Salvamento oficial cancelado: ${integridadeMidias.faltantes[0] || 'há mídia ausente'}. O rascunho foi preservado.`);
         documentoAnterior = await localforage.getItem(`os_doc_${dados.id}`);
         historicoAnterior = await obterHistoricoSalvo(); // se falhar, NÃO substitui o histórico por []
         await aplicarIntegridadeDocumento(dados, documentoAnterior?.integridade || null);
@@ -3562,8 +4017,19 @@ async function salvarDocumento(silencioso = false) {
         // A remoção do rascunho é pós-confirmação: se falhar, não transforma um salvamento válido em falha.
         try { await removerRascunhoPersistente(dados.id); }
         catch (e) { console.warn('O.S. salva, mas o rascunho antigo não pôde ser removido:', e); registrarErroApp('removerRascunhoAposSalvar', e); }
+        let integracaoBhResultado = { ok:true, total:0 };
+        try { integracaoBhResultado = await sincronizarBancoHorasAPartirDaOS(dados); }
+        catch (e) {
+            integracaoBhResultado = { ok:false, total:0, erro:e?.message || String(e) };
+            console.warn('O.S. salva, mas a integração com Banco de Horas falhou:', e); registrarErroApp('integracaoBancoHorasOS', e);
+            try { await localforage.setItem('diagnostico_ultima_integracao_bh_v94', { ...integracaoBhResultado, data:new Date().toISOString(), documentoId:String(dados.id || '') }); } catch (_) {}
+        }
         atualizarIndicadorRascunho(`O.S. salva no Histórico: ${new Date().toLocaleTimeString('pt-BR')}`, 'historico');
-        if(!silencioso) mostrarToast('O.S. salva e confirmada no Histórico!');
+        if(!silencioso) {
+            if (integracaoBhResultado.ok && integracaoBhResultado.total > 0) mostrarToast(`O.S. salva e Banco de Horas sincronizado (${integracaoBhResultado.total} visita${integracaoBhResultado.total === 1 ? '' : 's'}).`);
+            else if (!integracaoBhResultado.ok) mostrarToast(`O.S. salva no Histórico, mas o Banco de Horas não foi sincronizado. ${integracaoBhResultado.erro || ''}`.trim(), true);
+            else mostrarToast('O.S. salva e confirmada no Histórico!');
+        }
 
         // Limpeza de mídia é manutenção e não deve desfazer um salvamento já confirmado.
         try { await limparMidiasRemovidasDoDocumento(documentoAnterior, dados); }
@@ -3600,14 +4066,47 @@ function atualizarContadorHistoricoVisivel() {
     contador.textContent = visiveis === total ? `Total: ${total}` : `${visiveis} de ${total}`;
 }
 
+function normalizarFiltroHistorico(v) { return String(v || '').trim().toLocaleLowerCase('pt-BR'); }
+
 function filtrarHistorico() {
-    const input = document.getElementById('buscaHistorico');
-    const termo = String(input?.value || '').trim().toLowerCase();
-    document.querySelectorAll('.historico-item, .rascunho-item').forEach(item => {
-        item.style.display = item.innerText.toLowerCase().includes(termo) ? '' : 'none';
+    const termo = normalizarFiltroHistorico(document.getElementById('buscaHistorico')?.value);
+    const tecnico = normalizarFiltroHistorico(document.getElementById('histFiltroTecnico')?.value);
+    const cliente = normalizarFiltroHistorico(document.getElementById('histFiltroCliente')?.value);
+    const equipamento = normalizarFiltroHistorico(document.getElementById('histFiltroEquipamento')?.value);
+    const serie = normalizarFiltroHistorico(document.getElementById('histFiltroSerie')?.value);
+    const op = normalizarFiltroHistorico(document.getElementById('histFiltroOp')?.value);
+    const osNum = normalizarFiltroHistorico(document.getElementById('histFiltroOs')?.value);
+    const dataInicio = String(document.getElementById('histFiltroDataInicio')?.value || '');
+    const dataFim = String(document.getElementById('histFiltroDataFim')?.value || '');
+
+    document.querySelectorAll('.historico-item').forEach(item => {
+        const texto = normalizarFiltroHistorico(`${item.innerText} ${item.dataset.pesquisa || ''}`);
+        const datas = String(item.dataset.datas || '').split(',').filter(Boolean);
+        const bateData = (!dataInicio && !dataFim) || datas.some(d => (!dataInicio || d >= dataInicio) && (!dataFim || d <= dataFim));
+        const ok = (!termo || texto.includes(termo))
+            && (!tecnico || normalizarFiltroHistorico(item.dataset.tecnico).includes(tecnico))
+            && (!cliente || normalizarFiltroHistorico(item.dataset.cliente).includes(cliente))
+            && (!equipamento || normalizarFiltroHistorico(item.dataset.equipamento).includes(equipamento))
+            && (!serie || normalizarFiltroHistorico(item.dataset.serie).includes(serie))
+            && (!op || normalizarFiltroHistorico(item.dataset.op).includes(op))
+            && (!osNum || normalizarFiltroHistorico(item.dataset.os).includes(osNum))
+            && bateData;
+        item.style.display = ok ? '' : 'none';
+    });
+
+    // Rascunhos continuam respondendo à busca rápida; filtros avançados são das O.S. salvas.
+    document.querySelectorAll('.rascunho-item').forEach(item => {
+        item.style.display = (!termo || normalizarFiltroHistorico(item.innerText).includes(termo)) ? '' : 'none';
     });
     atualizarContadorHistoricoVisivel();
     atualizarContadorRascunhosVisivel();
+}
+
+function limparFiltrosHistorico() {
+    ['buscaHistorico','histFiltroTecnico','histFiltroCliente','histFiltroEquipamento','histFiltroSerie','histFiltroOp','histFiltroOs','histFiltroDataInicio','histFiltroDataFim'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    filtrarHistorico();
 }
 
 function atualizarContadorRascunhosVisivel() {
@@ -3751,6 +4250,7 @@ async function carregarHistorico() {
         if (!list) return;
         let historicoMeta = await obterHistoricoSalvo();
         historicoMeta = Array.isArray(historicoMeta) ? historicoMeta.filter(doc => doc && idLocalSeguro(doc.id)) : [];
+        historicoMeta = await garantirMetadadosHistoricoV94(historicoMeta);
         historicoMeta = ordenarHistoricoParaTela(historicoMeta);
         await carregarRascunhosHistorico(new Set(historicoMeta.map(doc => String(doc.id))));
 
@@ -3761,8 +4261,25 @@ async function carregarHistorico() {
             return;
         }
 
-        list.innerHTML = historicoMeta.map(doc => `
-        <div class="historico-item history-card">
+        list.innerHTML = historicoMeta.map(doc => {
+        const badges = [
+            `<span class="history-badge">${Number(doc.totalOrdens || 1)} folha${Number(doc.totalOrdens || 1) === 1 ? '' : 's'}</span>`,
+            Number(doc.totalFotos || 0) ? `<span class="history-badge">${Number(doc.totalFotos)} foto${Number(doc.totalFotos) === 1 ? '' : 's'}</span>` : '',
+            Number(doc.totalPecas || 0) ? `<span class="history-badge">${Number(doc.totalPecas)} peça${Number(doc.totalPecas) === 1 ? '' : 's'}</span>` : '',
+            Number(doc.totalChecklists || 0) ? `<span class="history-badge">${Number(doc.totalChecklists)} checklist</span>` : '',
+            Number(doc.totalAnexosPdf || 0) ? `<span class="history-badge">${Number(doc.totalAnexosPdf)} PDF anexo</span>` : ''
+        ].filter(Boolean).join('');
+        const pesquisa = [doc.clientesPesquisa, doc.osNumsPesquisa, doc.equipamentosPesquisa, doc.seriesPesquisa, doc.opsPesquisa, doc.tecnicoResumo].filter(Boolean).join(' | ');
+        return `
+        <div class="historico-item history-card"
+             data-pesquisa="${escapeHTML(pesquisa)}"
+             data-cliente="${escapeHTML(doc.clientesPesquisa || doc.clienteEmpresa || '')}"
+             data-tecnico="${escapeHTML(doc.tecnicoResumo || '')}"
+             data-equipamento="${escapeHTML(doc.equipamentosPesquisa || doc.equipamentoResumo || '')}"
+             data-serie="${escapeHTML(doc.seriesPesquisa || '')}"
+             data-op="${escapeHTML(doc.opsPesquisa || '')}"
+             data-os="${escapeHTML(doc.osNumsPesquisa || doc.osNumResumo || '')}"
+             data-datas="${escapeHTML(Array.isArray(doc.datasServico) ? doc.datasServico.join(',') : '')}">
             <div class="history-card-main">
                 <div class="history-card-icon" aria-hidden="true">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0118 9.414V19a2 2 0 01-2 2z"></path></svg>
@@ -3779,6 +4296,8 @@ async function carregarHistorico() {
                             ${escapeHTML(doc.equipamentoResumo || 'Diversos')}
                         </span>
                     </div>
+                    ${doc.tecnicoResumo ? `<div class="history-technician">Técnico: ${escapeHTML(doc.tecnicoResumo)}</div>` : ''}
+                    <div class="history-badges">${badges}</div>
                     <div class="history-date">${doc.dataAtualizacao ? new Date(doc.dataAtualizacao).toLocaleString('pt-BR') : ''}</div>
                 </div>
             </div>
@@ -3791,7 +4310,8 @@ async function carregarHistorico() {
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                 </button>
             </div>
-        </div>`).join('');
+        </div>`;
+        }).join('');
         filtrarHistorico();
 
     } catch(e) {
@@ -3848,6 +4368,8 @@ function atualizarProgressoPDF(percentual, texto) {
 
 async function construirPDFBytes(onProgressCallback) {
     if (!validarCamposObrigatorios()) throw new Error(ultimaMensagemValidacaoObrigatoria || "Preencha os campos obrigatórios!");
+    const integridadeMidiasPdf = await verificarIntegridadeMidiasAtual(true);
+    if (integridadeMidiasPdf && !integridadeMidiasPdf.ok) throw new Error(`Geração cancelada: ${integridadeMidiasPdf.faltantes[0] || 'há foto/anexo ausente no armazenamento'}.`);
     if (!validarChecklistsAntesPDF()) throw new Error("Geração cancelada para revisão do checklist.");
     if (!dependenciasPdfDisponiveis(false)) throw new Error("Bibliotecas de PDF indisponíveis. Verifique a ligação ou o cache offline.");
     const reportProgress = async (pct, txt) => { if(onProgressCallback) { onProgressCallback(pct, txt); await new Promise(r => setTimeout(r, 15)); } };
