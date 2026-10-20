@@ -870,7 +870,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 97;
+const APP_VERSION = 98;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
@@ -2598,7 +2598,7 @@ async function preencherBancoHorasPorData() {
     if (bancoHorasEdicaoId) return; // editar lançamento nunca deve ser sobrescrito por sugestão automática
     const data = document.getElementById('bh_data')?.value || '';
     limparAutoPreenchimentoBancoHorasAnterior();
-    // v97: a consulta fica silenciosa. Nenhum quadro, seletor de O.S. ou equipamento aparece na tela.
+    // v98: a consulta fica silenciosa. Nenhum quadro, seletor de O.S. ou equipamento aparece na tela.
     esconderSugestaoOSBancoHoras();
     if (!dataISOValida(data)) return;
     try {
@@ -2869,12 +2869,47 @@ function renderTabelaBancoHoras() {
     else { valTotalEl.className = 'text-4xl font-black font-mono text-gray-300 tracking-tight'; badgeStatus.textContent = 'REGULARIZADO'; badgeStatus.className = 'px-2.5 py-1 rounded-md text-[10px] font-bold bg-gray-700 text-gray-300 uppercase tracking-widest border border-gray-600'; }
 }
 
-function gerarPdfBancoHoras() {
+async function compartilharArquivoBancoHoras(blob, nomeFicheiro, mimeType, titulo) {
+    try {
+        const ficheiro = new File([blob], nomeFicheiro, { type: mimeType });
+        if (navigator.canShare && navigator.canShare({ files: [ficheiro] })) {
+            try {
+                await navigator.share({ title: titulo || 'Banco de Horas', files: [ficheiro] });
+                mostrarToast('Arquivo pronto para partilha!');
+                return true;
+            } catch (err) {
+                if (err?.name === 'AbortError') return false;
+                console.warn('Partilha indisponível; será feito download:', err);
+            }
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = nomeFicheiro; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+        mostrarToast('Arquivo gerado!');
+        return true;
+    } catch (e) {
+        console.error('Falha ao partilhar/baixar Banco de Horas:', e);
+        mostrarToast('Não foi possível gerar o arquivo.', true);
+        return false;
+    }
+}
+
+function obterRegistosBancoHorasDoFiltro() {
+    const inicioVal = document.getElementById('bh_mes_inicio')?.value || '';
+    const fimVal = document.getElementById('bh_mes_fim')?.value || '';
+    let regsFiltrados = registosBancoHoras;
+    let strPeriodo = 'Todos os Registos';
+    if (inicioVal && fimVal) {
+        regsFiltrados = registosBancoHoras.filter(r => { const mesRegisto = String(r.data || '').slice(0, 7); return mesRegisto >= inicioVal && mesRegisto <= fimVal; });
+        strPeriodo = `${inicioVal.split('-').reverse().join('/')} a ${fimVal.split('-').reverse().join('/')}`;
+    }
+    return { inicioVal, fimVal, regsFiltrados, strPeriodo };
+}
+
+async function gerarPdfBancoHoras() {
     if (!window.jspdf?.jsPDF) { mostrarToast('Motor de PDF indisponível. Verifique a ligação ou o cache offline.', true); return; }
     try {
-        const inicioVal = document.getElementById('bh_mes_inicio').value; const fimVal = document.getElementById('bh_mes_fim').value;
-        let regsFiltrados = registosBancoHoras; let strPeriodo = 'Todos os Registos';
-        if (inicioVal && fimVal) { regsFiltrados = registosBancoHoras.filter(r => { const mesRegisto = r.data.slice(0, 7); return mesRegisto >= inicioVal && mesRegisto <= fimVal; }); strPeriodo = `${inicioVal.split('-').reverse().join('/')} a ${fimVal.split('-').reverse().join('/')}`; }
+        const { inicioVal, fimVal, regsFiltrados, strPeriodo } = obterRegistosBancoHorasDoFiltro();
         if(regsFiltrados.length === 0) { mostrarToast('Não há dados.', true); return; }
         const { jsPDF } = window.jspdf; const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
         const pageW = doc.internal.pageSize.getWidth(); const pageH = doc.internal.pageSize.getHeight(); let startYHeader = 25;
@@ -2895,8 +2930,50 @@ function gerarPdfBancoHoras() {
         desenharCardSaldo(15 + cardW + gap, 'SALDO ACUMULADO', formatarMins(totalGlobal), totalGlobal, totalGlobal > 0 ? 'A RECEBER' : (totalGlobal < 0 ? 'A COMPENSAR' : 'REGULARIZADO'));
         const assinaturaY = resumoY + cardH + 21; doc.setDrawColor(75,85,99); doc.setLineWidth(0.25); doc.line((pageW/2)-55, assinaturaY, (pageW/2)+55, assinaturaY); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(75,85,99); doc.text('ASSINATURA', pageW/2, assinaturaY + 5, { align: 'center' });
         const paginas = doc.getNumberOfPages(); for (let p = 1; p <= paginas; p++) { doc.setPage(p); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(148,163,184); doc.text('Multi-OS Pro • Banco de Horas', 15, pageH - 6); doc.text(`Página ${p} de ${paginas}`, pageW - 15, pageH - 6, { align: 'right' }); }
-        const nomeTec = (document.getElementById('bh_nome_tecnico').value || 'Tecnico').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0,40) || 'Tecnico'; const periodoArquivo = inicioVal && fimVal ? `${inicioVal.replace('-', '')}_${fimVal.replace('-', '')}` : dataLocalISO().replace(/-/g,''); doc.save(`Horas_${nomeTec}_${periodoArquivo}.pdf`);
+        const nomeTec = (document.getElementById('bh_nome_tecnico').value || 'Tecnico').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0,40) || 'Tecnico';
+        const periodoArquivo = inicioVal && fimVal ? `${inicioVal.replace(/-/g, '')}_${fimVal.replace(/-/g, '')}` : dataLocalISO().replace(/-/g,'');
+        const nomeArquivo = `Horas_${nomeTec}_${periodoArquivo}.pdf`;
+        const blobPdf = doc.output('blob');
+        await compartilharArquivoBancoHoras(blobPdf, nomeArquivo, 'application/pdf', 'Banco de Horas - PDF');
     } catch (err) { console.error('Erro ao gerar folha de ponto:', err); mostrarToast('Não foi possível gerar a folha de ponto em PDF.', true); }
+}
+
+async function gerarExcelBancoHoras() {
+    try {
+        const { inicioVal, fimVal, regsFiltrados, strPeriodo } = obterRegistosBancoHorasDoFiltro();
+        if (!regsFiltrados.length) { mostrarToast('Não há dados para exportar.', true); return; }
+        const tecnico = document.getElementById('bh_nome_tecnico')?.value || 'Não Preenchido';
+        const totalPeriodo = regsFiltrados.reduce((soma, r) => soma + (Number(r.balancoFinal) || 0), 0);
+        const totalGlobal = registosBancoHoras.reduce((soma, r) => soma + (Number(r.balancoFinal) || 0), 0);
+        const cel = (v) => escapeHTML(String(v ?? ''));
+        const linhas = regsFiltrados.map(reg => `
+            <tr>
+                <td>${cel(String(reg.data || '').split('-').reverse().join('/'))}</td>
+                <td>${cel(reg.cliente || '')}</td>
+                <td>${cel(reg.motivo || '')}</td>
+                <td>${cel(reg.local || '')}</td>
+                <td>${cel(reg.chegada || '')}</td>
+                <td>${cel(reg.saida || '')}</td>
+                <td>${cel(reg.isCredito ? 'Crédito' : 'Débito')}</td>
+                <td>${cel(formatarMins(Number(reg.balancoFinal) || 0))}</td>
+            </tr>`).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body{font-family:Arial,sans-serif;color:#1f2937} table{border-collapse:collapse;width:100%} th,td{border:1px solid #cbd5e1;padding:7px;text-align:left;mso-number-format:\@} th{background:#10b981;color:#fff} .meta td{border:none;font-weight:bold;padding:4px 0}.saldo{font-weight:bold}
+        </style></head><body>
+            <h2>RELATÓRIO DE HORAS</h2>
+            <table class="meta"><tr><td>Técnico: ${cel(tecnico)}</td></tr><tr><td>Período: ${cel(strPeriodo)}</td></tr></table><br>
+            <table><thead><tr><th>Data</th><th>Cliente</th><th>Motivo / Atividade</th><th>Local</th><th>Chegada</th><th>Saída</th><th>Natureza</th><th>Extra / Falta</th></tr></thead><tbody>${linhas}</tbody></table><br>
+            <table class="meta"><tr><td class="saldo">Saldo do período: ${cel(formatarMins(totalPeriodo))}</td></tr><tr><td class="saldo">Saldo acumulado: ${cel(formatarMins(totalGlobal))}</td></tr></table>
+        </body></html>`;
+        const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        const nomeTec = tecnico.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0,40) || 'Tecnico';
+        const periodoArquivo = inicioVal && fimVal ? `${inicioVal.replace(/-/g, '')}_${fimVal.replace(/-/g, '')}` : dataLocalISO().replace(/-/g,'');
+        await compartilharArquivoBancoHoras(blob, `Horas_${nomeTec}_${periodoArquivo}.xls`, 'application/vnd.ms-excel', 'Banco de Horas - Excel');
+    } catch (err) {
+        console.error('Erro ao gerar Banco de Horas em Excel:', err);
+        registrarErroApp('gerarExcelBancoHoras', err);
+        mostrarToast('Não foi possível gerar o arquivo Excel.', true);
+    }
 }
 
 async function prepararCapturaCamera(id, sessaoEsperada = cameraSessaoId) {
@@ -3736,9 +3813,9 @@ function recolherDadosDoFormulario() {
         const id = b.getAttribute('data-id');
         let ordem = {
             cliente: getVal('cliente', id), osNum: getVal('osNum', id), equipamento: getVal('equipamento', id), modelo: getVal('modelo', id), serie: getVal('serie', id), tag: getVal('tag', id), op: getVal('op', id),
-            cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked,
+            cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked, cbContrato: !!document.getElementById(`cbContrato_${id}`)?.checked, cbQualificacao: !!document.getElementById(`cbQualificacao_${id}`)?.checked,
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
-            dt: getVal('dt', id), hc: getVal('hc', id), hs: getVal('hs', id), th: getVal('th', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id),
+            dt: getVal('dt', id), hc: getVal('hc', id), hi: getVal('hi', id), hs: getVal('hs', id), th: getVal('th', id), hiInterno: getVal('hiInterno', id), hfInterno: getVal('hfInterno', id), thInterno: getVal('thInterno', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id),
             anexoMediaId: document.getElementById(`anexoMediaId_${id}`)?.value || null,
             anexoBase64: document.getElementById(`anexoBase64_${id}`)?.value || null, 
             anexoNome: document.getElementById(`anexoMediaId_${id}`)?.dataset.filename || document.getElementById(`anexoBase64_${id}`)?.dataset.filename || null, 
@@ -3771,10 +3848,18 @@ function verificarServicoInternoGlobal() { return Array.from(document.querySelec
 function atualizarVisibilidadeCamposPorBloco() {
     document.querySelectorAll('.os-bloco').forEach(b => {
         const id = b.getAttribute('data-id'); const isInterno = document.getElementById(`cbServInterno_${id}`).checked; const isMontagem = document.getElementById(`cbMontagemSala_${id}`).checked;
-        const cHoras = document.getElementById(`containerHoras_${id}`); const cDias = document.getElementById(`containerDias_${id}`); const cReagendar = document.getElementById(`containerReagendar_${id}`);
-        if (isMontagem) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'block'; } 
-        else if (isInterno) { if(cHoras) cHoras.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true; } 
-        else { if(cHoras) cHoras.style.display = 'grid'; if(cDias) cDias.style.display = 'none'; if(cReagendar) cReagendar.style.display = 'block'; }
+        const cData = document.getElementById(`containerDataServico_${id}`);
+        const cHoras = document.getElementById(`containerHoras_${id}`);
+        const cHorasInterno = document.getElementById(`containerHorasInterno_${id}`);
+        const cDias = document.getElementById(`containerDias_${id}`);
+        const cReagendar = document.getElementById(`containerReagendar_${id}`);
+        if (isMontagem) {
+            if(cData) cData.style.display = 'none'; if(cHoras) cHoras.style.display = 'none'; if(cHorasInterno) cHorasInterno.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'block';
+        } else if (isInterno) {
+            if(cData) cData.style.display = 'grid'; if(cHoras) cHoras.style.display = 'none'; if(cHorasInterno) cHorasInterno.style.display = 'grid'; if(cDias) cDias.style.display = 'none'; calcHInterno(id); if(cReagendar) cReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true;
+        } else {
+            if(cData) cData.style.display = 'grid'; if(cHoras) cHoras.style.display = 'grid'; if(cHorasInterno) cHorasInterno.style.display = 'none'; if(cDias) cDias.style.display = 'none'; calcH(id); if(cReagendar) cReagendar.style.display = 'block';
+        }
     }); atualizarVisibilidadeClienteGeral();
 }
 function atualizarVisibilidadeClienteGeral() {
@@ -3931,13 +4016,15 @@ function adicionarBlocoOS(dados = null) {
 
             <div>
                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">Natureza do Serviço</h4>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     ${genToggle('cbOrcamento', 'Orçamento', false)}
                     ${genToggle('cbInstalacao', 'Instalação', false, true)}
                     ${genToggle('cbServInterno', 'Serv. Interno', true, true)}
                     ${genToggle('cbServExterno', 'Serv. Externo', false, true)}
                     ${genToggle('cbGarantia', 'Garantia', false)}
                     ${genToggle('cbMontagemSala', 'Montagem Sala', false, true)}
+                    ${genToggle('cbContrato', 'Contrato', false)}
+                    ${genToggle('cbQualificacao', 'Qualificação', false)}
                 </div>
             </div>
 
@@ -3992,11 +4079,22 @@ function adicionarBlocoOS(dados = null) {
 
             <div>
                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">Cronometria</h4>
-                <div id="containerHoras_${id}" class="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
+
+                <div id="containerDataServico_${id}" class="grid grid-cols-1 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm mb-3">
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Data</label><input type="date" id="dt_${id}" value="${dataHoje}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono"></div>
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chegada</label><input type="time" id="hc_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Saída</label><input type="time" id="hs_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total</label><input type="text" id="th_${id}" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
+                </div>
+
+                <div id="containerHoras_${id}" class="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chegada ao cliente</label><input type="time" id="hc_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início do trabalho</label><input type="time" id="hi_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono"></div>
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Finalização</label><input type="time" id="hs_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total (chegada → fim)</label><input type="text" id="th_${id}" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
+                </div>
+
+                <div id="containerHorasInterno_${id}" class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm" style="display:none;">
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início</label><input type="time" id="hiInterno_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Fim</label><input type="time" id="hfInterno_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total de horas</label><input type="text" id="thInterno_${id}" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
                 </div>
 
                 <div id="containerDias_${id}" class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm" style="display:none;">
@@ -4044,9 +4142,14 @@ function adicionarBlocoOS(dados = null) {
     if (campoOp) { campoOp.required = false; campoOp.removeAttribute('required'); }
 
     if (dados) {
-        ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hs','th','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
-        ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
+        if (dados.cbServInterno && dados.hiInterno === undefined && dados.hfInterno === undefined && dados.thInterno === undefined) bloco.dataset.cronoInternaLegada = '1';
+        ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hi','hs','th','hiInterno','hfInterno','thInterno','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
+        ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','cbContrato','cbQualificacao','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
         if(document.getElementById(`cbMontagemSala_${id}`)) document.getElementById(`cbMontagemSala_${id}`).checked = dados.cbMontagemSala !== undefined ? !!dados.cbMontagemSala : !!dados.cbSemGarantia;
+        // Compatibilidade: documentos internos antigos usavam intervalo de datas. Mantemos esses campos
+        // e aproveitamos a data inicial como data do serviço quando não houver data específica.
+        if (dados.cbServInterno && !dados.dt && dados.dtInicio && document.getElementById(`dt_${id}`)) document.getElementById(`dt_${id}`).value = dados.dtInicio;
+        calcH(id); calcHInterno(id);
         if (dados.anexoMediaId || (dados.anexoBase64 && dataUrlPdfSegura(dados.anexoBase64))) { const mediaEl = document.getElementById(`anexoMediaId_${id}`); const b64 = document.getElementById(`anexoBase64_${id}`); let nomeAnexo = dados.anexoNome ? String(dados.anexoNome).replace(/^Anexado:\s*/i, '').trim() : ''; if (/^Anexado$/i.test(nomeAnexo)) nomeAnexo = ''; if (dados.anexoMediaId && mediaEl) { mediaEl.value = dados.anexoMediaId; if (nomeAnexo) mediaEl.dataset.filename = nomeAnexo; } else if (b64) { b64.value = dados.anexoBase64; if (nomeAnexo) b64.dataset.filename = nomeAnexo; } definirNomeAnexo(id, nomeAnexo); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
         if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { 
             const pContainer = document.getElementById(`pecasContainer_${id}`); 
@@ -4099,11 +4202,26 @@ function removerPecaRow(botao) {
     mostrarToast('Peça removida do relatório.');
 }
 
+function calcularIntervaloHoras(inicio, fim) {
+    if (!horaValida(inicio) || !horaValida(fim)) return '';
+    const [ih, im] = inicio.split(':').map(Number); const [fh, fm] = fim.split(':').map(Number);
+    let total = (fh * 60 + fm) - (ih * 60 + im);
+    if (total < 0) total += 1440;
+    return `${String(Math.floor(total / 60)).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
+}
+
 function calcH(id) {
-    const hc = document.getElementById(`hc_${id}`).value, hs = document.getElementById(`hs_${id}`).value; const elTh = document.getElementById(`th_${id}`);
-    if(!elTh) return;
-    if(hc && hs) { let [ch, cm] = hc.split(':').map(Number), [sh, sm] = hs.split(':').map(Number); let t = (sh*60+sm) - (ch*60+cm); if(t < 0) t += 1440; elTh.value = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`; }
-    else { elTh.value = ''; }
+    const hc = document.getElementById(`hc_${id}`)?.value || '';
+    const hs = document.getElementById(`hs_${id}`)?.value || '';
+    const elTh = document.getElementById(`th_${id}`);
+    if (elTh) elTh.value = calcularIntervaloHoras(hc, hs);
+}
+
+function calcHInterno(id) {
+    const inicio = document.getElementById(`hiInterno_${id}`)?.value || '';
+    const fim = document.getElementById(`hfInterno_${id}`)?.value || '';
+    const total = document.getElementById(`thInterno_${id}`);
+    if (total) total.value = calcularIntervaloHoras(inicio, fim);
 }
 function calcDias(id) {
     let diffDays = Math.round((new Date(document.getElementById(`dtFim_${id}`).value) - new Date(document.getElementById(`dtInicio_${id}`).value)) / (1000 * 60 * 60 * 24)) + 1;
@@ -4572,6 +4690,7 @@ async function construirPDFBytes(onProgressCallback) {
         const numeroOp = getVal('op', id).trim(); cy += 6; docOS.text(`NÚMERO DE OP: ${truncarStr(numeroOp, 55)}`, 15, cy);
         cy += 8; docOS.text(`${cb('cbOrcamento_'+id)} ORÇAMENTO`, 15, cy); docOS.text(`${cb('cbInstalacao_'+id)} INSTALAÇÃO`, 65, cy); docOS.text(`${cb('cbServInterno_'+id)} SERV INTERNO`, 115, cy);
         cy += 6; docOS.text(`${cb('cbGarantia_'+id)} GARANTIA`, 15, cy); docOS.text(`${cb('cbMontagemSala_'+id)} MONTAGEM SALA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
+        cy += 6; docOS.text(`${cb('cbContrato_'+id)} CONTRATO`, 15, cy); docOS.text(`${cb('cbQualificacao_'+id)} QUALIFICAÇÃO`, 65, cy);
         cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal"); cy += 4; 
         docOS.autoTable({ startY: cy, margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, body: [[getVal('descricao', id) || ' ']], theme: 'plain', styles: { lineWidth: 0.2, lineColor: [150, 150, 150], textColor: [0, 0, 0], fontSize: 9, cellPadding: 4, valign: 'middle' } });
         cy = docOS.lastAutoTable.finalY + 8; if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
@@ -4585,9 +4704,36 @@ async function construirPDFBytes(onProgressCallback) {
         docOS.text(`Status: ${cb('stOk_'+id)} OK  ${cb('stRes_'+id)} RESTRIÇÃO`, 15, cy); 
         const isItemMontagem = document.getElementById(`cbMontagemSala_${id}`).checked; const isItemInterno = document.getElementById(`cbServInterno_${id}`).checked;
         if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
-        if (isItemMontagem) { docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy); cy+=8; docOS.text(`DATA INÍCIO: ${getVal('dtInicio', id).split('-').reverse().join('/')}`, 15, cy); docOS.text(`DATA FINAL: ${getVal('dtFim', id).split('-').reverse().join('/')}`, 75, cy); docOS.text(`TOTAL DE DIAS: ${getVal('totalDias', id)}`, 140, cy); } 
-        else if (!isItemInterno) { docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy); cy+=10; docOS.text(`DATA: ${getVal('dt', id).split('-').reverse().join('/')}`, 15, cy); docOS.text(`CHEGADA: ${getVal('hc', id)}`, 75, cy); docOS.text(`SAÍDA: ${getVal('hs', id)}`, 140, cy); cy+=6; docOS.text(`TOTAL HORAS: ${getVal('th', id)}`, 15, cy); } 
-        else { cy+=10; docOS.text(`DATA INÍCIO: ${getVal('dtInicio', id).split('-').reverse().join('/')}`, 15, cy); docOS.text(`DATA FINAL: ${getVal('dtFim', id).split('-').reverse().join('/')}`, 75, cy); docOS.text(`TOTAL DE DIAS: ${getVal('totalDias', id)}`, 140, cy); }
+        if (isItemMontagem) {
+            docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy); cy+=8;
+            docOS.text(`DATA INÍCIO: ${getVal('dtInicio', id).split('-').reverse().join('/')}`, 15, cy);
+            docOS.text(`DATA FINAL: ${getVal('dtFim', id).split('-').reverse().join('/')}`, 75, cy);
+            docOS.text(`TOTAL DE DIAS: ${getVal('totalDias', id)}`, 140, cy);
+        } else if (!isItemInterno) {
+            docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy); cy+=10;
+            docOS.text(`DATA: ${getVal('dt', id).split('-').reverse().join('/')}`, 15, cy);
+            docOS.text(`CHEGADA CLIENTE: ${getVal('hc', id)}`, 65, cy);
+            docOS.text(`INÍCIO TRABALHO: ${getVal('hi', id)}`, 130, cy);
+            cy+=6;
+            docOS.text(`FINALIZAÇÃO: ${getVal('hs', id)}`, 15, cy);
+            docOS.text(`TOTAL HORAS (CHEGADA → FIM): ${getVal('th', id)}`, 75, cy);
+        } else {
+            cy+=10;
+            const dataInterna = getVal('dt', id) || getVal('dtInicio', id);
+            const inicioInterno = getVal('hiInterno', id); const fimInterno = getVal('hfInterno', id); const totalInterno = getVal('thInterno', id);
+            const cronoLegada = b.dataset.cronoInternaLegada === '1';
+            if (cronoLegada && !inicioInterno && !fimInterno && !totalInterno) {
+                // Compatibilidade visual para O.S. internas gravadas antes da v98.
+                docOS.text(`DATA INÍCIO: ${getVal('dtInicio', id).split('-').reverse().join('/')}`, 15, cy);
+                docOS.text(`DATA FINAL: ${getVal('dtFim', id).split('-').reverse().join('/')}`, 75, cy);
+                docOS.text(`TOTAL DE DIAS: ${getVal('totalDias', id)}`, 140, cy);
+            } else {
+                docOS.text(`DATA: ${dataInterna.split('-').reverse().join('/')}`, 15, cy);
+                docOS.text(`INÍCIO: ${inicioInterno}`, 75, cy);
+                docOS.text(`FIM: ${fimInterno}`, 120, cy);
+                docOS.text(`TOTAL HORAS: ${totalInterno}`, 155, cy);
+            }
+        }
         const fotoItems = document.getElementById(`fotosContainer_${id}`).querySelectorAll('.foto-item');
         if (fotoItems.length > 0) {
             cy += 12; if (cy > 260) { docOS.addPage(); cy = margemTopoSegura; } docOS.setFont("helvetica", "bold"); docOS.setFontSize(10); docOS.text("EVIDÊNCIAS FOTOGRÁFICAS", 15, cy); cy += 8;
