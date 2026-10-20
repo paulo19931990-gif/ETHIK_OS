@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=101">
+    <link rel="manifest" href="./manifest.json?v=102">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=101"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=101"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=101"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=101"></script>
-    <script src="./vendor/pdf-lib.min.js?v=101"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=101"></script>
-    <script src="./vendor/localforage.min.js?v=101"></script>
-    <script src="./vendor/pdf.min.js?v=101"></script>
+    <script src="./vendor/tailwindcss.js?v=102"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=102"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=102"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=102"></script>
+    <script src="./vendor/pdf-lib.min.js?v=102"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=102"></script>
+    <script src="./vendor/localforage.min.js?v=102"></script>
+    <script src="./vendor/pdf.min.js?v=102"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=101').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=102').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=101';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=102';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=101">
+    <link rel="stylesheet" href="style.css?v=102">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -541,16 +541,22 @@
             .history-logo-action { width:42px; justify-content:center; padding:0; }
         }
     
-        /* v101: estabiliza o seletor nativo de horário em Android sem substituir o componente do sistema. */
+        /* v102: mantém o seletor nativo e elimina a âncora lateral em telas pequenas. */
         html, body { width:100%; max-width:100%; overflow-x:hidden; }
         input[type="time"].native-time-safe {
             width:100% !important; min-width:0 !important; max-width:100% !important;
             box-sizing:border-box !important; -webkit-appearance:auto; appearance:auto;
+            font-size:16px !important;
         }
         @media (max-width: 640px) {
             #novaOs .os-bloco { max-width:100%; overflow-x:clip; }
             #novaOs [id^="containerHoras_"],
-            #novaOs [id^="containerHorasInterno_"] { width:100%; max-width:100%; min-width:0; }
+            #novaOs [id^="containerHorasInterno_"] {
+                width:100%; max-width:100%; min-width:0;
+                grid-template-columns:minmax(0,1fr) !important;
+            }
+            #novaOs [id^="containerHoras_"] > div,
+            #novaOs [id^="containerHorasInterno_"] > div { width:100%; min-width:0; }
         }
 </style>
 </head>
@@ -1231,8 +1237,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=101"></script>
-    <script src="bancoPecas.js?v=101"></script>
-    <script src="app.js?v=101"></script>
+    <script src="checklists/checklists.js?v=102"></script>
+    <script src="bancoPecas.js?v=102"></script>
+    <script src="app.js?v=102"></script>
 </body>
 </html>
