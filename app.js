@@ -870,7 +870,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 102;
+const APP_VERSION = 103;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
@@ -2336,6 +2336,32 @@ async function salvarNomeTecnicoBh() {
     try { await localforage.setItem('bh_nome_tecnico_salvo', val); } catch(e) { console.error(e); mostrarToast('Não foi possível guardar o nome do técnico.', true); }
 }
 
+function configurarGestosPreviewPDF() {
+    const modal = document.getElementById('modalPreviewPDF');
+    const pdfContainer = document.getElementById('pdfRenderContainer');
+    if (!modal || !pdfContainer || modal.dataset.gestosProtegidos === '1') return;
+    modal.dataset.gestosProtegidos = '1';
+
+    // v103: qualquer gesto de zoom que COMEÇAR fora do documento é bloqueado.
+    // Isso mantém cabeçalho/botões estáveis e evita o zoom nativo da página inteira.
+    const foraDaFolha = (target) => !(target instanceof Element) || !target.closest('#pdfRenderContainer');
+    const bloquearMultiTouchForaDoPdf = (e) => {
+        if (e.touches && e.touches.length > 1 && foraDaFolha(e.target)) e.preventDefault();
+    };
+    modal.addEventListener('touchstart', bloquearMultiTouchForaDoPdf, { capture:true, passive:false });
+    modal.addEventListener('touchmove', bloquearMultiTouchForaDoPdf, { capture:true, passive:false });
+
+    // Safari/iOS expõe eventos gesture*. Em outros navegadores esses listeners são inofensivos.
+    ['gesturestart','gesturechange','gestureend'].forEach(tipo => {
+        modal.addEventListener(tipo, (e) => { if (foraDaFolha(e.target)) e.preventDefault(); }, { capture:true, passive:false });
+    });
+
+    // Pinch/trackpad com Ctrl fora da folha não deve alterar o zoom do navegador.
+    modal.addEventListener('wheel', (e) => {
+        if (e.ctrlKey && foraDaFolha(e.target)) e.preventDefault();
+    }, { capture:true, passive:false });
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     inicializarTemaApp();
     await solicitarPersistenciaArmazenamento();
@@ -2366,6 +2392,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!document.getElementById('novaOs').classList.contains('hidden')) { resizeCanvasSeguro(cTec, padTecnico); resizeCanvasSeguro(cCli, padCliente); }
     });
 
+    configurarGestosPreviewPDF();
     const pdfContainer = document.getElementById('pdfRenderContainer');
     if(pdfContainer) {
         pdfContainer.addEventListener('touchstart', function(e) {
