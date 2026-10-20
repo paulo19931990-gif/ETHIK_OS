@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=100">
+    <link rel="manifest" href="./manifest.json?v=101">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=100"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=100"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=100"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=100"></script>
-    <script src="./vendor/pdf-lib.min.js?v=100"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=100"></script>
-    <script src="./vendor/localforage.min.js?v=100"></script>
-    <script src="./vendor/pdf.min.js?v=100"></script>
+    <script src="./vendor/tailwindcss.js?v=101"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=101"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=101"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=101"></script>
+    <script src="./vendor/pdf-lib.min.js?v=101"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=101"></script>
+    <script src="./vendor/localforage.min.js?v=101"></script>
+    <script src="./vendor/pdf.min.js?v=101"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=100').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=101').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=100';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=101';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=100">
+    <link rel="stylesheet" href="style.css?v=101">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -540,7 +540,19 @@
             .history-logo-action span { display:none; }
             .history-logo-action { width:42px; justify-content:center; padding:0; }
         }
-    </style>
+    
+        /* v101: estabiliza o seletor nativo de horário em Android sem substituir o componente do sistema. */
+        html, body { width:100%; max-width:100%; overflow-x:hidden; }
+        input[type="time"].native-time-safe {
+            width:100% !important; min-width:0 !important; max-width:100% !important;
+            box-sizing:border-box !important; -webkit-appearance:auto; appearance:auto;
+        }
+        @media (max-width: 640px) {
+            #novaOs .os-bloco { max-width:100%; overflow-x:clip; }
+            #novaOs [id^="containerHoras_"],
+            #novaOs [id^="containerHorasInterno_"] { width:100%; max-width:100%; min-width:0; }
+        }
+</style>
 </head>
 <body class="bg-gray-50 text-gray-800 antialiased selection:bg-blue-200 selection:text-blue-900">
 
@@ -1136,9 +1148,9 @@
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Período de Desvio (Opcional p/ Horário)</label>
                             <div class="flex items-center gap-3">
-                                <input type="time" id="bh_chegada" class="w-full border border-gray-300 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-center">
+                                <input type="time" id="bh_chegada" onpointerdown="prepararPickerHoraNativo()" class="native-time-safe w-full border border-gray-300 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-center">
                                 <span class="text-gray-400 font-bold">às</span>
-                                <input type="time" id="bh_saida" class="w-full border border-gray-300 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-center">
+                                <input type="time" id="bh_saida" onpointerdown="prepararPickerHoraNativo()" class="native-time-safe w-full border border-gray-300 p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-center">
                             </div>
                         </div>
                     </div>
@@ -1219,8 +1231,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=100"></script>
-    <script src="bancoPecas.js?v=100"></script>
-    <script src="app.js?v=100"></script>
+    <script src="checklists/checklists.js?v=101"></script>
+    <script src="bancoPecas.js?v=101"></script>
+    <script src="app.js?v=101"></script>
 </body>
 </html>

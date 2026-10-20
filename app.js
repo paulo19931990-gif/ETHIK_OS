@@ -870,7 +870,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 100;
+const APP_VERSION = 101;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
@@ -4093,16 +4093,16 @@ function adicionarBlocoOS(dados = null) {
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Data</label><input type="date" id="dt_${id}" value="${dataHoje}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono"></div>
                 </div>
 
-                <div id="containerHoras_${id}" class="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
-                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chegada ao cliente</label><input type="time" id="hc_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
-                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início do trabalho</label><input type="time" id="hi_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono"></div>
-                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Finalização</label><input type="time" id="hs_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
+                <div id="containerHoras_${id}" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chegada ao cliente</label><input type="time" id="hc_${id}" onpointerdown="prepararPickerHoraNativo()" class="native-time-safe w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início do trabalho</label><input type="time" id="hi_${id}" onpointerdown="prepararPickerHoraNativo()" class="native-time-safe w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono"></div>
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Finalização</label><input type="time" id="hs_${id}" onpointerdown="prepararPickerHoraNativo()" class="native-time-safe w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total (chegada → fim)</label><input type="text" id="th_${id}" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
                 </div>
 
                 <div id="containerHorasInterno_${id}" class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm" style="display:none;">
-                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início</label><input type="time" id="hiInterno_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
-                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Fim</label><input type="time" id="hfInterno_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início</label><input type="time" id="hiInterno_${id}" onpointerdown="prepararPickerHoraNativo()" class="native-time-safe w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Fim</label><input type="time" id="hfInterno_${id}" onpointerdown="prepararPickerHoraNativo()" class="native-time-safe w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total de horas</label><input type="text" id="thInterno_${id}" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
                 </div>
 
@@ -4224,6 +4224,18 @@ function calcularIntervaloHoras(inicio, fim) {
     let total = (fh * 60 + fm) - (ih * 60 + im);
     if (total < 0) total += 1440;
     return `${String(Math.floor(total / 60)).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
+}
+
+function prepararPickerHoraNativo() {
+    // Alguns Androids posicionam o diálogo nativo pela largura rolável do documento.
+    // Mantém o seletor nativo, mas garante que a página esteja alinhada à esquerda antes de abri-lo.
+    try {
+        const top = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        if (document.scrollingElement) document.scrollingElement.scrollLeft = 0;
+        document.documentElement.scrollLeft = 0;
+        document.body.scrollLeft = 0;
+        window.scrollTo(0, top);
+    } catch (_) {}
 }
 
 function calcH(id) {
