@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=103">
+    <link rel="manifest" href="./manifest.json?v=104">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=103"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=103"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=103"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=103"></script>
-    <script src="./vendor/pdf-lib.min.js?v=103"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=103"></script>
-    <script src="./vendor/localforage.min.js?v=103"></script>
-    <script src="./vendor/pdf.min.js?v=103"></script>
+    <script src="./vendor/tailwindcss.js?v=104"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=104"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=104"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=104"></script>
+    <script src="./vendor/pdf-lib.min.js?v=104"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=104"></script>
+    <script src="./vendor/localforage.min.js?v=104"></script>
+    <script src="./vendor/pdf.min.js?v=104"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=103').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=104').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=103';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=104';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=103">
+    <link rel="stylesheet" href="style.css?v=104">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -870,11 +870,6 @@
                         <svg id="themeIconMoon" class="theme-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646a9.003 9.003 0 1011.708 11.708z"></path></svg>
                         <svg id="themeIconSun" class="theme-icon hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                     </button>
-                    <!-- Botão Instalar App -->
-                    <button onclick="acionarInstalacaoApp()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-xs font-semibold">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        Instalar App
-                    </button>
                 </div>
             </div>
             <div class="flex overflow-x-auto hide-scrollbar border-t border-gray-800">
@@ -1088,6 +1083,9 @@
                         <button onclick="limparTodoHistorico()" class="history-action history-action-danger">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg> Mover Tudo p/ Lixeira
                         </button>
+                        <button type="button" onclick="acionarInstalacaoApp()" class="history-action history-action-primary-soft" title="Instalar o Multi-OS Pro neste dispositivo">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Instalar App
+                        </button>
                     </div>
                 </section>
 
@@ -1253,8 +1251,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=103"></script>
-    <script src="bancoPecas.js?v=103"></script>
-    <script src="app.js?v=103"></script>
+    <script src="checklists/checklists.js?v=104"></script>
+    <script src="bancoPecas.js?v=104"></script>
+    <script src="app.js?v=104"></script>
 </body>
 </html>
