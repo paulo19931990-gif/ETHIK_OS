@@ -870,7 +870,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 98;
+const APP_VERSION = 100;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
@@ -2945,27 +2945,36 @@ async function gerarExcelBancoHoras() {
         const tecnico = document.getElementById('bh_nome_tecnico')?.value || 'Não Preenchido';
         const totalPeriodo = regsFiltrados.reduce((soma, r) => soma + (Number(r.balancoFinal) || 0), 0);
         const totalGlobal = registosBancoHoras.reduce((soma, r) => soma + (Number(r.balancoFinal) || 0), 0);
-        const cel = (v) => escapeHTML(String(v ?? ''));
-        const linhas = regsFiltrados.map(reg => `
-            <tr>
-                <td>${cel(String(reg.data || '').split('-').reverse().join('/'))}</td>
-                <td>${cel(reg.cliente || '')}</td>
-                <td>${cel(reg.motivo || '')}</td>
-                <td>${cel(reg.local || '')}</td>
-                <td>${cel(reg.chegada || '')}</td>
-                <td>${cel(reg.saida || '')}</td>
-                <td>${cel(reg.isCredito ? 'Crédito' : 'Débito')}</td>
-                <td>${cel(formatarMins(Number(reg.balancoFinal) || 0))}</td>
-            </tr>`).join('');
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-            body{font-family:Arial,sans-serif;color:#1f2937} table{border-collapse:collapse;width:100%} th,td{border:1px solid #cbd5e1;padding:7px;text-align:left;mso-number-format:\@} th{background:#10b981;color:#fff} .meta td{border:none;font-weight:bold;padding:4px 0}.saldo{font-weight:bold}
-        </style></head><body>
-            <h2>RELATÓRIO DE HORAS</h2>
-            <table class="meta"><tr><td>Técnico: ${cel(tecnico)}</td></tr><tr><td>Período: ${cel(strPeriodo)}</td></tr></table><br>
-            <table><thead><tr><th>Data</th><th>Cliente</th><th>Motivo / Atividade</th><th>Local</th><th>Chegada</th><th>Saída</th><th>Natureza</th><th>Extra / Falta</th></tr></thead><tbody>${linhas}</tbody></table><br>
-            <table class="meta"><tr><td class="saldo">Saldo do período: ${cel(formatarMins(totalPeriodo))}</td></tr><tr><td class="saldo">Saldo acumulado: ${cel(formatarMins(totalGlobal))}</td></tr></table>
-        </body></html>`;
-        const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        const xml = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+        const cell = (v, style='Cell') => `<Cell ss:StyleID="${style}"><Data ss:Type="String">${xml(v)}</Data></Cell>`;
+        const rows = regsFiltrados.map(reg => `<Row>${[
+            String(reg.data || '').split('-').reverse().join('/'), reg.cliente || '', reg.motivo || '', reg.local || '',
+            reg.chegada || '', reg.saida || '', reg.isCredito ? 'Crédito' : 'Débito', formatarMins(Number(reg.balancoFinal) || 0)
+        ].map(v => cell(v)).join('')}</Row>`).join('');
+        const workbook = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+ <Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10"/></Style>
+ <Style ss:ID="Title"><Font ss:FontName="Arial" ss:Size="15" ss:Bold="1"/><Alignment ss:Horizontal="Center"/></Style>
+ <Style ss:ID="Meta"><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1"/></Style>
+ <Style ss:ID="Header"><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#10B981" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>
+ <Style ss:ID="Cell"><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/></Borders></Style>
+ <Style ss:ID="Saldo"><Font ss:FontName="Arial" ss:Size="11" ss:Bold="1"/></Style>
+</Styles>
+<Worksheet ss:Name="Banco de Horas"><Table>
+<Column ss:Width="75"/><Column ss:Width="150"/><Column ss:Width="150"/><Column ss:Width="130"/><Column ss:Width="70"/><Column ss:Width="70"/><Column ss:Width="75"/><Column ss:Width="85"/>
+<Row><Cell ss:MergeAcross="7" ss:StyleID="Title"><Data ss:Type="String">RELATÓRIO DE HORAS</Data></Cell></Row>
+<Row><Cell ss:MergeAcross="7" ss:StyleID="Meta"><Data ss:Type="String">Técnico: ${xml(tecnico)}</Data></Cell></Row>
+<Row><Cell ss:MergeAcross="7" ss:StyleID="Meta"><Data ss:Type="String">Período: ${xml(strPeriodo)}</Data></Cell></Row>
+<Row></Row>
+<Row>${['Data','Cliente','Motivo / Atividade','Local','Chegada','Saída','Natureza','Extra / Falta'].map(v=>cell(v,'Header')).join('')}</Row>
+${rows}
+<Row></Row>
+<Row><Cell ss:MergeAcross="7" ss:StyleID="Saldo"><Data ss:Type="String">Saldo do período: ${xml(formatarMins(totalPeriodo))}</Data></Cell></Row>
+<Row><Cell ss:MergeAcross="7" ss:StyleID="Saldo"><Data ss:Type="String">Saldo acumulado: ${xml(formatarMins(totalGlobal))}</Data></Cell></Row>
+</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>5</SplitHorizontal><TopRowBottomPane>5</TopRowBottomPane></WorksheetOptions></Worksheet>
+</Workbook>`;
+        const blob = new Blob(['\ufeff', workbook], { type: 'application/vnd.ms-excel;charset=utf-8' });
         const nomeTec = tecnico.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0,40) || 'Tecnico';
         const periodoArquivo = inicioVal && fimVal ? `${inicioVal.replace(/-/g, '')}_${fimVal.replace(/-/g, '')}` : dataLocalISO().replace(/-/g,'');
         await compartilharArquivoBancoHoras(blob, `Horas_${nomeTec}_${periodoArquivo}.xls`, 'application/vnd.ms-excel', 'Banco de Horas - Excel');
@@ -4085,15 +4094,15 @@ function adicionarBlocoOS(dados = null) {
                 </div>
 
                 <div id="containerHoras_${id}" class="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chegada ao cliente</label><input type="time" id="hc_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início do trabalho</label><input type="time" id="hi_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono"></div>
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Finalização</label><input type="time" id="hs_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chegada ao cliente</label><input type="time" id="hc_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início do trabalho</label><input type="time" id="hi_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono"></div>
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Finalização</label><input type="time" id="hs_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total (chegada → fim)</label><input type="text" id="th_${id}" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
                 </div>
 
                 <div id="containerHorasInterno_${id}" class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm" style="display:none;">
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início</label><input type="time" id="hiInterno_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Fim</label><input type="time" id="hfInterno_${id}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início</label><input type="time" id="hiInterno_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
+                    <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Fim</label><input type="time" id="hfInterno_${id}" class="w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcHInterno(${id})"></div>
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total de horas</label><input type="text" id="thInterno_${id}" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
                 </div>
 
@@ -4200,6 +4209,13 @@ function removerPecaRow(botao) {
     marcarFormularioAlterado();
     autoSalvarRascunho();
     mostrarToast('Peça removida do relatório.');
+}
+
+function formatarCampoHora(el) {
+    if (!el) return;
+    let v = String(el.value || '').replace(/\D/g, '').slice(0, 4);
+    if (v.length >= 3) v = v.slice(0, 2) + ':' + v.slice(2);
+    el.value = v;
 }
 
 function calcularIntervaloHoras(inicio, fim) {
