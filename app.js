@@ -870,7 +870,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 105;
+const APP_VERSION = 106;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
 const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
@@ -4227,7 +4227,7 @@ function adicionarBlocoOS(dados = null) {
                     ${genToggle('cbInstalacao', 'Instalação', false, true)}
                     ${genToggle('cbServInterno', 'Serv. Interno', true, true)}
                     ${genToggle('cbServExterno', 'Serv. Externo', false, true)}
-                    ${genToggle('cbGarantia', 'Garantia', false)}
+                    ${genToggle('cbGarantia', 'Equipamento em Garantia', false)}
                     ${genToggle('cbMontagemSala', 'Montagem Sala', false, true)}
                     ${genToggle('cbContrato', 'Contrato', false)}
                     ${genToggle('cbQualificacao', 'Qualificação', false)}
@@ -4921,7 +4921,7 @@ async function construirPDFBytes(onProgressCallback) {
         cy += 6; docOS.text(`SÉRIE: ${truncarStr(getVal('serie', id), 45)}`, 15, cy); docOS.text(`TAG: ${truncarStr(getVal('tag', id), 25)}`, 140, cy);
         const numeroOp = getVal('op', id).trim(); cy += 6; docOS.text(`NÚMERO DE OP: ${truncarStr(numeroOp, 55)}`, 15, cy);
         cy += 8; docOS.text(`${cb('cbOrcamento_'+id)} ORÇAMENTO`, 15, cy); docOS.text(`${cb('cbInstalacao_'+id)} INSTALAÇÃO`, 65, cy); docOS.text(`${cb('cbServInterno_'+id)} SERV INTERNO`, 115, cy);
-        cy += 6; docOS.text(`${cb('cbGarantia_'+id)} GARANTIA`, 15, cy); docOS.text(`${cb('cbMontagemSala_'+id)} MONTAGEM SALA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
+        cy += 6; docOS.text(`${cb('cbGarantia_'+id)} EQUIPAMENTO EM GARANTIA`, 15, cy); docOS.text(`${cb('cbMontagemSala_'+id)} MONTAGEM SALA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
         cy += 6; docOS.text(`${cb('cbContrato_'+id)} CONTRATO`, 15, cy); docOS.text(`${cb('cbQualificacao_'+id)} QUALIFICAÇÃO`, 65, cy); docOS.text(`${cb('cbServicoGarantia_'+id)} SERVIÇO EM GARANTIA`, 115, cy);
         cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal"); cy += 4; 
         docOS.autoTable({ startY: cy, margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, body: [[getVal('descricao', id) || ' ']], theme: 'plain', styles: { lineWidth: 0.2, lineColor: [150, 150, 150], textColor: [0, 0, 0], fontSize: 9, cellPadding: 4, valign: 'middle' } });
