@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=104">
+    <link rel="manifest" href="./manifest.json?v=105">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=104"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=104"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=104"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=104"></script>
-    <script src="./vendor/pdf-lib.min.js?v=104"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=104"></script>
-    <script src="./vendor/localforage.min.js?v=104"></script>
-    <script src="./vendor/pdf.min.js?v=104"></script>
+    <script src="./vendor/tailwindcss.js?v=105"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=105"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=105"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=105"></script>
+    <script src="./vendor/pdf-lib.min.js?v=105"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=105"></script>
+    <script src="./vendor/localforage.min.js?v=105"></script>
+    <script src="./vendor/pdf.min.js?v=105"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=104').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=105').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=104';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=105';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=104">
+    <link rel="stylesheet" href="style.css?v=105">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -503,6 +503,10 @@
             box-shadow:0 12px 28px rgba(37,99,235,.24); }
         .login-primary:active { transform:translateY(1px); }
         .login-status { min-height:20px; margin-top:12px; text-align:center; color:#fca5a5; font-size:.73rem; font-weight:800; }
+        .login-secondary { width:100%; min-height:46px; margin-top:10px; border-radius:14px; border:1px solid #3b4f69; color:#dbeafe; background:#132238; font-size:.76rem; font-weight:900; letter-spacing:.04em; }
+        .login-recovery-box { margin-top:12px; padding:12px 13px; border-radius:14px; border:1px solid #7c2d12; background:#2a180f; color:#fed7aa; font-size:.73rem; line-height:1.5; font-weight:700; }
+        html[data-theme="light"] .login-secondary { color:#1e3a8a; background:#eff6ff; border-color:#bfdbfe; }
+        html[data-theme="light"] .login-recovery-box { color:#9a3412; background:#fff7ed; border-color:#fdba74; }
         .login-security-note { margin-top:18px; padding-top:15px; border-top:1px solid rgba(148,163,184,.16); color:#74869e; text-align:center; font-size:.66rem; line-height:1.45; }
         html[data-theme="light"] .login-gate { background:radial-gradient(circle at 16% 8%,#dbeafe,transparent 32%),linear-gradient(145deg,#eef4fb,#dfe9f5); }
         html[data-theme="light"] .login-card { color:#111827; background:rgba(255,255,255,.94); border-color:#d8e1ec; box-shadow:0 28px 75px rgba(15,23,42,.18); }
@@ -623,6 +627,14 @@
                     <div><label class="login-label" for="loginConfirmarSenha">Confirmar senha</label><input id="loginConfirmarSenha" type="password" inputmode="numeric" maxlength="12" autocomplete="new-password" class="login-password" placeholder="••••" onkeydown="if(event.key==='Enter'){event.preventDefault();criarSenhaTelaAcesso();}"></div>
                 </div>
                 <button type="button" class="login-primary" onclick="criarSenhaTelaAcesso()">Criar senha e entrar</button>
+            </div>
+
+            <div id="loginRecuperar" class="hidden">
+                <h2 class="login-heading">Proteção de dados ativada</h2>
+                <p class="login-copy">O aplicativo detectou que este aparelho já possuía dados ou senha, mas o armazenamento local não respondeu como esperado.</p>
+                <div id="loginRecuperarTexto" class="login-recovery-box">Não crie uma nova senha agora. Tente recuperar o armazenamento primeiro.</div>
+                <button type="button" class="login-primary" onclick="tentarRecuperarAcesso()">Tentar recuperar dados</button>
+                <button id="loginCriarComDados" type="button" class="login-secondary hidden" onclick="autorizarCriarSenhaComDados()">Criar senha mantendo os dados encontrados</button>
             </div>
             <div id="loginStatus" class="login-status" aria-live="polite"></div>
             <div class="login-security-note">A senha protege o acesso pela interface do Multi-OS neste dispositivo. Seus dados continuam armazenados localmente para funcionamento offline.</div>
@@ -1251,8 +1263,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=104"></script>
-    <script src="bancoPecas.js?v=104"></script>
-    <script src="app.js?v=104"></script>
+    <script src="checklists/checklists.js?v=105"></script>
+    <script src="bancoPecas.js?v=105"></script>
+    <script src="app.js?v=105"></script>
 </body>
 </html>

@@ -870,8 +870,12 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 104;
+const APP_VERSION = 105;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
+const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
+const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
+let criacaoSenhaComDadosAutorizada = false;
+let historicoCarregamentoSeq = 0;
 const PDF_PREVIEW_ECONOMICO_BYTES = 10 * 1024 * 1024; // 10 MB: muda apenas a forma de visualizar
 const PDF_PREVIEW_ECONOMICO_PAGINAS = 6; // v87: relatórios longos renderizam uma página por vez para poupar RAM
 const ANEXO_PDF_MAX_BYTES = 20 * 1024 * 1024; // protege a memória do celular
@@ -1199,8 +1203,72 @@ function marcarFormularioAlterado() {
 
 async function solicitarPersistenciaArmazenamento() {
     try {
-        if (navigator.storage?.persist) await navigator.storage.persist();
+        if (navigator.storage?.persisted && await navigator.storage.persisted()) return true;
+        if (navigator.storage?.persist) return !!(await navigator.storage.persist());
     } catch (e) { console.warn('Persistência de armazenamento não pôde ser solicitada:', e); }
+    return false;
+}
+
+function lerProtecaoArmazenamentoLocal() {
+    try {
+        const bruto = localStorage.getItem(STORAGE_GUARD_KEY);
+        const obj = bruto ? JSON.parse(bruto) : null;
+        return obj && typeof obj === 'object' ? obj : null;
+    } catch (_) { return null; }
+}
+
+function gravarProtecaoArmazenamentoLocal(parcial = {}) {
+    try {
+        const anterior = lerProtecaoArmazenamentoLocal() || {};
+        const novo = { ...anterior, ...parcial, versao: APP_VERSION, atualizadoEm: new Date().toISOString() };
+        localStorage.setItem(STORAGE_GUARD_KEY, JSON.stringify(novo));
+        return novo;
+    } catch (_) { return null; }
+}
+
+async function verificarArmazenamentoOperacional(tentativas = 3) {
+    if (typeof localforage === 'undefined') throw new Error('Armazenamento local indisponível.');
+    let ultimoErro = null;
+    for (let i = 0; i < Math.max(1, tentativas); i++) {
+        try {
+            if (typeof localforage.ready === 'function') await localforage.ready();
+            const token = `${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`;
+            await localforage.setItem(STORAGE_PROBE_KEY, token);
+            const lido = await localforage.getItem(STORAGE_PROBE_KEY);
+            if (lido !== token) throw new Error('Teste de leitura/gravação do armazenamento falhou.');
+            await localforage.removeItem(STORAGE_PROBE_KEY);
+            return true;
+        } catch (e) {
+            ultimoErro = e;
+            await new Promise(r => setTimeout(r, 120 * (i + 1)));
+        }
+    }
+    throw ultimoErro || new Error('Armazenamento local não respondeu.');
+}
+
+async function obterResumoArmazenamentoLocal() {
+    await verificarArmazenamentoOperacional(2);
+    const keys = await localforage.keys();
+    const historicoBruto = await localforage.getItem('historico_os');
+    const pinSalvo = await localforage.getItem('app_pin');
+    const docsCount = keys.filter(k => k.startsWith('os_doc_')).length;
+    const draftsCount = keys.filter(k => k.startsWith('draft_doc_')).length;
+    const trashCount = keys.filter(k => k.startsWith('trash_os_doc_')).length;
+    const historicoCount = Array.isArray(historicoBruto) ? historicoBruto.length : 0;
+    return { keys, historicoBruto, pinSalvo, docsCount, draftsCount, trashCount, historicoCount, dadosExistem: docsCount > 0 || draftsCount > 0 || trashCount > 0 || historicoCount > 0 };
+}
+
+async function atualizarProtecaoArmazenamentoConhecido(parcial = {}) {
+    try {
+        const resumo = await obterResumoArmazenamentoLocal();
+        const anterior = lerProtecaoArmazenamentoLocal() || {};
+        gravarProtecaoArmazenamentoLocal({
+            pinEsperado: parcial.pinEsperado !== undefined ? !!parcial.pinEsperado : (anterior.pinEsperado || !!resumo.pinSalvo),
+            dadosEsperados: parcial.dadosEsperados !== undefined ? !!parcial.dadosEsperados : (anterior.dadosEsperados || resumo.dadosExistem),
+            historicoCount: parcial.historicoCount !== undefined ? Number(parcial.historicoCount || 0) : resumo.historicoCount,
+            docsCount: resumo.docsCount, draftsCount: resumo.draftsCount, trashCount: resumo.trashCount
+        });
+    } catch (_) {}
 }
 
 async function registrarErroApp(origem, erro) {
@@ -1389,14 +1457,38 @@ function mostrarModoTelaAcesso(modo) {
     const carregar = document.getElementById('loginCarregando');
     const entrar = document.getElementById('loginEntrar');
     const criar = document.getElementById('loginCriar');
+    const recuperar = document.getElementById('loginRecuperar');
     carregar?.classList.toggle('hidden', modo !== 'carregando');
     entrar?.classList.toggle('hidden', modo !== 'entrar');
     criar?.classList.toggle('hidden', modo !== 'criar');
+    recuperar?.classList.toggle('hidden', modo !== 'recuperar');
     setStatusTelaAcesso('');
     setTimeout(() => {
         if (modo === 'entrar') document.getElementById('loginSenha')?.focus();
         if (modo === 'criar') document.getElementById('loginNovaSenha')?.focus();
     }, 80);
+}
+
+function mostrarRecuperacaoAcesso(mensagem, permitirCriarComDados = false) {
+    mostrarModoTelaAcesso('recuperar');
+    const texto = document.getElementById('loginRecuperarTexto');
+    if (texto) texto.textContent = mensagem;
+    const btn = document.getElementById('loginCriarComDados');
+    if (btn) btn.classList.toggle('hidden', !permitirCriarComDados);
+}
+
+async function tentarRecuperarAcesso() {
+    criacaoSenhaComDadosAutorizada = false;
+    mostrarModoTelaAcesso('carregando');
+    setStatusTelaAcesso('Tentando acessar novamente os dados locais…');
+    await new Promise(r => setTimeout(r, 180));
+    await inicializarTelaAcesso();
+}
+
+function autorizarCriarSenhaComDados() {
+    criacaoSenhaComDadosAutorizada = true;
+    mostrarModoTelaAcesso('criar');
+    setStatusTelaAcesso('Os dados encontrados serão mantidos. Apenas uma nova senha de acesso será criada.', false);
 }
 
 async function carregarFotoPerfilAcesso() {
@@ -1462,16 +1554,36 @@ async function inicializarTelaAcesso() {
     document.body.classList.add('login-locked');
     mostrarModoTelaAcesso('carregando');
     if (typeof localforage === 'undefined') {
-        setStatusTelaAcesso('Armazenamento local indisponível. Não é possível validar a senha.', true);
+        mostrarRecuperacaoAcesso('Armazenamento local indisponível. Não crie uma nova senha; feche e abra o aplicativo e tente novamente.', false);
         return;
     }
     try {
+        await verificarArmazenamentoOperacional(3);
         await carregarFotoPerfilAcesso();
-        const pinSalvo = await localforage.getItem('app_pin');
-        mostrarModoTelaAcesso(pinSalvo ? 'entrar' : 'criar');
+        const resumo = await obterResumoArmazenamentoLocal();
+        const guard = lerProtecaoArmazenamentoLocal();
+        if (resumo.pinSalvo) {
+            gravarProtecaoArmazenamentoLocal({ pinEsperado:true, dadosEsperados:(guard?.dadosEsperados || resumo.dadosExistem), historicoCount:resumo.historicoCount, docsCount:resumo.docsCount, draftsCount:resumo.draftsCount, trashCount:resumo.trashCount });
+            mostrarModoTelaAcesso('entrar');
+            return;
+        }
+
+        // Se este aparelho já tinha senha/dados e agora o banco retornou vazio, NÃO tratamos como primeiro uso.
+        if (guard?.pinEsperado || (guard?.dadosEsperados && !resumo.dadosExistem)) {
+            mostrarRecuperacaoAcesso('Este aparelho já tinha senha ou O.S. registradas, mas o armazenamento apareceu vazio ou incompleto. Não crie uma nova senha agora. Tente recuperar os dados primeiro.', resumo.dadosExistem);
+            return;
+        }
+
+        // Dados existentes sem PIN podem ser de uma versão antiga: permitimos criar uma senha sem apagar nada, mas de forma explícita.
+        if (resumo.dadosExistem) {
+            mostrarRecuperacaoAcesso('Foram encontrados dados de O.S./rascunhos, porém não há senha registrada. Tente recuperar primeiro; se esta instalação nunca teve senha, você pode criar uma nova mantendo os dados.', true);
+            return;
+        }
+        mostrarModoTelaAcesso('criar');
     } catch (e) {
         console.error('Falha ao preparar tela de acesso:', e);
-        setStatusTelaAcesso('Não foi possível preparar o acesso local.', true);
+        mostrarRecuperacaoAcesso('O armazenamento local não respondeu corretamente. Nenhum dado será apagado e o aplicativo não permitirá criar uma nova senha até a verificação ser concluída.', false);
+        setStatusTelaAcesso('Não foi possível validar o armazenamento agora.', true);
     }
 }
 
@@ -1497,6 +1609,8 @@ async function entrarTelaAcesso() {
         }
         // Compatibilidade: migra PIN antigo em texto simples para o registro protegido atual.
         if (typeof pinSalvo === 'string' || pinSalvo?.v === 1) await localforage.setItem('app_pin', await criarRegistroPin(digitado));
+        await solicitarPersistenciaArmazenamento();
+        await atualizarProtecaoArmazenamentoConhecido({ pinEsperado:true });
         liberarTelaAcesso();
     } catch (e) {
         console.error('Falha ao validar senha inicial:', e);
@@ -1511,9 +1625,18 @@ async function criarSenhaTelaAcesso() {
     if (senha !== confirmar) { setStatusTelaAcesso('As duas senhas não coincidem.', true); return; }
     try {
         // Evita substituir silenciosamente uma senha que tenha aparecido entre a abertura e a confirmação.
+        await verificarArmazenamentoOperacional(2);
         const existente = await localforage.getItem('app_pin');
         if (existente) { mostrarModoTelaAcesso('entrar'); setStatusTelaAcesso('Já existe uma senha neste aparelho. Digite-a para entrar.', true); return; }
+        const guard = lerProtecaoArmazenamentoLocal();
+        if (guard?.pinEsperado && !criacaoSenhaComDadosAutorizada) {
+            mostrarRecuperacaoAcesso('Este aparelho já tinha uma senha. A criação de outra foi bloqueada para evitar mascarar uma falha de armazenamento.', false);
+            return;
+        }
         await localforage.setItem('app_pin', await criarRegistroPin(senha));
+        await solicitarPersistenciaArmazenamento();
+        await atualizarProtecaoArmazenamentoConhecido({ pinEsperado:true });
+        criacaoSenhaComDadosAutorizada = false;
         liberarTelaAcesso();
         mostrarToast('Senha de acesso criada e salva neste aparelho.');
     } catch (e) {
@@ -2036,10 +2159,51 @@ async function garantirMetadadosHistoricoV94(historicoMeta) {
     return atualizado;
 }
 
+async function reconstruirHistoricoAPartirDocumentos(chaves = null) {
+    const keys = Array.isArray(chaves) ? chaves : await localforage.keys();
+    const docKeys = keys.filter(k => k.startsWith('os_doc_'));
+    if (!docKeys.length) return [];
+    const metas = [];
+    for (const chave of docKeys) {
+        try {
+            const doc = await localforage.getItem(chave);
+            if (!doc || !Array.isArray(doc.ordens) || !doc.ordens.length || !idLocalSeguro(String(doc.id || ''))) continue;
+            metas.push(gerarMetadadosResumo(doc));
+        } catch (_) {}
+    }
+    if (!metas.length) return [];
+    metas.sort((a,b) => String(b.dataAtualizacao || '').localeCompare(String(a.dataAtualizacao || '')));
+    await localforage.setItem('historico_os_recovery_v105', metas);
+    await localforage.setItem('historico_os', metas);
+    gravarProtecaoArmazenamentoLocal({ dadosEsperados:true, historicoCount:metas.length, docsCount:docKeys.length });
+    console.warn(`Índice do Histórico reconstruído automaticamente a partir de ${metas.length} documento(s).`);
+    return metas;
+}
+
 async function obterHistoricoSalvo() {
     if (typeof localforage === 'undefined') throw new Error('Armazenamento local indisponível.');
-    let h = await localforage.getItem('historico_os');
-    if (h === null || h === undefined) return [];
+    await verificarArmazenamentoOperacional(2);
+    let h = null;
+    let ultimoErro = null;
+    for (let tentativa = 0; tentativa < 3; tentativa++) {
+        try { h = await localforage.getItem('historico_os'); ultimoErro = null; break; }
+        catch (e) { ultimoErro = e; await new Promise(r => setTimeout(r, 100 * (tentativa + 1))); }
+    }
+    if (ultimoErro) throw ultimoErro;
+
+    const guard = lerProtecaoArmazenamentoLocal();
+    if (h === null || h === undefined || (Array.isArray(h) && h.length === 0)) {
+        const keys = await localforage.keys();
+        const docKeys = keys.filter(k => k.startsWith('os_doc_'));
+        if (docKeys.length) {
+            const recuperado = await reconstruirHistoricoAPartirDocumentos(keys);
+            if (recuperado.length) return recuperado;
+        }
+        if (Number(guard?.historicoCount || 0) > 0) {
+            throw new Error('O Histórico retornou vazio inesperadamente. A tela foi protegida para não substituir os dados por uma lista vazia.');
+        }
+        if (h === null || h === undefined) return [];
+    }
     if (!Array.isArray(h)) throw new Error('Índice do histórico possui formato inválido.');
     if (h.length > 0 && h[0]?.ordens) {
         // Migração antiga protegida: guarda uma cópia do índice antes de converter.
@@ -2051,17 +2215,23 @@ async function obterHistoricoSalvo() {
             novoMeta.push(gerarMetadadosResumo(doc));
         }
         await localforage.setItem('historico_os', novoMeta);
+        gravarProtecaoArmazenamentoLocal({ dadosEsperados:novoMeta.length > 0 || !!guard?.dadosEsperados, historicoCount:novoMeta.length, docsCount:novoMeta.length });
         return novoMeta;
     }
+    gravarProtecaoArmazenamentoLocal({ dadosEsperados:h.length > 0 || !!guard?.dadosEsperados, historicoCount:h.length });
     return h;
 }
 
 async function gravarHistoricoSalvo(historicoMeta) {
     try {
         if (!Array.isArray(historicoMeta)) throw new Error('Índice inválido');
+        await verificarArmazenamentoOperacional(2);
         const anterior = await localforage.getItem('historico_os');
         if (Array.isArray(anterior)) await localforage.setItem('historico_os_recovery_v66', anterior);
         await localforage.setItem('historico_os', historicoMeta);
+        const confirmado = await localforage.getItem('historico_os');
+        if (!Array.isArray(confirmado) || confirmado.length !== historicoMeta.length) throw new Error('Confirmação do índice do Histórico falhou.');
+        await atualizarProtecaoArmazenamentoConhecido({ historicoCount:historicoMeta.length });
         return true;
     } catch(e) {
         console.error('Falha ao gravar histórico:', e); registrarErroApp('gravarHistoricoSalvo', e); return false;
@@ -3849,7 +4019,7 @@ function recolherDadosDoFormulario() {
         const id = b.getAttribute('data-id');
         let ordem = {
             cliente: getVal('cliente', id), osNum: getVal('osNum', id), equipamento: getVal('equipamento', id), modelo: getVal('modelo', id), serie: getVal('serie', id), tag: getVal('tag', id), op: getVal('op', id),
-            cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked, cbContrato: !!document.getElementById(`cbContrato_${id}`)?.checked, cbQualificacao: !!document.getElementById(`cbQualificacao_${id}`)?.checked,
+            cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked, cbContrato: !!document.getElementById(`cbContrato_${id}`)?.checked, cbQualificacao: !!document.getElementById(`cbQualificacao_${id}`)?.checked, cbServicoGarantia: !!document.getElementById(`cbServicoGarantia_${id}`)?.checked,
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
             dt: getVal('dt', id), hc: getVal('hc', id), hi: getVal('hi', id), hs: getVal('hs', id), th: getVal('th', id), hiInterno: getVal('hiInterno', id), hfInterno: getVal('hfInterno', id), thInterno: getVal('thInterno', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id),
             anexoMediaId: document.getElementById(`anexoMediaId_${id}`)?.value || null,
@@ -4061,6 +4231,7 @@ function adicionarBlocoOS(dados = null) {
                     ${genToggle('cbMontagemSala', 'Montagem Sala', false, true)}
                     ${genToggle('cbContrato', 'Contrato', false)}
                     ${genToggle('cbQualificacao', 'Qualificação', false)}
+                    ${genToggle('cbServicoGarantia', 'Serviço em Garantia', false)}
                 </div>
             </div>
 
@@ -4180,7 +4351,7 @@ function adicionarBlocoOS(dados = null) {
     if (dados) {
         if (dados.cbServInterno && dados.hiInterno === undefined && dados.hfInterno === undefined && dados.thInterno === undefined) bloco.dataset.cronoInternaLegada = '1';
         ['cliente','equipamento','modelo','serie','tag','op','descricao','liberacaoObs','dt','hc','hi','hs','th','hiInterno','hfInterno','thInterno','dtInicio','dtFim','totalDias'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).value = dados[k] || ''; });
-        ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','cbContrato','cbQualificacao','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
+        ['cbOrcamento','cbInstalacao','cbServInterno','cbServExterno','cbGarantia','cbContrato','cbQualificacao','cbServicoGarantia','stOk','stRes','reSim','reNao'].forEach(k => { if(document.getElementById(`${k}_${id}`)) document.getElementById(`${k}_${id}`).checked = !!dados[k]; });
         if(document.getElementById(`cbMontagemSala_${id}`)) document.getElementById(`cbMontagemSala_${id}`).checked = dados.cbMontagemSala !== undefined ? !!dados.cbMontagemSala : !!dados.cbSemGarantia;
         // Compatibilidade: documentos internos antigos usavam intervalo de datas. Mantemos esses campos
         // e aproveitamos a data inicial como data do serviço quando não houver data específica.
@@ -4384,6 +4555,8 @@ async function salvarDocumento(silencioso = false) {
         catch (e) { console.warn('O.S. salva, mas o rascunho antigo não pôde ser removido:', e); registrarErroApp('removerRascunhoAposSalvar', e); }
         atualizarIndicadorRascunho(`O.S. salva no Histórico: ${new Date().toLocaleTimeString('pt-BR')}`, 'historico');
         if(!silencioso) mostrarToast('O.S. salva e confirmada no Histórico!');
+        void solicitarPersistenciaArmazenamento();
+        void atualizarProtecaoArmazenamentoConhecido({ dadosEsperados:true, historicoCount:historicoMeta.length });
 
         // Limpeza de mídia é manutenção e não deve desfazer um salvamento já confirmado.
         try { await limparMidiasRemovidasDoDocumento(documentoAnterior, dados); }
@@ -4599,14 +4772,17 @@ async function excluirRascunhoHistorico(id) {
 }
 
 async function carregarHistorico() {
+    const seq = ++historicoCarregamentoSeq;
+    const list = document.getElementById('historicoList');
+    if (!list) return;
     try {
-        const list = document.getElementById('historicoList');
-        if (!list) return;
         let historicoMeta = await obterHistoricoSalvo();
+        if (seq !== historicoCarregamentoSeq) return;
         historicoMeta = Array.isArray(historicoMeta) ? historicoMeta.filter(doc => doc && idLocalSeguro(doc.id)) : [];
         historicoMeta = await garantirMetadadosHistoricoV94(historicoMeta);
         historicoMeta = ordenarHistoricoParaTela(historicoMeta);
         await carregarRascunhosHistorico(new Set(historicoMeta.map(doc => String(doc.id))));
+        if (seq !== historicoCarregamentoSeq) return;
 
         const contador = document.getElementById('historicoContador');
         if (contador) contador.textContent = `Total: ${historicoMeta.length}`;
@@ -4669,11 +4845,12 @@ async function carregarHistorico() {
         filtrarHistorico();
 
     } catch(e) {
+        if (seq !== historicoCarregamentoSeq) return;
         console.error('Falha ao carregar histórico:', e);
         registrarErroApp('carregarHistorico', e);
-        const list = document.getElementById('historicoList');
-        if(list) list.innerHTML = '<div class="history-empty" style="color:#b91c1c;border-color:#fecaca">Falha ao ler o histórico. Nenhum índice foi apagado. Feche e abra o aplicativo novamente ou restaure um backup se o problema persistir.</div>';
-        mostrarToast('Falha ao ler o histórico. Os dados não foram substituídos.', true);
+        // Se a tela já tinha O.S. renderizadas, não as apaga por causa de uma leitura transitória.
+        if(!list.querySelector('.historico-item')) list.innerHTML = '<div class="history-empty" style="color:#b91c1c;border-color:#fecaca">Falha temporária ao ler o Histórico. Nenhum dado foi apagado. Tente abrir a aba novamente.</div>';
+        mostrarToast('Falha temporária ao ler o Histórico. A lista anterior foi preservada.', true);
     }
 }
 
@@ -4745,7 +4922,7 @@ async function construirPDFBytes(onProgressCallback) {
         const numeroOp = getVal('op', id).trim(); cy += 6; docOS.text(`NÚMERO DE OP: ${truncarStr(numeroOp, 55)}`, 15, cy);
         cy += 8; docOS.text(`${cb('cbOrcamento_'+id)} ORÇAMENTO`, 15, cy); docOS.text(`${cb('cbInstalacao_'+id)} INSTALAÇÃO`, 65, cy); docOS.text(`${cb('cbServInterno_'+id)} SERV INTERNO`, 115, cy);
         cy += 6; docOS.text(`${cb('cbGarantia_'+id)} GARANTIA`, 15, cy); docOS.text(`${cb('cbMontagemSala_'+id)} MONTAGEM SALA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
-        cy += 6; docOS.text(`${cb('cbContrato_'+id)} CONTRATO`, 15, cy); docOS.text(`${cb('cbQualificacao_'+id)} QUALIFICAÇÃO`, 65, cy);
+        cy += 6; docOS.text(`${cb('cbContrato_'+id)} CONTRATO`, 15, cy); docOS.text(`${cb('cbQualificacao_'+id)} QUALIFICAÇÃO`, 65, cy); docOS.text(`${cb('cbServicoGarantia_'+id)} SERVIÇO EM GARANTIA`, 115, cy);
         cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal"); cy += 4; 
         docOS.autoTable({ startY: cy, margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, body: [[getVal('descricao', id) || ' ']], theme: 'plain', styles: { lineWidth: 0.2, lineColor: [150, 150, 150], textColor: [0, 0, 0], fontSize: 9, cellPadding: 4, valign: 'middle' } });
         cy = docOS.lastAutoTable.finalY + 8; if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
