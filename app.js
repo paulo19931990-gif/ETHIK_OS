@@ -825,6 +825,10 @@ async function adicionarChecklistAoMaster(masterPdf, osId, PDFDocumentCtor, Stan
 let documentoAtualId = novoIdLocal();
 let logoImgData = null, logoImgFormat = 'PNG', imgObject = null;
 let urlDownloadGerado = null; 
+let arquivoPdfPendentePartilha = null;
+let urlPdfPendentePartilha = null;
+let tituloPdfPendentePartilha = '';
+let textoPdfPendentePartilha = '';
 let objUrlPreview = null;
 let padTecnico, padCliente, padExpandido, alvoAssinaturaAtual = null;
 
@@ -870,7 +874,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 106;
+const APP_VERSION = 107;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
 const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
@@ -5397,6 +5401,66 @@ function fecharPreviewPDF() {
     pdfPreviewModoEconomico = false; pdfPreviewPaginaAtual = 1; currentZoom = 1; startDist = 0; previewPdfSujoPorAssinatura = false; atualizarControlesPreview();
 }
 
+function prepararPdfParaPartilha(blob, nomeFicheiro, pOs, pCliente) {
+    if (urlPdfPendentePartilha) {
+        try { URL.revokeObjectURL(urlPdfPendentePartilha); } catch (_) {}
+    }
+    urlPdfPendentePartilha = URL.createObjectURL(blob);
+    arquivoPdfPendentePartilha = new File([blob], nomeFicheiro, { type: 'application/pdf' });
+    tituloPdfPendentePartilha = `Ordem de Serviço ${pOs || ''}`.trim();
+    textoPdfPendentePartilha = `Segue em anexo a Ordem de Serviço ${pOs || ''} referente a ${pCliente || ''}.`.replace(/\s+/g, ' ').trim();
+    const nomeEl = document.getElementById('nomePdfPartilha');
+    if (nomeEl) nomeEl.textContent = nomeFicheiro;
+    const modal = document.getElementById('modalPartilhaPdf');
+    if (modal) modal.classList.remove('hidden');
+}
+
+async function partilharPdfPendente() {
+    const ficheiro = arquivoPdfPendentePartilha;
+    if (!ficheiro) { mostrarToast('Gere o PDF novamente antes de partilhar.', true); return false; }
+    if (!navigator.share) {
+        mostrarToast('Este navegador não oferece partilha nativa de arquivos. Use “Baixar PDF”.', true);
+        return false;
+    }
+    try {
+        if (navigator.canShare && !navigator.canShare({ files: [ficheiro] })) {
+            mostrarToast('Este navegador não permite partilhar este PDF como arquivo. Use “Baixar PDF”.', true);
+            return false;
+        }
+        await navigator.share({
+            title: tituloPdfPendentePartilha || 'Ordem de Serviço',
+            text: textoPdfPendentePartilha || 'Segue em anexo a Ordem de Serviço.',
+            files: [ficheiro]
+        });
+        mostrarToast('PDF partilhado!');
+        fecharModalPartilhaPdf();
+        return true;
+    } catch (err) {
+        if (err?.name === 'AbortError') return false;
+        console.error('Falha ao abrir a partilha nativa do PDF:', err);
+        registrarErroApp('partilharPdfPendente', err);
+        mostrarToast('Não foi possível abrir a partilha. O PDF continua disponível para baixar.', true);
+        return false;
+    }
+}
+
+function baixarPdfPendente() {
+    if (!arquivoPdfPendentePartilha || !urlPdfPendentePartilha) {
+        mostrarToast('Gere o PDF novamente antes de baixar.', true); return false;
+    }
+    const a = document.createElement('a');
+    a.href = urlPdfPendentePartilha;
+    a.download = arquivoPdfPendentePartilha.name || 'Ordem_de_Servico.pdf';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    mostrarToast('PDF baixado!');
+    return true;
+}
+
+function fecharModalPartilhaPdf() {
+    const modal = document.getElementById('modalPartilhaPdf');
+    if (modal) modal.classList.add('hidden');
+}
+
 async function gerarPDFConsolidado() {
     const btn = document.getElementById('btnGerarPdf'); const btnTxt = document.getElementById('btnTxt'); if(btn.disabled) return;
     try {
@@ -5405,11 +5469,14 @@ async function gerarPDFConsolidado() {
         const bytesPdfFinal = await construirPDFBytes(atualizarProgressoPDF);
         const pId = document.querySelector('.os-bloco').getAttribute('data-id'); const pOs = getVal('osNum', pId).trim(); const pCliente = getVal('cliente', pId).trim();
         const nomeFicheiro = `${pOs.replace(/[^a-z0-9]/gi, '_')}_${pCliente.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-        const blob = new Blob([bytesPdfFinal], { type: 'application/pdf' }); const ficheiroPdf = new File([blob], nomeFicheiro, { type: "application/pdf" });
-        if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado); urlDownloadGerado = URL.createObjectURL(blob);
-        if (navigator.canShare && navigator.canShare({ files: [ficheiroPdf] })) {
-            try { await navigator.share({ title: `Ordem de Serviço ${pOs}`, text: `Segue em anexo a Ordem de Serviço ${pOs} referente a ${pCliente}.`, files: [ficheiroPdf] }); mostrarToast('Partilhado!'); } 
-            catch(err) { const link = document.createElement('a'); link.href = urlDownloadGerado; link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast('Transferido!'); }
-        } else { const link = document.createElement('a'); link.href = urlDownloadGerado; link.download = nomeFicheiro; document.body.appendChild(link); link.click(); document.body.removeChild(link); mostrarToast('Transferido!'); }
-    } catch (err) { mostrarToast(err.message || 'Erro ao gerar.', true); document.getElementById('pdfProgressOverlay').classList.add('hidden'); } finally { btn.disabled = false; btnTxt.innerText = "Gerar PDF & Partilhar"; }
+        const blob = new Blob([bytesPdfFinal], { type: 'application/pdf' });
+        prepararPdfParaPartilha(blob, nomeFicheiro, pOs, pCliente);
+        mostrarToast('PDF pronto para partilhar.');
+    } catch (err) {
+        console.error(err); registrarErroApp('gerarPDFConsolidado', err);
+        mostrarToast(err.message || 'Erro ao gerar.', true);
+        document.getElementById('pdfProgressOverlay').classList.add('hidden');
+    } finally {
+        btn.disabled = false; btnTxt.innerText = "Gerar PDF & Partilhar";
+    }
 }
