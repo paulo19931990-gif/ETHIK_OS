@@ -401,7 +401,10 @@ function gravarChecklistNoCampo(osId, checklist) {
     const el = document.getElementById(`checklistData_${osId}`);
     if (!el) return;
     const normalizado = normalizarChecklistPersistido(checklist);
-    el.value = normalizado ? JSON.stringify(normalizado) : '';
+    const valor = normalizado ? JSON.stringify(normalizado) : '';
+    if (el.value === valor) return;
+    el.value = valor;
+    marcarFormularioAlterado();
 }
 
 function totalItensChecklist(modelo) {
@@ -855,6 +858,7 @@ let osIdAtualFoto = null;
 let timeoutRascunho = null;
 let filaRascunho = Promise.resolve();
 let formularioSujo = false;
+let revisaoFormulario = 0;
 let salvamentoManualEmAndamento = false;
 let restaurandoDocumento = false;
 let pdfPreviewDoc = null;
@@ -874,7 +878,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 108;
+const APP_VERSION = 109;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
 const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
@@ -1021,6 +1025,10 @@ async function listarRascunhosPersistentes() {
 }
 
 async function confirmarSaidaComAlteracoes(destinoId = null) {
+    if (salvamentoManualEmAndamento || restaurandoDocumento) {
+        mostrarToast('Aguarde a conclusão do salvamento ou carregamento da O.S.', true);
+        return false;
+    }
     if (!formularioSujo || !documentoAtualId || String(destinoId || '') === String(documentoAtualId)) return true;
     const guardar = confirm('Há alterações não salvas nesta O.S.\n\nOK = guardar um rascunho e continuar.\nCancelar = escolher se deseja descartar ou permanecer aqui.');
     if (guardar) {
@@ -1035,6 +1043,7 @@ async function confirmarSaidaComAlteracoes(destinoId = null) {
 }
 
 async function prepararAtualizacaoSegura() {
+    if (salvamentoManualEmAndamento || restaurandoDocumento) { mostrarToast('Atualização adiada: aguarde a operação atual.', true); return false; }
     if (typeof localforage === 'undefined') {
         if (formularioSujo) { mostrarToast('Atualização adiada: armazenamento indisponível para proteger o trabalho atual.', true); return false; }
         return true;
@@ -1043,6 +1052,7 @@ async function prepararAtualizacaoSegura() {
         // Mesmo que o usuário esteja olhando Histórico/Banco de Horas, o formulário em memória
         // pode conter alterações ainda não gravadas. Salva o snapshot diretamente antes do reload.
         if (formularioSujo && document.querySelector('.os-bloco')) {
+            await aguardarAssinaturas();
             await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
             return true;
         }
@@ -1198,6 +1208,7 @@ function cancelarAutoSavePendente() {
 
 function marcarFormularioAlterado() {
     if (restaurandoDocumento) return;
+    revisaoFormulario++;
     formularioSujo = true;
     atualizarIndicadorRascunho('Alterações aguardando proteção', 'edicao');
     cancelarAutoSavePendente();
@@ -2173,7 +2184,7 @@ async function reconstruirHistoricoAPartirDocumentos(chaves = null) {
             const doc = await localforage.getItem(chave);
             if (!doc || !Array.isArray(doc.ordens) || !doc.ordens.length || !idLocalSeguro(String(doc.id || ''))) continue;
             metas.push(gerarMetadadosResumo(doc));
-        } catch (_) {}
+        } catch (erro) { throw new Error(`Não foi possível ler ${chave}. Recuperação do Histórico adiada.`, { cause: erro }); }
     }
     if (!metas.length) return [];
     metas.sort((a,b) => String(b.dataAtualizacao || '').localeCompare(String(a.dataAtualizacao || '')));
@@ -2302,14 +2313,16 @@ async function confirmarExportacao() {
 }
 function validarDocumentoBackup(doc) {
     if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return false;
-    if (!idLocalSeguro(doc.id) || !Array.isArray(doc.ordens)) return false;
+    if (!validarEstruturaDocumento(doc)) return false;
     return doc.ordens.every(ordem => {
         if (!ordem || typeof ordem !== 'object' || Array.isArray(ordem)) return false;
         if (ordem.fotos !== undefined && !Array.isArray(ordem.fotos)) return false;
         if (ordem.pecas !== undefined && !Array.isArray(ordem.pecas)) return false;
+        if (Array.isArray(ordem.pecas) && !ordem.pecas.every(p => p && typeof p === 'object' && !Array.isArray(p)
+            && ['q', 'n', 'c'].every(k => p[k] === undefined || typeof p[k] === 'string' || typeof p[k] === 'number'))) return false;
         if (ordem.anexoBase64 && !dataUrlPdfSegura(ordem.anexoBase64)) return false;
         if (ordem.anexoMediaId && !ordem.anexoBase64) return false;
-        if (Array.isArray(ordem.fotos) && !ordem.fotos.every(f => f && typeof f === 'object' && (!f.b64 || dataUrlImagemSegura(f.b64)) && (!f.mediaId || !!f.b64))) return false;
+        if (Array.isArray(ordem.fotos) && !ordem.fotos.every(f => f && typeof f === 'object' && !Array.isArray(f) && dataUrlImagemSegura(f.b64) && (f.desc === undefined || typeof f.desc === 'string'))) return false;
         return true;
     });
 }
@@ -2350,6 +2363,7 @@ function importarBackupJSON(event) {
     }
     const reader = new FileReader();
     reader.onload = async function(e) {
+      try { await executarComBloqueioBancoHoras(async () => {
         let rollbackDocs = new Map(); let historicoAnterior = null; let bancoHorasAnterior = null;
         try {
             const normalizado = normalizarBackupImportado(JSON.parse(e.target.result));
@@ -2362,7 +2376,9 @@ function importarBackupJSON(event) {
             }
 
             historicoAnterior = await obterHistoricoSalvo();
-            bancoHorasAnterior = Array.isArray(registosBancoHoras) ? [...registosBancoHoras] : [];
+            const horasAtuais = await localforage.getItem('banco_horas_data');
+            if (horasAtuais !== null && !Array.isArray(horasAtuais)) throw new Error('Banco de horas armazenado inválido');
+            bancoHorasAnterior = horasAtuais || [];
             for (const doc of normalizado.historicoOS) rollbackDocs.set(doc.id, await localforage.getItem(`os_doc_${doc.id}`));
 
             const novoHistorico = [...historicoAnterior];
@@ -2405,6 +2421,7 @@ function importarBackupJSON(event) {
                 ? 'Importação incompleta e falha ao restaurar parte dos dados anteriores. Preserve o arquivo de backup e confira o Histórico e o Banco de Horas antes de continuar.'
                 : 'Backup inválido ou importação incompleta. Nenhum dado novo foi mantido.', true);
         }
+      }); } catch (erro) { mostrarToast(erro.message || 'Não foi possível iniciar a importação.', true); }
     };
     reader.onerror = () => mostrarToast('Não foi possível ler o ficheiro de backup.', true);
     reader.readAsText(file); event.target.value = '';
@@ -2456,13 +2473,15 @@ async function apagarDocumentoDefinitivo(id) {
     const lix = await obterLixeiraOS();
     try {
         await localforage.setItem('lixeira_os', lix.filter(m => m.id !== id));
-        try { const docTrash = await localforage.getItem(`trash_os_doc_${id}`); if (docTrash) { for (const chave of idsMidiaDocumento(docTrash)) { await removerChaveMidiaComRelacionados(chave); } } await localforage.removeItem(`trash_os_doc_${id}`); }
+        // A limpeza posterior consulta todas as referências, inclusive rascunhos e outras O.S.
+        try { await localforage.removeItem(`trash_os_doc_${id}`); }
         catch(e) { await localforage.setItem('lixeira_os', lix); throw e; }
         await carregarLixeira(); mostrarToast('OS excluída definitivamente.'); agendarLimpezaMidiasOrfas(800);
     } catch(e) { console.error(e); mostrarToast('Falha ao excluir definitivamente. A entrada da lixeira foi preservada quando possível.', true); }
 }
 
 async function limparTodoHistorico() {
+    if (salvamentoManualEmAndamento || restaurandoDocumento) { mostrarToast('Aguarde a operação atual antes de limpar o Histórico.', true); return; }
     if(!confirm('Mover TODAS as O.S. para a Lixeira? Elas poderão ser restauradas depois.')) return;
     try {
         const historicoMeta = await obterHistoricoSalvo();
@@ -2506,13 +2525,25 @@ function aplicarZoomPdf(novoZoom, focoClientX = null, focoClientY = null, zoomAn
 function zoomInPdf() { aplicarZoomPdf(currentZoom + 0.25); }
 function zoomOutPdf() { aplicarZoomPdf(currentZoom - 0.25); }
 
+async function carregarAssinaturaPad(pad, dataUrl) {
+    const anterior = pad.carregamentoAssinatura || Promise.resolve();
+    const operacao = anterior.then(() => pad.fromDataURL(dataUrl));
+    pad.carregamentoAssinatura = operacao;
+    try { await operacao; } finally { if (pad.carregamentoAssinatura === operacao) pad.carregamentoAssinatura = null; }
+}
+
+async function aguardarAssinaturas() {
+    await Promise.all([padTecnico, padCliente, padExpandido].map(p => p?.carregamentoAssinatura).filter(Boolean));
+}
+
 function resizeCanvasSeguro(canvas, pad, skipRestore = false) {
+    if (pad?.carregamentoAssinatura) return;
     if(!canvas) return; let dataURL = null; if(!skipRestore && pad && !pad.isEmpty()) dataURL = pad.toDataURL(); 
     const ratio = Math.max(window.devicePixelRatio || 1, 1);
     const width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 300; const height = canvas.offsetHeight || canvas.parentElement.offsetHeight || 150;
     canvas.width = width * ratio; canvas.height = height * ratio;
     const ctx = canvas.getContext("2d"); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(ratio, ratio);
-    if (pad) pad.clear(); if(!skipRestore && dataURL && pad) pad.fromDataURL(dataURL); 
+    if (pad) pad.clear(); if(!skipRestore && dataURL && pad) void carregarAssinaturaPad(pad, dataURL).catch(e => registrarErroApp('redimensionarAssinatura', e)); 
 }
 
 function bloquearMultiTouch(canvas) {
@@ -2620,7 +2651,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const formOs = document.getElementById('osForm');
     if(formOs) {
         formOs.addEventListener('input', () => {
-            if (!restaurandoDocumento && !salvamentoManualEmAndamento) marcarFormularioAlterado();
+            if (!restaurandoDocumento) marcarFormularioAlterado();
         });
     }
 
@@ -2702,6 +2733,7 @@ async function atualizarEstadoSalvamentoAtual() {
 async function protegerRascunhoAtualAntesDeValidar() {
     if (typeof localforage === 'undefined' || !document.querySelector('.os-bloco')) return false;
     try {
+        await aguardarAssinaturas();
         const dados = recolherDadosDoFormulario();
         await salvarRascunhoPersistente(dados, true);
         atualizarIndicadorRascunho(`Rascunho protegido: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
@@ -2722,6 +2754,7 @@ async function autoSalvarRascunho(forcar = false) {
     const bloqueado = document.getElementById('lockStatus')?.textContent?.includes('BLOQUEADO');
     if (typeof localforage === 'undefined' || restaurandoDocumento || salvamentoManualEmAndamento || !novaOs || (!forcar && novaOs.classList.contains('hidden')) || (!forcar && bloqueado) || (!forcar && !clientePreenchido)) return false;
     try {
+        await aguardarAssinaturas();
         const dados = recolherDadosDoFormulario();
         await salvarRascunhoPersistente(dados, true);
         atualizarIndicadorRascunho(`Rascunho protegido: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
@@ -2850,16 +2883,30 @@ function sanitizarRegistoBancoHoras(reg) {
     return limpo;
 }
 
+async function executarComBloqueioBancoHoras(operacao) {
+    if (!globalThis.navigator?.locks?.request) throw new Error('Este navegador não oferece proteção de gravação entre abas. Atualize o navegador para salvar o Banco de Horas com segurança.');
+    return navigator.locks.request('multios-banco-horas', { mode: 'exclusive' }, operacao);
+}
+
 async function persistirBancoHorasSeguro(novosRegistos) {
+    const base = JSON.stringify((registosBancoHoras || []).map(sanitizarRegistoBancoHoras));
     try {
         if (!Array.isArray(novosRegistos)) throw new Error('Banco de horas inválido');
         const limpos = novosRegistos.map(sanitizarRegistoBancoHoras);
-        const anterior = await localforage.getItem('banco_horas_data');
-        if (Array.isArray(anterior)) await localforage.setItem('banco_horas_recovery_v66', anterior);
-        await localforage.setItem('banco_horas_data', limpos);
-        registosBancoHoras = limpos;
-        return true;
-    } catch(e) { console.error('Falha ao salvar banco de horas:', e); registrarErroApp('bancoHoras', e); mostrarToast('Não foi possível salvar o banco de horas. Os dados anteriores foram mantidos.', true); return false; }
+        return await executarComBloqueioBancoHoras(async () => {
+            const bruto = await localforage.getItem('banco_horas_data');
+            if (bruto !== null && !Array.isArray(bruto)) throw new Error('Banco de horas armazenado inválido. Nenhuma alteração foi gravada.');
+            const anterior = (bruto || []).map(sanitizarRegistoBancoHoras);
+            if (JSON.stringify(anterior) !== base) {
+                registosBancoHoras = anterior;
+                throw new Error('O Banco de Horas mudou em outra aba. A lista foi atualizada; confira os dados e tente salvar novamente. Seus campos foram mantidos.');
+            }
+            await localforage.setItem('banco_horas_recovery_v66', bruto || []);
+            await localforage.setItem('banco_horas_data', limpos);
+            registosBancoHoras = limpos;
+            return true;
+        });
+    } catch(e) { console.error('Falha ao salvar banco de horas:', e); registrarErroApp('bancoHoras', e); mostrarToast(e.message || 'Não foi possível salvar o Banco de Horas.', true); return false; }
 }
 
 async function sincronizarBancoHorasAPartirDaOS(dados) {
@@ -3861,7 +3908,7 @@ async function verificarRetornoCapturaPendente() {
         const draft = idLocalSeguro(String(pending.documentoId || '')) ? await obterRascunhoDocumento(String(pending.documentoId)) : await localforage.getItem('draft_os');
         let recuperado = false;
         if (draft?.ordens?.length && idade >= 0 && idade <= CAMERA_RESTORE_MAX_AGE_MS) {
-            restaurarDadosParaFormulario(draft);
+            await restaurarDadosParaFormulario(draft);
             mostrarToast('O Android reiniciou o app durante o uso da câmera. Sua O.S. foi recuperada automaticamente.');
             recuperado = true;
         }
@@ -4054,20 +4101,32 @@ function recolherDadosDoFormulario() {
     }); return dados;
 }
 
-function restaurarDadosParaFormulario(doc) {
-    cancelarAutoSavePendente(); restaurandoDocumento = true; formularioSujo = false;
-    desbloquearEdicao(); documentoAtualId = doc.id; document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
-    if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
-    if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o)); ['tecnico','nomeClienteFinal','cargo','setor','placaVeiculo','kmSaida','kmChegada'].forEach(k => { const el = document.getElementById(k); if (el) el.value = doc[k] || ''; });
-    atualizarTotalKm();
-    switchTab('novaOs');
-    setTimeout(() => {
-        if(document.getElementById('canvasTecnico') && padTecnico && dataUrlImagemSegura(doc.assinaturaTecnico)) padTecnico.fromDataURL(doc.assinaturaTecnico);
-        if(document.getElementById('canvasCliente') && padCliente && dataUrlImagemSegura(doc.assinaturaCliente)) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); }
-        atualizarVisibilidadeCamposPorBloco(); restaurandoDocumento = false; formularioSujo = false;
+function validarEstruturaDocumento(doc) {
+    if (!doc || !idLocalSeguro(doc.id) || !Array.isArray(doc.ordens) || !doc.ordens.length) return false;
+    return doc.ordens.every(o => o && typeof o === 'object' && !Array.isArray(o)
+        && (o.pecas === undefined || (Array.isArray(o.pecas) && o.pecas.every(p => p && typeof p === 'object' && !Array.isArray(p))))
+        && (o.fotos === undefined || (Array.isArray(o.fotos) && o.fotos.every(f => f && typeof f === 'object' && !Array.isArray(f)))));
+}
+
+async function restaurarDadosParaFormulario(doc) {
+    if (!validarEstruturaDocumento(doc)) throw new Error('Documento inválido. O formulário atual foi preservado.');
+    cancelarAutoSavePendente(); restaurandoDocumento = true;
+    try {
+        await aguardarAssinaturas();
+        desbloquearEdicao(); documentoAtualId = doc.id; document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
+        if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
+        doc.ordens.forEach(o => adicionarBlocoOS(o));
+        ['tecnico','nomeClienteFinal','cargo','setor','placaVeiculo','kmSaida','kmChegada'].forEach(k => { const el = document.getElementById(k); if (el) el.value = doc[k] || ''; });
+        atualizarTotalKm();
+        await switchTab('novaOs');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        atualizarVisibilidadeCamposPorBloco();
+        if(padTecnico && dataUrlImagemSegura(doc.assinaturaTecnico)) await carregarAssinaturaPad(padTecnico, doc.assinaturaTecnico);
+        if(padCliente && dataUrlImagemSegura(doc.assinaturaCliente)) { await carregarAssinaturaPad(padCliente, doc.assinaturaCliente); bloquearEdicao(); }
+        formularioSujo = false;
         void atualizarEstadoSalvamentoAtual();
         agendarVerificacaoIntegridadeAtual(250, true);
-    }, 100);
+    } finally { restaurandoDocumento = false; }
 }
 
 function verificarServicoInternoGlobal() { return Array.from(document.querySelectorAll('.os-bloco')).every(b => document.getElementById(`cbServInterno_${b.getAttribute('data-id')}`).checked); }
@@ -4100,7 +4159,7 @@ function abrirModalAssinatura(alvo) {
     alvoAssinaturaAtual = alvo;
     document.getElementById('tituloModalAssinatura').textContent = alvo === 'tecnico' ? 'Assinatura (Técnico)' : 'Assinatura (Cliente)';
     document.getElementById('modalAssinaturaExpandida').classList.remove('hidden'); document.body.style.overflow = 'hidden';
-    setTimeout(() => { if(padExpandido) padExpandido.clear(); resizeCanvasSeguro(document.getElementById('canvasExpandido'), padExpandido, true); const padFonte = alvo === 'tecnico' ? padTecnico : padCliente; if (padExpandido && padFonte && !padFonte.isEmpty()) padExpandido.fromDataURL(padFonte.toDataURL()); }, 50);
+    setTimeout(() => { if(padExpandido) padExpandido.clear(); resizeCanvasSeguro(document.getElementById('canvasExpandido'), padExpandido, true); const padFonte = alvo === 'tecnico' ? padTecnico : padCliente; if (padExpandido && padFonte && !padFonte.isEmpty()) void carregarAssinaturaPad(padExpandido, padFonte.toDataURL()).catch(e => registrarErroApp('abrirAssinatura', e)); }, 50);
 }
 
 function abrirAssinaturaPeloPreview(alvo) {
@@ -4114,9 +4173,11 @@ function fecharModalAssinatura(manterOrigemPreview = false) {
     document.body.style.overflow = previewAberto ? 'hidden' : '';
     if (!manterOrigemPreview) assinaturaAbertaPeloPreview = false;
 }
-function limparPadExpandido() { if(padExpandido) padExpandido.clear(); }
+function limparPadExpandido() { if(padExpandido?.carregamentoAssinatura) return; if(padExpandido) padExpandido.clear(); }
 
 async function confirmarAssinaturaExpandida() {
+    if (restaurandoDocumento || salvamentoManualEmAndamento) { mostrarToast('Aguarde a operação atual antes de confirmar a assinatura.', true); return; }
+    await aguardarAssinaturas();
     const veioDoPreview = assinaturaAbertaPeloPreview;
     const alvoConfirmado = alvoAssinaturaAtual;
     const padDestino = alvoConfirmado === 'tecnico' ? padTecnico : padCliente;
@@ -4128,10 +4189,11 @@ async function confirmarAssinaturaExpandida() {
             if (alvoConfirmado === 'cliente') desbloquearEdicao();
         } else {
             padDestino.clear();
-            padDestino.fromDataURL(padExpandido.toDataURL());
+            await carregarAssinaturaPad(padDestino, padExpandido.toDataURL());
             if (alvoConfirmado === 'cliente') bloquearEdicao();
         }
     }
+    marcarFormularioAlterado();
     fecharModalAssinatura(true);
     assinaturaAbertaPeloPreview = false;
     // Na pré-visualização a assinatura aparece no mesmo instante em que o modal fecha.
@@ -4147,7 +4209,7 @@ function toggleLock(locked) {
 }
 function bloquearEdicao() { toggleLock(true); mostrarToast('Formulário selado pela Assinatura do Cliente.'); }
 function desbloquearEdicao() { toggleLock(false); }
-function limparAssinatura(pad, isCliente = false) { if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); autoSalvarRascunho(); }
+function limparAssinatura(pad, isCliente = false) { if(pad?.carregamentoAssinatura) return; marcarFormularioAlterado(); if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); autoSalvarRascunho(); }
 
 async function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden')); 
@@ -4164,6 +4226,7 @@ async function switchTab(tabId) {
 }
 
 async function iniciarNovaOS(forcarDescartarRascunho = false) {
+    if (salvamentoManualEmAndamento || restaurandoDocumento) { mostrarToast('Aguarde a operação atual antes de iniciar outra O.S.', true); return false; }
     if (!forcarDescartarRascunho && !await confirmarSaidaComAlteracoes(null)) return false;
     const idAnterior = documentoAtualId;
     cancelarAutoSavePendente(); salvamentoManualEmAndamento = true; restaurandoDocumento = true;
@@ -4203,7 +4266,7 @@ function adicionarBlocoOS(dados = null) {
             osManualValue = getVal('osNum', origemId);
         }
     }
-    const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco(); autoSalvarRascunho();" class="text-gray-400 hover:text-red-600 transition-colors p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
+    const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco(); marcarFormularioAlterado(); autoSalvarRascunho();" class="text-gray-400 hover:text-red-600 transition-colors p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
     const bloco = document.createElement('div'); bloco.className = "os-bloco bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden relative transition-all"; bloco.setAttribute('data-id', id);
     
     const genToggle = (tid, label, checked, oc = false) => `
@@ -4396,6 +4459,7 @@ function adicionarBlocoOS(dados = null) {
     } else { addPecaRow(id); addPecaRow(id); }
     atualizarResumoChecklistOS(id);
     atualizarVisibilidadeCamposPorBloco();
+    if (!dados && id > 1) marcarFormularioAlterado();
 }
 
 function addPecaRow(id) {
@@ -4525,17 +4589,19 @@ function validarCamposObrigatorios() {
 }
 
 async function salvarDocumento(silencioso = false) {
+    if (salvamentoManualEmAndamento || restaurandoDocumento) return false;
     const btnSalvar = document.getElementById('btnSalvarOs');
     if (!silencioso && btnSalvar && btnSalvar.disabled) return false;
     cancelarAutoSavePendente();
     if (!silencioso && btnSalvar) btnSalvar.disabled = true;
+    salvamentoManualEmAndamento = true;
 
     // v87: antes de validar ou tentar o salvamento oficial, protege o estado atual em rascunho.
     // Assim, mesmo que um único campo obrigatório esteja vazio, o trabalho longo não fica desprotegido.
     if (!silencioso) {
-        if (typeof localforage === 'undefined') { mostrarToast('Armazenamento local indisponível. Não foi possível proteger o trabalho.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
+        if (typeof localforage === 'undefined') { mostrarToast('Armazenamento local indisponível. Não foi possível proteger o trabalho.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
         const rascunhoProtegido = await protegerRascunhoAtualAntesDeValidar();
-        if (!rascunhoProtegido) { mostrarToast('Não foi possível proteger o rascunho antes de salvar. O salvamento foi cancelado por segurança.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
+        if (!rascunhoProtegido) { mostrarToast('Não foi possível proteger o rascunho antes de salvar. O salvamento foi cancelado por segurança.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
     }
 
     salvamentoManualEmAndamento = true;
@@ -4543,9 +4609,12 @@ async function salvarDocumento(silencioso = false) {
     if (typeof localforage === 'undefined') { if(!silencioso) mostrarToast('Armazenamento local indisponível.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
     let dados = null; let documentoAnterior = null; let historicoAnterior = null;
     let salvamentoConfirmado = false;
+    let revisaoSalva = null;
     try {
         await aprenderPecasDaOS();
+        await aguardarAssinaturas();
         dados = recolherDadosDoFormulario();
+        revisaoSalva = revisaoFormulario;
         const integridadeMidias = await verificarIntegridadeMidiasDocumento(dados, { contexto:'salvamento_oficial', registrar:true });
         ultimoResultadoIntegridadeMidias = integridadeMidias; ultimaVerificacaoMidiasTs = Date.now(); atualizarIndicadorIntegridadeMidias(integridadeMidias);
         if (!integridadeMidias.ok) throw new Error(`Salvamento oficial cancelado: ${integridadeMidias.faltantes[0] || 'há mídia ausente'}. O rascunho foi preservado.`);
@@ -4569,10 +4638,24 @@ async function salvarDocumento(silencioso = false) {
         }
 
         salvamentoConfirmado = true;
+        if (documentoAtualId !== dados.id || revisaoFormulario !== revisaoSalva) {
+            // O snapshot antigo foi salvo; preserva também a edição que chegou durante a gravação.
+            formularioSujo = true;
+            await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
+            atualizarIndicadorRascunho('Alterações recentes protegidas em rascunho; salve novamente.', 'rascunho');
+            if (!silencioso) mostrarToast('A versão anterior foi salva. Suas novas alterações estão em rascunho; clique em Salvar novamente.');
+            return false;
+        }
         formularioSujo = false;
         // A remoção do rascunho é pós-confirmação: se falhar, não transforma um salvamento válido em falha.
         try { await removerRascunhoPersistente(dados.id); }
         catch (e) { console.warn('O.S. salva, mas o rascunho antigo não pôde ser removido:', e); registrarErroApp('removerRascunhoAposSalvar', e); }
+        if (documentoAtualId !== dados.id || revisaoFormulario !== revisaoSalva) {
+            formularioSujo = true;
+            await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
+            atualizarIndicadorRascunho('Alterações recentes protegidas em rascunho; salve novamente.', 'rascunho');
+            return false;
+        }
         atualizarIndicadorRascunho(`O.S. salva no Histórico: ${new Date().toLocaleTimeString('pt-BR')}`, 'historico');
         if(!silencioso) mostrarToast('O.S. salva e confirmada no Histórico!');
         void solicitarPersistenciaArmazenamento();
@@ -4584,6 +4667,12 @@ async function salvarDocumento(silencioso = false) {
         try { if(!silencioso) await carregarHistorico(); }
         catch (e) { console.warn('O.S. salva, mas a atualização visual do Histórico falhou:', e); registrarErroApp('atualizarHistoricoAposSalvar', e); }
         agendarLimpezaMidiasOrfas(1200);
+        if (documentoAtualId !== dados.id || revisaoFormulario !== revisaoSalva) {
+            formularioSujo = true;
+            await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
+            atualizarIndicadorRascunho('Alterações recentes protegidas em rascunho; salve novamente.', 'rascunho');
+            return false;
+        }
         return true;
     } catch(e) {
         console.error('Erro ao salvar documento:', e); registrarErroApp('salvarDocumento', e);
@@ -4593,7 +4682,11 @@ async function salvarDocumento(silencioso = false) {
                 await localforage.setItem('historico_os', historicoAnterior);
             } catch (rollbackErr) { console.error('Falha no rollback do salvamento:', rollbackErr); registrarErroApp('rollbackSalvarDocumento', rollbackErr); }
         }
-        if(!silencioso) {
+        if(!silencioso && salvamentoConfirmado) {
+            formularioSujo = true;
+            atualizarIndicadorRascunho('Falha ao proteger as alterações recentes. Não feche esta O.S.', 'erro');
+            mostrarToast('A versão anterior foi salva, mas não foi possível proteger as alterações recentes. Não feche esta O.S.; tente salvar novamente.', true);
+        } else if(!silencioso) {
             atualizarIndicadorRascunho('Rascunho preservado; O.S. não confirmada no Histórico', 'rascunho');
             mostrarToast(`Não foi possível confirmar a O.S. no Histórico. O rascunho foi preservado. ${e?.message || ''}`.trim(), true);
         }
@@ -4762,7 +4855,7 @@ async function abrirRascunhoHistorico(id) {
             await carregarRascunhosHistorico();
             return;
         }
-        restaurarDadosParaFormulario(draft);
+        await restaurarDadosParaFormulario(draft);
         mostrarToast('Rascunho recuperado. Continue o preenchimento normalmente.');
     } catch (e) {
         console.error('Falha ao abrir rascunho:', e);
@@ -4900,11 +4993,12 @@ async function carregarDocumentoParaEdicao(id) {
             if (tDraft > tSalvo && confirm('Existe um rascunho mais recente desta O.S.\n\nDeseja recuperar as alterações não salvas?')) docAbrir = draft;
         }
 
-        restaurarDadosParaFormulario(docAbrir);
+        await restaurarDadosParaFormulario(docAbrir);
         mostrarToast(docAbrir === draft ? 'Rascunho mais recente recuperado.' : (integridadeOk === false ? 'Carregado com alerta de integridade.' : 'Carregado.'));
     } catch(e) { console.error(e); registrarErroApp('carregarDocumentoParaEdicao', e); mostrarToast('Não foi possível abrir esta O.S.', true); }
 }
 async function apagarDocumento(id) {
+    if (salvamentoManualEmAndamento || restaurandoDocumento) { mostrarToast('Aguarde a operação atual antes de excluir uma O.S.', true); return; }
     if(!confirm('Mover esta O.S. para a Lixeira?')) return;
     try { await moverDocumentoParaLixeira(id); if(id === documentoAtualId) await iniciarNovaOS(true); await carregarHistorico(); mostrarToast('O.S. movida para a Lixeira.'); }
     catch(e) { console.error(e); registrarErroApp('apagarDocumento', e); mostrarToast('Não foi possível mover a O.S. para a Lixeira.', true); }
@@ -5096,7 +5190,7 @@ async function construirPDFBytes(onProgressCallback) {
                 anexoPages.forEach((p) => masterPdf.addPage(p));
             } catch (e) {
                 console.error('Falha ao incorporar PDF anexo:', e);
-                mostrarToast(`Aviso: O PDF Anexo da OS #${id} não pôde ser incorporado.`, true);
+                throw new Error(`PDF cancelado: o anexo da O.S. ${getVal('osNum', id) || id} não pôde ser incorporado. Substitua ou remova o anexo antes de gerar o relatório.`, { cause: e });
             }
         }
     }
@@ -5496,4 +5590,5 @@ async function gerarPDFConsolidado() {
         btn.disabled = false; btnTxt.innerText = "Gerar PDF & Partilhar";
     }
 }
+
 

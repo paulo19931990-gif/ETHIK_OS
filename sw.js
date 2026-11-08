@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v108';
+const CACHE_NAME = 'multios-pro-v109';
 
 // v81: todos os recursos necessários ao funcionamento do Multi-OS ficam no próprio projeto.
 // A nova versão só instala se TODOS estes arquivos existirem. Isso evita instalar uma versão
@@ -40,7 +40,7 @@ self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const respostas = await Promise.all(ASSETS_CRITICOS.map(async asset => {
       const url = new URL(asset, self.location.href);
-      url.searchParams.set('v', '108');
+      url.searchParams.set('v', '109');
       const resposta = await fetch(url.href, { cache: 'no-store' });
       if (!respostaCacheavel(resposta)) throw new Error(`Asset crítico indisponível: ${asset}`);
       return [asset, resposta];
@@ -88,4 +88,5 @@ self.addEventListener('fetch', event => {
     });
   })());
 });
+
 
