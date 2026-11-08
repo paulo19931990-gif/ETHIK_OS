@@ -874,7 +874,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 107;
+const APP_VERSION = 108;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
 const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
@@ -2287,7 +2287,11 @@ async function confirmarExportacao() {
         let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${dataLocalISO()}`;
         const historicoMeta = await obterHistoricoSalvo();
         const backupCompleto = { tipo: 'multi-os-backup', versaoFormato: 3, versaoApp: APP_VERSION, exportadoEm: new Date().toISOString(), historicoOS: [], bancoHoras: registosBancoHoras || [] };
-        for (const meta of historicoMeta) { const docFull = await localforage.getItem(`os_doc_${meta.id}`); if (docFull) backupCompleto.historicoOS.push(await prepararDocumentoParaBackup(docFull)); }
+        for (const meta of historicoMeta) {
+            const docFull = await localforage.getItem(`os_doc_${meta.id}`);
+            if (!docFull) throw new Error(`A O.S. ${meta.id} não foi encontrada. Backup cancelado para evitar arquivo incompleto.`);
+            backupCompleto.historicoOS.push(await prepararDocumentoParaBackup(docFull));
+        }
         const blob = new Blob([JSON.stringify(backupCompleto, null, 2)], { type: 'application/json' });
         if (blob.size > 100 * 1024 * 1024 && !confirm(`O backup tem ${(blob.size/1024/1024).toFixed(1)} MB e pode demorar para abrir em celulares. Deseja baixar mesmo assim?`)) return;
         if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado); urlDownloadGerado = URL.createObjectURL(blob);
@@ -2380,14 +2384,26 @@ function importarBackupJSON(event) {
             await carregarHistorico(); mostrarToast('Backup importado e validado!');
         } catch(err) {
             console.error('Erro ao importar backup:', err);
-            try {
+            const falhasRollback = [];
+            const tentarRestaurar = async (operacao) => {
+                try { await operacao(); }
+                catch (rollbackErr) { falhasRollback.push(rollbackErr); console.error('Falha no rollback da importação:', rollbackErr); }
+            };
+            {
                 for (const [id, antigo] of rollbackDocs) {
-                    if (antigo === null || antigo === undefined) await localforage.removeItem(`os_doc_${id}`); else await localforage.setItem(`os_doc_${id}`, antigo);
+                    await tentarRestaurar(() => antigo === null || antigo === undefined
+                        ? localforage.removeItem(`os_doc_${id}`)
+                        : localforage.setItem(`os_doc_${id}`, antigo));
                 }
-                if (historicoAnterior) await localforage.setItem('historico_os', historicoAnterior);
-                if (bancoHorasAnterior) { registosBancoHoras = bancoHorasAnterior; await localforage.setItem('banco_horas_data', bancoHorasAnterior); }
-            } catch (rollbackErr) { console.error('Falha no rollback da importação:', rollbackErr); }
-            mostrarToast('Backup inválido ou importação incompleta. Nenhum dado novo foi mantido.', true);
+                if (historicoAnterior) await tentarRestaurar(() => localforage.setItem('historico_os', historicoAnterior));
+                if (bancoHorasAnterior) {
+                    registosBancoHoras = bancoHorasAnterior;
+                    await tentarRestaurar(() => localforage.setItem('banco_horas_data', bancoHorasAnterior));
+                }
+            }
+            mostrarToast(falhasRollback.length
+                ? 'Importação incompleta e falha ao restaurar parte dos dados anteriores. Preserve o arquivo de backup e confira o Histórico e o Banco de Horas antes de continuar.'
+                : 'Backup inválido ou importação incompleta. Nenhum dado novo foi mantido.', true);
         }
     };
     reader.onerror = () => mostrarToast('Não foi possível ler o ficheiro de backup.', true);
@@ -5480,3 +5496,4 @@ async function gerarPDFConsolidado() {
         btn.disabled = false; btnTxt.innerText = "Gerar PDF & Partilhar";
     }
 }
+
