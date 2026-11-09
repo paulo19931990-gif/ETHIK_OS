@@ -401,10 +401,7 @@ function gravarChecklistNoCampo(osId, checklist) {
     const el = document.getElementById(`checklistData_${osId}`);
     if (!el) return;
     const normalizado = normalizarChecklistPersistido(checklist);
-    const valor = normalizado ? JSON.stringify(normalizado) : '';
-    if (el.value === valor) return;
-    el.value = valor;
-    marcarFormularioAlterado();
+    el.value = normalizado ? JSON.stringify(normalizado) : '';
 }
 
 function totalItensChecklist(modelo) {
@@ -858,7 +855,6 @@ let osIdAtualFoto = null;
 let timeoutRascunho = null;
 let filaRascunho = Promise.resolve();
 let formularioSujo = false;
-let revisaoFormulario = 0;
 let salvamentoManualEmAndamento = false;
 let restaurandoDocumento = false;
 let pdfPreviewDoc = null;
@@ -878,7 +874,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 109;
+const APP_VERSION = 108;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
 const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
@@ -1025,10 +1021,6 @@ async function listarRascunhosPersistentes() {
 }
 
 async function confirmarSaidaComAlteracoes(destinoId = null) {
-    if (salvamentoManualEmAndamento || restaurandoDocumento) {
-        mostrarToast('Aguarde a conclusão do salvamento ou carregamento da O.S.', true);
-        return false;
-    }
     if (!formularioSujo || !documentoAtualId || String(destinoId || '') === String(documentoAtualId)) return true;
     const guardar = confirm('Há alterações não salvas nesta O.S.\n\nOK = guardar um rascunho e continuar.\nCancelar = escolher se deseja descartar ou permanecer aqui.');
     if (guardar) {
@@ -1043,7 +1035,6 @@ async function confirmarSaidaComAlteracoes(destinoId = null) {
 }
 
 async function prepararAtualizacaoSegura() {
-    if (salvamentoManualEmAndamento || restaurandoDocumento) { mostrarToast('Atualização adiada: aguarde a operação atual.', true); return false; }
     if (typeof localforage === 'undefined') {
         if (formularioSujo) { mostrarToast('Atualização adiada: armazenamento indisponível para proteger o trabalho atual.', true); return false; }
         return true;
@@ -1052,7 +1043,6 @@ async function prepararAtualizacaoSegura() {
         // Mesmo que o usuário esteja olhando Histórico/Banco de Horas, o formulário em memória
         // pode conter alterações ainda não gravadas. Salva o snapshot diretamente antes do reload.
         if (formularioSujo && document.querySelector('.os-bloco')) {
-            await aguardarAssinaturas();
             await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
             return true;
         }
@@ -1208,7 +1198,6 @@ function cancelarAutoSavePendente() {
 
 function marcarFormularioAlterado() {
     if (restaurandoDocumento) return;
-    revisaoFormulario++;
     formularioSujo = true;
     atualizarIndicadorRascunho('Alterações aguardando proteção', 'edicao');
     cancelarAutoSavePendente();
@@ -2133,14 +2122,17 @@ function gerarMetadadosResumo(doc) {
     const datasServico = [];
     ordens.forEach(o => {
         [o?.dt, o?.dtInicio, o?.dtFim].forEach(v => { if (dataISOValida(String(v || ''))) datasServico.push(String(v)); });
+        if (Array.isArray(o?.diasExternos)) o.diasExternos.forEach(d => {
+            if (dataISOValida(String(d?.data || ''))) datasServico.push(String(d.data));
+        });
     });
-    datasServico.sort();
+    const datasServicoUnicas = [...new Set(datasServico)].sort();
     const totalFotos = ordens.reduce((s, o) => s + (Array.isArray(o?.fotos) ? o.fotos.length : 0), 0);
     const totalPecas = ordens.reduce((s, o) => s + (Array.isArray(o?.pecas) ? o.pecas.filter(p => p && (p.q || p.n || p.c)).length : 0), 0);
     const totalChecklists = ordens.reduce((s, o) => s + (o?.checklist?.modeloId ? 1 : 0), 0);
     const totalAnexosPdf = ordens.reduce((s, o) => s + (o?.anexoMediaId || o?.anexoBase64 ? 1 : 0), 0);
     return {
-        metaVersao: 94,
+        metaVersao: 108,
         id: doc.id, dataAtualizacao: doc.dataAtualizacao,
         clienteEmpresa: primeira.cliente || 'Desconhecido', nomeClienteFinal: doc.nomeClienteFinal || 'Desconhecido',
         tecnicoResumo: String(doc.tecnico || '').trim(),
@@ -2150,8 +2142,8 @@ function gerarMetadadosResumo(doc) {
         equipamentosPesquisa: valoresUnicos('equipamento').join(' | '),
         seriesPesquisa: valoresUnicos('serie').join(' | '),
         opsPesquisa: valoresUnicos('op').join(' | '),
-        datasServico,
-        dataServicoInicio: datasServico[0] || '', dataServicoFim: datasServico[datasServico.length - 1] || '',
+        datasServico: datasServicoUnicas,
+        dataServicoInicio: datasServicoUnicas[0] || '', dataServicoFim: datasServicoUnicas[datasServicoUnicas.length - 1] || '',
         totalOrdens: ordens.length, totalFotos, totalPecas, totalChecklists, totalAnexosPdf
     };
 }
@@ -2162,7 +2154,7 @@ async function garantirMetadadosHistoricoV94(historicoMeta) {
     const atualizado = [];
     for (const meta of historicoMeta) {
         if (!meta || !idLocalSeguro(String(meta.id || ''))) continue;
-        if (Number(meta.metaVersao || 0) >= 94) { atualizado.push(meta); continue; }
+        if (Number(meta.metaVersao || 0) >= 108) { atualizado.push(meta); continue; }
         const doc = await localforage.getItem(`os_doc_${meta.id}`);
         if (doc?.ordens) { atualizado.push(gerarMetadadosResumo(doc)); alterou = true; }
         else atualizado.push(meta);
@@ -2184,7 +2176,7 @@ async function reconstruirHistoricoAPartirDocumentos(chaves = null) {
             const doc = await localforage.getItem(chave);
             if (!doc || !Array.isArray(doc.ordens) || !doc.ordens.length || !idLocalSeguro(String(doc.id || ''))) continue;
             metas.push(gerarMetadadosResumo(doc));
-        } catch (erro) { throw new Error(`Não foi possível ler ${chave}. Recuperação do Histórico adiada.`, { cause: erro }); }
+        } catch (_) {}
     }
     if (!metas.length) return [];
     metas.sort((a,b) => String(b.dataAtualizacao || '').localeCompare(String(a.dataAtualizacao || '')));
@@ -2298,11 +2290,7 @@ async function confirmarExportacao() {
         let inputNome = document.getElementById('inputNomeBackup').value.trim() || `Backup_${dataLocalISO()}`;
         const historicoMeta = await obterHistoricoSalvo();
         const backupCompleto = { tipo: 'multi-os-backup', versaoFormato: 3, versaoApp: APP_VERSION, exportadoEm: new Date().toISOString(), historicoOS: [], bancoHoras: registosBancoHoras || [] };
-        for (const meta of historicoMeta) {
-            const docFull = await localforage.getItem(`os_doc_${meta.id}`);
-            if (!docFull) throw new Error(`A O.S. ${meta.id} não foi encontrada. Backup cancelado para evitar arquivo incompleto.`);
-            backupCompleto.historicoOS.push(await prepararDocumentoParaBackup(docFull));
-        }
+        for (const meta of historicoMeta) { const docFull = await localforage.getItem(`os_doc_${meta.id}`); if (docFull) backupCompleto.historicoOS.push(await prepararDocumentoParaBackup(docFull)); }
         const blob = new Blob([JSON.stringify(backupCompleto, null, 2)], { type: 'application/json' });
         if (blob.size > 100 * 1024 * 1024 && !confirm(`O backup tem ${(blob.size/1024/1024).toFixed(1)} MB e pode demorar para abrir em celulares. Deseja baixar mesmo assim?`)) return;
         if(urlDownloadGerado) URL.revokeObjectURL(urlDownloadGerado); urlDownloadGerado = URL.createObjectURL(blob);
@@ -2313,16 +2301,22 @@ async function confirmarExportacao() {
 }
 function validarDocumentoBackup(doc) {
     if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return false;
-    if (!validarEstruturaDocumento(doc)) return false;
+    if (!idLocalSeguro(doc.id) || !Array.isArray(doc.ordens)) return false;
     return doc.ordens.every(ordem => {
         if (!ordem || typeof ordem !== 'object' || Array.isArray(ordem)) return false;
         if (ordem.fotos !== undefined && !Array.isArray(ordem.fotos)) return false;
         if (ordem.pecas !== undefined && !Array.isArray(ordem.pecas)) return false;
-        if (Array.isArray(ordem.pecas) && !ordem.pecas.every(p => p && typeof p === 'object' && !Array.isArray(p)
-            && ['q', 'n', 'c'].every(k => p[k] === undefined || typeof p[k] === 'string' || typeof p[k] === 'number'))) return false;
+        if (ordem.diasExternos !== undefined) {
+            if (!Array.isArray(ordem.diasExternos)) return false;
+            if (!ordem.diasExternos.every(d => d && typeof d === 'object' && !Array.isArray(d)
+                && (!d.data || dataISOValida(d.data))
+                && (!d.chegada || horaValida(d.chegada))
+                && (!d.inicio || horaValida(d.inicio))
+                && (!d.fim || horaValida(d.fim)))) return false;
+        }
         if (ordem.anexoBase64 && !dataUrlPdfSegura(ordem.anexoBase64)) return false;
         if (ordem.anexoMediaId && !ordem.anexoBase64) return false;
-        if (Array.isArray(ordem.fotos) && !ordem.fotos.every(f => f && typeof f === 'object' && !Array.isArray(f) && dataUrlImagemSegura(f.b64) && (f.desc === undefined || typeof f.desc === 'string'))) return false;
+        if (Array.isArray(ordem.fotos) && !ordem.fotos.every(f => f && typeof f === 'object' && (!f.b64 || dataUrlImagemSegura(f.b64)) && (!f.mediaId || !!f.b64))) return false;
         return true;
     });
 }
@@ -2363,7 +2357,6 @@ function importarBackupJSON(event) {
     }
     const reader = new FileReader();
     reader.onload = async function(e) {
-      try { await executarComBloqueioBancoHoras(async () => {
         let rollbackDocs = new Map(); let historicoAnterior = null; let bancoHorasAnterior = null;
         try {
             const normalizado = normalizarBackupImportado(JSON.parse(e.target.result));
@@ -2376,9 +2369,7 @@ function importarBackupJSON(event) {
             }
 
             historicoAnterior = await obterHistoricoSalvo();
-            const horasAtuais = await localforage.getItem('banco_horas_data');
-            if (horasAtuais !== null && !Array.isArray(horasAtuais)) throw new Error('Banco de horas armazenado inválido');
-            bancoHorasAnterior = horasAtuais || [];
+            bancoHorasAnterior = Array.isArray(registosBancoHoras) ? [...registosBancoHoras] : [];
             for (const doc of normalizado.historicoOS) rollbackDocs.set(doc.id, await localforage.getItem(`os_doc_${doc.id}`));
 
             const novoHistorico = [...historicoAnterior];
@@ -2400,28 +2391,15 @@ function importarBackupJSON(event) {
             await carregarHistorico(); mostrarToast('Backup importado e validado!');
         } catch(err) {
             console.error('Erro ao importar backup:', err);
-            const falhasRollback = [];
-            const tentarRestaurar = async (operacao) => {
-                try { await operacao(); }
-                catch (rollbackErr) { falhasRollback.push(rollbackErr); console.error('Falha no rollback da importação:', rollbackErr); }
-            };
-            {
+            try {
                 for (const [id, antigo] of rollbackDocs) {
-                    await tentarRestaurar(() => antigo === null || antigo === undefined
-                        ? localforage.removeItem(`os_doc_${id}`)
-                        : localforage.setItem(`os_doc_${id}`, antigo));
+                    if (antigo === null || antigo === undefined) await localforage.removeItem(`os_doc_${id}`); else await localforage.setItem(`os_doc_${id}`, antigo);
                 }
-                if (historicoAnterior) await tentarRestaurar(() => localforage.setItem('historico_os', historicoAnterior));
-                if (bancoHorasAnterior) {
-                    registosBancoHoras = bancoHorasAnterior;
-                    await tentarRestaurar(() => localforage.setItem('banco_horas_data', bancoHorasAnterior));
-                }
-            }
-            mostrarToast(falhasRollback.length
-                ? 'Importação incompleta e falha ao restaurar parte dos dados anteriores. Preserve o arquivo de backup e confira o Histórico e o Banco de Horas antes de continuar.'
-                : 'Backup inválido ou importação incompleta. Nenhum dado novo foi mantido.', true);
+                if (historicoAnterior) await localforage.setItem('historico_os', historicoAnterior);
+                if (bancoHorasAnterior) { registosBancoHoras = bancoHorasAnterior; await localforage.setItem('banco_horas_data', bancoHorasAnterior); }
+            } catch (rollbackErr) { console.error('Falha no rollback da importação:', rollbackErr); }
+            mostrarToast('Backup inválido ou importação incompleta. Nenhum dado novo foi mantido.', true);
         }
-      }); } catch (erro) { mostrarToast(erro.message || 'Não foi possível iniciar a importação.', true); }
     };
     reader.onerror = () => mostrarToast('Não foi possível ler o ficheiro de backup.', true);
     reader.readAsText(file); event.target.value = '';
@@ -2473,15 +2451,13 @@ async function apagarDocumentoDefinitivo(id) {
     const lix = await obterLixeiraOS();
     try {
         await localforage.setItem('lixeira_os', lix.filter(m => m.id !== id));
-        // A limpeza posterior consulta todas as referências, inclusive rascunhos e outras O.S.
-        try { await localforage.removeItem(`trash_os_doc_${id}`); }
+        try { const docTrash = await localforage.getItem(`trash_os_doc_${id}`); if (docTrash) { for (const chave of idsMidiaDocumento(docTrash)) { await removerChaveMidiaComRelacionados(chave); } } await localforage.removeItem(`trash_os_doc_${id}`); }
         catch(e) { await localforage.setItem('lixeira_os', lix); throw e; }
         await carregarLixeira(); mostrarToast('OS excluída definitivamente.'); agendarLimpezaMidiasOrfas(800);
     } catch(e) { console.error(e); mostrarToast('Falha ao excluir definitivamente. A entrada da lixeira foi preservada quando possível.', true); }
 }
 
 async function limparTodoHistorico() {
-    if (salvamentoManualEmAndamento || restaurandoDocumento) { mostrarToast('Aguarde a operação atual antes de limpar o Histórico.', true); return; }
     if(!confirm('Mover TODAS as O.S. para a Lixeira? Elas poderão ser restauradas depois.')) return;
     try {
         const historicoMeta = await obterHistoricoSalvo();
@@ -2525,25 +2501,13 @@ function aplicarZoomPdf(novoZoom, focoClientX = null, focoClientY = null, zoomAn
 function zoomInPdf() { aplicarZoomPdf(currentZoom + 0.25); }
 function zoomOutPdf() { aplicarZoomPdf(currentZoom - 0.25); }
 
-async function carregarAssinaturaPad(pad, dataUrl) {
-    const anterior = pad.carregamentoAssinatura || Promise.resolve();
-    const operacao = anterior.then(() => pad.fromDataURL(dataUrl));
-    pad.carregamentoAssinatura = operacao;
-    try { await operacao; } finally { if (pad.carregamentoAssinatura === operacao) pad.carregamentoAssinatura = null; }
-}
-
-async function aguardarAssinaturas() {
-    await Promise.all([padTecnico, padCliente, padExpandido].map(p => p?.carregamentoAssinatura).filter(Boolean));
-}
-
 function resizeCanvasSeguro(canvas, pad, skipRestore = false) {
-    if (pad?.carregamentoAssinatura) return;
     if(!canvas) return; let dataURL = null; if(!skipRestore && pad && !pad.isEmpty()) dataURL = pad.toDataURL(); 
     const ratio = Math.max(window.devicePixelRatio || 1, 1);
     const width = canvas.offsetWidth || canvas.parentElement.offsetWidth || 300; const height = canvas.offsetHeight || canvas.parentElement.offsetHeight || 150;
     canvas.width = width * ratio; canvas.height = height * ratio;
     const ctx = canvas.getContext("2d"); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(ratio, ratio);
-    if (pad) pad.clear(); if(!skipRestore && dataURL && pad) void carregarAssinaturaPad(pad, dataURL).catch(e => registrarErroApp('redimensionarAssinatura', e)); 
+    if (pad) pad.clear(); if(!skipRestore && dataURL && pad) pad.fromDataURL(dataURL); 
 }
 
 function bloquearMultiTouch(canvas) {
@@ -2651,7 +2615,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const formOs = document.getElementById('osForm');
     if(formOs) {
         formOs.addEventListener('input', () => {
-            if (!restaurandoDocumento) marcarFormularioAlterado();
+            if (!restaurandoDocumento && !salvamentoManualEmAndamento) marcarFormularioAlterado();
         });
     }
 
@@ -2733,7 +2697,6 @@ async function atualizarEstadoSalvamentoAtual() {
 async function protegerRascunhoAtualAntesDeValidar() {
     if (typeof localforage === 'undefined' || !document.querySelector('.os-bloco')) return false;
     try {
-        await aguardarAssinaturas();
         const dados = recolherDadosDoFormulario();
         await salvarRascunhoPersistente(dados, true);
         atualizarIndicadorRascunho(`Rascunho protegido: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
@@ -2754,7 +2717,6 @@ async function autoSalvarRascunho(forcar = false) {
     const bloqueado = document.getElementById('lockStatus')?.textContent?.includes('BLOQUEADO');
     if (typeof localforage === 'undefined' || restaurandoDocumento || salvamentoManualEmAndamento || !novaOs || (!forcar && novaOs.classList.contains('hidden')) || (!forcar && bloqueado) || (!forcar && !clientePreenchido)) return false;
     try {
-        await aguardarAssinaturas();
         const dados = recolherDadosDoFormulario();
         await salvarRascunhoPersistente(dados, true);
         atualizarIndicadorRascunho(`Rascunho protegido: ${new Date().toLocaleTimeString('pt-BR')}`, 'rascunho');
@@ -2808,7 +2770,12 @@ async function obterOSDoHistoricoNaData(data) {
         try { doc = await localforage.getItem(`os_doc_${meta.id}`); } catch (_) { continue; }
         if (!doc || !Array.isArray(doc.ordens)) continue;
         doc.ordens.forEach((ordem, indice) => {
-            if (!ordem || ordem.dt !== data || ordem.cbServInterno || ordem.cbMontagemSala) return;
+            if (!ordem || ordem.cbServInterno || ordem.cbMontagemSala) return;
+            const dias = Array.isArray(ordem.diasExternos) && ordem.diasExternos.length
+                ? ordem.diasExternos
+                : [{ data: ordem.dt || '', chegada: ordem.hc || '', fim: ordem.hs || '' }];
+            const diaCorrespondente = dias.find(d => String(d?.data || '') === data);
+            if (!diaCorrespondente) return;
             encontrados.push({
                 documentoId: String(doc.id || meta.id || ''),
                 indice,
@@ -2816,8 +2783,8 @@ async function obterOSDoHistoricoNaData(data) {
                 cliente: String(ordem.cliente || '').trim(),
                 equipamento: String(ordem.equipamento || '').trim(),
                 local: String(ordem.cidadeVisita || '').trim(), // compatibilidade com O.S. criadas na v93/v94
-                chegada: horaValida(ordem.hc) ? ordem.hc : '',
-                saida: horaValida(ordem.hs) ? ordem.hs : ''
+                chegada: horaValida(diaCorrespondente.chegada) ? diaCorrespondente.chegada : '',
+                saida: horaValida(diaCorrespondente.fim) ? diaCorrespondente.fim : ''
             });
         });
     }
@@ -2883,30 +2850,16 @@ function sanitizarRegistoBancoHoras(reg) {
     return limpo;
 }
 
-async function executarComBloqueioBancoHoras(operacao) {
-    if (!globalThis.navigator?.locks?.request) throw new Error('Este navegador não oferece proteção de gravação entre abas. Atualize o navegador para salvar o Banco de Horas com segurança.');
-    return navigator.locks.request('multios-banco-horas', { mode: 'exclusive' }, operacao);
-}
-
 async function persistirBancoHorasSeguro(novosRegistos) {
-    const base = JSON.stringify((registosBancoHoras || []).map(sanitizarRegistoBancoHoras));
     try {
         if (!Array.isArray(novosRegistos)) throw new Error('Banco de horas inválido');
         const limpos = novosRegistos.map(sanitizarRegistoBancoHoras);
-        return await executarComBloqueioBancoHoras(async () => {
-            const bruto = await localforage.getItem('banco_horas_data');
-            if (bruto !== null && !Array.isArray(bruto)) throw new Error('Banco de horas armazenado inválido. Nenhuma alteração foi gravada.');
-            const anterior = (bruto || []).map(sanitizarRegistoBancoHoras);
-            if (JSON.stringify(anterior) !== base) {
-                registosBancoHoras = anterior;
-                throw new Error('O Banco de Horas mudou em outra aba. A lista foi atualizada; confira os dados e tente salvar novamente. Seus campos foram mantidos.');
-            }
-            await localforage.setItem('banco_horas_recovery_v66', bruto || []);
-            await localforage.setItem('banco_horas_data', limpos);
-            registosBancoHoras = limpos;
-            return true;
-        });
-    } catch(e) { console.error('Falha ao salvar banco de horas:', e); registrarErroApp('bancoHoras', e); mostrarToast(e.message || 'Não foi possível salvar o Banco de Horas.', true); return false; }
+        const anterior = await localforage.getItem('banco_horas_data');
+        if (Array.isArray(anterior)) await localforage.setItem('banco_horas_recovery_v66', anterior);
+        await localforage.setItem('banco_horas_data', limpos);
+        registosBancoHoras = limpos;
+        return true;
+    } catch(e) { console.error('Falha ao salvar banco de horas:', e); registrarErroApp('bancoHoras', e); mostrarToast('Não foi possível salvar o banco de horas. Os dados anteriores foram mantidos.', true); return false; }
 }
 
 async function sincronizarBancoHorasAPartirDaOS(dados) {
@@ -3908,7 +3861,7 @@ async function verificarRetornoCapturaPendente() {
         const draft = idLocalSeguro(String(pending.documentoId || '')) ? await obterRascunhoDocumento(String(pending.documentoId)) : await localforage.getItem('draft_os');
         let recuperado = false;
         if (draft?.ordens?.length && idade >= 0 && idade <= CAMERA_RESTORE_MAX_AGE_MS) {
-            await restaurarDadosParaFormulario(draft);
+            restaurarDadosParaFormulario(draft);
             mostrarToast('O Android reiniciou o app durante o uso da câmera. Sua O.S. foi recuperada automaticamente.');
             recuperado = true;
         }
@@ -4084,11 +4037,16 @@ function recolherDadosDoFormulario() {
     let dados = { id: documentoAtualId, dataAtualizacao: new Date().toISOString(), tecnico: document.getElementById('tecnico').value, nomeClienteFinal: document.getElementById('nomeClienteFinal').value, cargo: document.getElementById('cargo').value, setor: document.getElementById('setor').value, placaVeiculo: document.getElementById('placaVeiculo')?.value.trim().toUpperCase() || '', kmSaida: document.getElementById('kmSaida')?.value.trim() || '', kmChegada: document.getElementById('kmChegada')?.value.trim() || '', totalKm: document.getElementById('kmTotal')?.value.trim() || '', assinaturaTecnico: padTecnico && !padTecnico.isEmpty() ? padTecnico.toDataURL() : null, assinaturaCliente: padCliente && !padCliente.isEmpty() ? padCliente.toDataURL() : null, ordens: [] };
     document.querySelectorAll('.os-bloco').forEach(b => {
         const id = b.getAttribute('data-id');
+        const diasExternos = obterDiasExternosDoBloco(id);
+        const primeiroDiaExterno = diasExternos[0] || {};
+        const usarCronologiaExterna = !document.getElementById(`cbServInterno_${id}`).checked && !document.getElementById(`cbMontagemSala_${id}`).checked;
         let ordem = {
             cliente: getVal('cliente', id), osNum: getVal('osNum', id), equipamento: getVal('equipamento', id), modelo: getVal('modelo', id), serie: getVal('serie', id), tag: getVal('tag', id), op: getVal('op', id),
             cbOrcamento: document.getElementById(`cbOrcamento_${id}`).checked, cbInstalacao: document.getElementById(`cbInstalacao_${id}`).checked, cbServInterno: document.getElementById(`cbServInterno_${id}`).checked, cbServExterno: document.getElementById(`cbServExterno_${id}`).checked, cbGarantia: document.getElementById(`cbGarantia_${id}`).checked, cbMontagemSala: document.getElementById(`cbMontagemSala_${id}`).checked, cbContrato: !!document.getElementById(`cbContrato_${id}`)?.checked, cbQualificacao: !!document.getElementById(`cbQualificacao_${id}`)?.checked, cbServicoGarantia: !!document.getElementById(`cbServicoGarantia_${id}`)?.checked,
             descricao: getVal('descricao', id), pecas: [], liberacaoObs: getVal('liberacaoObs', id), stOk: document.getElementById(`stOk_${id}`).checked, stRes: document.getElementById(`stRes_${id}`).checked, reSim: document.getElementById(`reSim_${id}`).checked, reNao: document.getElementById(`reNao_${id}`).checked,
-            dt: getVal('dt', id), hc: getVal('hc', id), hi: getVal('hi', id), hs: getVal('hs', id), th: getVal('th', id), hiInterno: getVal('hiInterno', id), hfInterno: getVal('hfInterno', id), thInterno: getVal('thInterno', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id),
+            // Compatibilidade: dt/hc/hi/hs/th continuam espelhando o primeiro dia externo.
+            dt: usarCronologiaExterna ? (primeiroDiaExterno.data || getVal('dt', id)) : getVal('dt', id), hc: usarCronologiaExterna ? (primeiroDiaExterno.chegada || getVal('hc', id)) : getVal('hc', id), hi: usarCronologiaExterna ? (primeiroDiaExterno.inicio || getVal('hi', id)) : getVal('hi', id), hs: usarCronologiaExterna ? (primeiroDiaExterno.fim || getVal('hs', id)) : getVal('hs', id), th: usarCronologiaExterna ? (primeiroDiaExterno.total || getVal('th', id)) : getVal('th', id), diasExternos,
+            hiInterno: getVal('hiInterno', id), hfInterno: getVal('hfInterno', id), thInterno: getVal('thInterno', id), dtInicio: getVal('dtInicio', id), dtFim: getVal('dtFim', id), totalDias: getVal('totalDias', id),
             anexoMediaId: document.getElementById(`anexoMediaId_${id}`)?.value || null,
             anexoBase64: document.getElementById(`anexoBase64_${id}`)?.value || null, 
             anexoNome: document.getElementById(`anexoMediaId_${id}`)?.dataset.filename || document.getElementById(`anexoBase64_${id}`)?.dataset.filename || null, 
@@ -4101,32 +4059,20 @@ function recolherDadosDoFormulario() {
     }); return dados;
 }
 
-function validarEstruturaDocumento(doc) {
-    if (!doc || !idLocalSeguro(doc.id) || !Array.isArray(doc.ordens) || !doc.ordens.length) return false;
-    return doc.ordens.every(o => o && typeof o === 'object' && !Array.isArray(o)
-        && (o.pecas === undefined || (Array.isArray(o.pecas) && o.pecas.every(p => p && typeof p === 'object' && !Array.isArray(p))))
-        && (o.fotos === undefined || (Array.isArray(o.fotos) && o.fotos.every(f => f && typeof f === 'object' && !Array.isArray(f)))));
-}
-
-async function restaurarDadosParaFormulario(doc) {
-    if (!validarEstruturaDocumento(doc)) throw new Error('Documento inválido. O formulário atual foi preservado.');
-    cancelarAutoSavePendente(); restaurandoDocumento = true;
-    try {
-        await aguardarAssinaturas();
-        desbloquearEdicao(); documentoAtualId = doc.id; document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
-        if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
-        doc.ordens.forEach(o => adicionarBlocoOS(o));
-        ['tecnico','nomeClienteFinal','cargo','setor','placaVeiculo','kmSaida','kmChegada'].forEach(k => { const el = document.getElementById(k); if (el) el.value = doc[k] || ''; });
-        atualizarTotalKm();
-        await switchTab('novaOs');
-        await new Promise(resolve => setTimeout(resolve, 100));
-        atualizarVisibilidadeCamposPorBloco();
-        if(padTecnico && dataUrlImagemSegura(doc.assinaturaTecnico)) await carregarAssinaturaPad(padTecnico, doc.assinaturaTecnico);
-        if(padCliente && dataUrlImagemSegura(doc.assinaturaCliente)) { await carregarAssinaturaPad(padCliente, doc.assinaturaCliente); bloquearEdicao(); }
-        formularioSujo = false;
+function restaurarDadosParaFormulario(doc) {
+    cancelarAutoSavePendente(); restaurandoDocumento = true; formularioSujo = false;
+    desbloquearEdicao(); documentoAtualId = doc.id; document.getElementById('listaOrdensServico').innerHTML = ''; contadorOS = 0;
+    if(padTecnico) padTecnico.clear(); if(padCliente) padCliente.clear();
+    if(doc.ordens) doc.ordens.forEach(o => adicionarBlocoOS(o)); ['tecnico','nomeClienteFinal','cargo','setor','placaVeiculo','kmSaida','kmChegada'].forEach(k => { const el = document.getElementById(k); if (el) el.value = doc[k] || ''; });
+    atualizarTotalKm();
+    switchTab('novaOs');
+    setTimeout(() => {
+        if(document.getElementById('canvasTecnico') && padTecnico && dataUrlImagemSegura(doc.assinaturaTecnico)) padTecnico.fromDataURL(doc.assinaturaTecnico);
+        if(document.getElementById('canvasCliente') && padCliente && dataUrlImagemSegura(doc.assinaturaCliente)) { padCliente.fromDataURL(doc.assinaturaCliente); bloquearEdicao(); }
+        atualizarVisibilidadeCamposPorBloco(); restaurandoDocumento = false; formularioSujo = false;
         void atualizarEstadoSalvamentoAtual();
         agendarVerificacaoIntegridadeAtual(250, true);
-    } finally { restaurandoDocumento = false; }
+    }, 100);
 }
 
 function verificarServicoInternoGlobal() { return Array.from(document.querySelectorAll('.os-bloco')).every(b => document.getElementById(`cbServInterno_${b.getAttribute('data-id')}`).checked); }
@@ -4135,15 +4081,18 @@ function atualizarVisibilidadeCamposPorBloco() {
         const id = b.getAttribute('data-id'); const isInterno = document.getElementById(`cbServInterno_${id}`).checked; const isMontagem = document.getElementById(`cbMontagemSala_${id}`).checked;
         const cData = document.getElementById(`containerDataServico_${id}`);
         const cHoras = document.getElementById(`containerHoras_${id}`);
+        const cDiasExternos = document.getElementById(`containerDiasExternos_${id}`);
         const cHorasInterno = document.getElementById(`containerHorasInterno_${id}`);
         const cDias = document.getElementById(`containerDias_${id}`);
         const cReagendar = document.getElementById(`containerReagendar_${id}`);
         if (isMontagem) {
-            if(cData) cData.style.display = 'none'; if(cHoras) cHoras.style.display = 'none'; if(cHorasInterno) cHorasInterno.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'block';
+            if(cData) cData.style.display = 'none'; if(cHoras) cHoras.style.display = 'none'; if(cDiasExternos) cDiasExternos.style.display = 'none'; if(cHorasInterno) cHorasInterno.style.display = 'none'; if(cDias) cDias.style.display = 'grid'; calcDias(id); if(cReagendar) cReagendar.style.display = 'block';
         } else if (isInterno) {
-            if(cData) cData.style.display = 'grid'; if(cHoras) cHoras.style.display = 'none'; if(cHorasInterno) cHorasInterno.style.display = 'grid'; if(cDias) cDias.style.display = 'none'; calcHInterno(id); if(cReagendar) cReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true;
+            if(cData) cData.style.display = 'grid'; if(cHoras) cHoras.style.display = 'none'; if(cDiasExternos) cDiasExternos.style.display = 'none'; if(cHorasInterno) cHorasInterno.style.display = 'grid'; if(cDias) cDias.style.display = 'none'; calcHInterno(id); if(cReagendar) cReagendar.style.display = 'none'; if(document.getElementById(`reNao_${id}`)) document.getElementById(`reNao_${id}`).checked = true;
         } else {
-            if(cData) cData.style.display = 'grid'; if(cHoras) cHoras.style.display = 'grid'; if(cHorasInterno) cHorasInterno.style.display = 'none'; if(cDias) cDias.style.display = 'none'; calcH(id); if(cReagendar) cReagendar.style.display = 'block';
+            // v108: serviço externo usa lista ilimitada de dias. Os campos antigos ficam ocultos
+            // e são espelhados no primeiro dia para manter compatibilidade com documentos/backup antigos.
+            if(cData) cData.style.display = 'none'; if(cHoras) cHoras.style.display = 'none'; if(cDiasExternos) cDiasExternos.style.display = 'block'; if(cHorasInterno) cHorasInterno.style.display = 'none'; if(cDias) cDias.style.display = 'none'; recalcularResumoDiasExternos(id); if(cReagendar) cReagendar.style.display = 'block';
         }
     }); atualizarVisibilidadeClienteGeral();
 }
@@ -4159,7 +4108,7 @@ function abrirModalAssinatura(alvo) {
     alvoAssinaturaAtual = alvo;
     document.getElementById('tituloModalAssinatura').textContent = alvo === 'tecnico' ? 'Assinatura (Técnico)' : 'Assinatura (Cliente)';
     document.getElementById('modalAssinaturaExpandida').classList.remove('hidden'); document.body.style.overflow = 'hidden';
-    setTimeout(() => { if(padExpandido) padExpandido.clear(); resizeCanvasSeguro(document.getElementById('canvasExpandido'), padExpandido, true); const padFonte = alvo === 'tecnico' ? padTecnico : padCliente; if (padExpandido && padFonte && !padFonte.isEmpty()) void carregarAssinaturaPad(padExpandido, padFonte.toDataURL()).catch(e => registrarErroApp('abrirAssinatura', e)); }, 50);
+    setTimeout(() => { if(padExpandido) padExpandido.clear(); resizeCanvasSeguro(document.getElementById('canvasExpandido'), padExpandido, true); const padFonte = alvo === 'tecnico' ? padTecnico : padCliente; if (padExpandido && padFonte && !padFonte.isEmpty()) padExpandido.fromDataURL(padFonte.toDataURL()); }, 50);
 }
 
 function abrirAssinaturaPeloPreview(alvo) {
@@ -4173,11 +4122,9 @@ function fecharModalAssinatura(manterOrigemPreview = false) {
     document.body.style.overflow = previewAberto ? 'hidden' : '';
     if (!manterOrigemPreview) assinaturaAbertaPeloPreview = false;
 }
-function limparPadExpandido() { if(padExpandido?.carregamentoAssinatura) return; if(padExpandido) padExpandido.clear(); }
+function limparPadExpandido() { if(padExpandido) padExpandido.clear(); }
 
 async function confirmarAssinaturaExpandida() {
-    if (restaurandoDocumento || salvamentoManualEmAndamento) { mostrarToast('Aguarde a operação atual antes de confirmar a assinatura.', true); return; }
-    await aguardarAssinaturas();
     const veioDoPreview = assinaturaAbertaPeloPreview;
     const alvoConfirmado = alvoAssinaturaAtual;
     const padDestino = alvoConfirmado === 'tecnico' ? padTecnico : padCliente;
@@ -4189,11 +4136,10 @@ async function confirmarAssinaturaExpandida() {
             if (alvoConfirmado === 'cliente') desbloquearEdicao();
         } else {
             padDestino.clear();
-            await carregarAssinaturaPad(padDestino, padExpandido.toDataURL());
+            padDestino.fromDataURL(padExpandido.toDataURL());
             if (alvoConfirmado === 'cliente') bloquearEdicao();
         }
     }
-    marcarFormularioAlterado();
     fecharModalAssinatura(true);
     assinaturaAbertaPeloPreview = false;
     // Na pré-visualização a assinatura aparece no mesmo instante em que o modal fecha.
@@ -4209,7 +4155,7 @@ function toggleLock(locked) {
 }
 function bloquearEdicao() { toggleLock(true); mostrarToast('Formulário selado pela Assinatura do Cliente.'); }
 function desbloquearEdicao() { toggleLock(false); }
-function limparAssinatura(pad, isCliente = false) { if(pad?.carregamentoAssinatura) return; marcarFormularioAlterado(); if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); autoSalvarRascunho(); }
+function limparAssinatura(pad, isCliente = false) { if(pad) pad.clear(); if(isCliente) desbloquearEdicao(); autoSalvarRascunho(); }
 
 async function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden')); 
@@ -4226,7 +4172,6 @@ async function switchTab(tabId) {
 }
 
 async function iniciarNovaOS(forcarDescartarRascunho = false) {
-    if (salvamentoManualEmAndamento || restaurandoDocumento) { mostrarToast('Aguarde a operação atual antes de iniciar outra O.S.', true); return false; }
     if (!forcarDescartarRascunho && !await confirmarSaidaComAlteracoes(null)) return false;
     const idAnterior = documentoAtualId;
     cancelarAutoSavePendente(); salvamentoManualEmAndamento = true; restaurandoDocumento = true;
@@ -4266,7 +4211,7 @@ function adicionarBlocoOS(dados = null) {
             osManualValue = getVal('osNum', origemId);
         }
     }
-    const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco(); marcarFormularioAlterado(); autoSalvarRascunho();" class="text-gray-400 hover:text-red-600 transition-colors p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
+    const btnRemover = id > 1 ? `<button type="button" onclick="this.closest('.os-bloco').remove(); atualizarVisibilidadeCamposPorBloco(); autoSalvarRascunho();" class="text-gray-400 hover:text-red-600 transition-colors p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : '';
     const bloco = document.createElement('div'); bloco.className = "os-bloco bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden relative transition-all"; bloco.setAttribute('data-id', id);
     
     const genToggle = (tid, label, checked, oc = false) => `
@@ -4370,6 +4315,7 @@ function adicionarBlocoOS(dados = null) {
             <div>
                 <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-1">Cronometria</h4>
 
+                <!-- Campos legados: permanecem no DOM para compatibilidade, mas o serviço externo v108 usa diasExternos. -->
                 <div id="containerDataServico_${id}" class="grid grid-cols-1 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm mb-3">
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Data</label><input type="date" id="dt_${id}" value="${dataHoje}" class="w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono"></div>
                 </div>
@@ -4379,6 +4325,27 @@ function adicionarBlocoOS(dados = null) {
                     <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início do trabalho</label><input type="time" id="hi_${id}" class="native-time-safe w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono"></div>
                     <div class="min-w-0"><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Finalização</label><input type="time" id="hs_${id}" class="native-time-safe w-full min-w-0 max-w-full border-0 bg-gray-50 p-2 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500 font-mono" onchange="calcH(${id})"></div>
                     <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Total Horas</label><input type="text" id="th_${id}" class="w-full border-0 bg-gray-100 p-2 rounded text-sm text-blue-700 font-black font-mono text-center" readonly></div>
+                </div>
+
+                <div id="containerDiasExternos_${id}" class="dias-externos-card bg-white p-3 border border-gray-200 rounded-xl shadow-sm" style="display:none;">
+                    <div class="flex items-center justify-between gap-3 mb-3">
+                        <div>
+                            <div class="text-xs font-black text-gray-700 uppercase tracking-wider">Dias no cliente</div>
+                            <div class="text-[10px] text-gray-400 mt-0.5">Adicione quantos dias forem necessários para esta O.S.</div>
+                        </div>
+                        <button type="button" onclick="adicionarDiaExterno(${id})" class="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold whitespace-nowrap">+ Adicionar dia</button>
+                    </div>
+                    <div id="diasExternosLista_${id}" class="space-y-3"></div>
+                    <div class="dias-externos-resumo grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-200">
+                        <div class="rounded-lg bg-gray-50 px-3 py-2">
+                            <div class="text-[10px] font-bold text-gray-500 uppercase">Total de dias</div>
+                            <div id="totalDiasExternos_${id}" class="text-lg font-black text-gray-800">1 dia</div>
+                        </div>
+                        <div class="rounded-lg bg-blue-50 px-3 py-2">
+                            <div class="text-[10px] font-bold text-blue-600 uppercase">Total geral de horas</div>
+                            <div id="totalHorasExternas_${id}" class="text-lg font-black text-blue-700 font-mono">00:00</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="containerHorasInterno_${id}" class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-white p-3 border border-gray-200 rounded-lg shadow-sm" style="display:none;">
@@ -4427,6 +4394,15 @@ function adicionarBlocoOS(dados = null) {
         if (checklistRestaurado) gravarChecklistNoCampo(id, checklistRestaurado);
     }
     atualizarResumoChecklistOS(id);
+
+    // v108: inicializa a cronologia externa. Documentos antigos viram automaticamente Dia 1.
+    const diasExternosIniciais = Array.isArray(dados?.diasExternos) && dados.diasExternos.length
+        ? dados.diasExternos
+        : (dados && (dados.dt || dados.hc || dados.hi || dados.hs)
+            ? [{ data: dados.dt || dataHoje, chegada: dados.hc || '', inicio: dados.hi || '', fim: dados.hs || '' }]
+            : [{ data: dataHoje, chegada: '', inicio: '', fim: '' }]);
+    restaurarDiasExternos(id, diasExternosIniciais);
+
     // v90: defesa redundante — Número de OP permanece sempre opcional.
     const campoOp = document.getElementById(`op_${id}`);
     if (campoOp) { campoOp.required = false; campoOp.removeAttribute('required'); }
@@ -4439,7 +4415,7 @@ function adicionarBlocoOS(dados = null) {
         // Compatibilidade: documentos internos antigos usavam intervalo de datas. Mantemos esses campos
         // e aproveitamos a data inicial como data do serviço quando não houver data específica.
         if (dados.cbServInterno && !dados.dt && dados.dtInicio && document.getElementById(`dt_${id}`)) document.getElementById(`dt_${id}`).value = dados.dtInicio;
-        calcH(id); calcHInterno(id);
+        calcH(id); calcHInterno(id); recalcularResumoDiasExternos(id);
         if (dados.anexoMediaId || (dados.anexoBase64 && dataUrlPdfSegura(dados.anexoBase64))) { const mediaEl = document.getElementById(`anexoMediaId_${id}`); const b64 = document.getElementById(`anexoBase64_${id}`); let nomeAnexo = dados.anexoNome ? String(dados.anexoNome).replace(/^Anexado:\s*/i, '').trim() : ''; if (/^Anexado$/i.test(nomeAnexo)) nomeAnexo = ''; if (dados.anexoMediaId && mediaEl) { mediaEl.value = dados.anexoMediaId; if (nomeAnexo) mediaEl.dataset.filename = nomeAnexo; } else if (b64) { b64.value = dados.anexoBase64; if (nomeAnexo) b64.dataset.filename = nomeAnexo; } definirNomeAnexo(id, nomeAnexo); document.getElementById(`btnRemoverAnexo_${id}`).classList.remove('hidden'); }
         if(dados.pecas && dados.pecas.length > 0) dados.pecas.forEach(p => { 
             const pContainer = document.getElementById(`pecasContainer_${id}`); 
@@ -4459,7 +4435,6 @@ function adicionarBlocoOS(dados = null) {
     } else { addPecaRow(id); addPecaRow(id); }
     atualizarResumoChecklistOS(id);
     atualizarVisibilidadeCamposPorBloco();
-    if (!dados && id > 1) marcarFormularioAlterado();
 }
 
 function addPecaRow(id) {
@@ -4518,6 +4493,121 @@ function prepararPickerHoraNativo() {
         document.body.scrollLeft = 0;
         window.scrollTo(0, top);
     } catch (_) {}
+}
+
+function minutosIntervaloHoras(inicio, fim) {
+    if (!horaValida(inicio) || !horaValida(fim)) return 0;
+    const [ih, im] = inicio.split(':').map(Number);
+    const [fh, fm] = fim.split(':').map(Number);
+    let total = (fh * 60 + fm) - (ih * 60 + im);
+    if (total < 0) total += 1440;
+    return total;
+}
+
+function formatarDuracaoMinutos(minutos) {
+    const total = Math.max(0, Number(minutos) || 0);
+    return `${String(Math.floor(total / 60)).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
+}
+
+function obterDiasExternosDoBloco(id) {
+    const lista = document.getElementById(`diasExternosLista_${id}`);
+    if (!lista) return [];
+    return [...lista.querySelectorAll('.dia-externo-row')].map(row => {
+        const data = row.querySelector('.dia-ext-data')?.value || '';
+        const chegada = row.querySelector('.dia-ext-chegada')?.value || '';
+        const inicio = row.querySelector('.dia-ext-inicio')?.value || '';
+        const fim = row.querySelector('.dia-ext-fim')?.value || '';
+        return { data, chegada, inicio, fim, total: calcularIntervaloHoras(chegada, fim) };
+    }).filter(d => d.data || d.chegada || d.inicio || d.fim);
+}
+
+function adicionarDiaExterno(id, dadosDia = null) {
+    const lista = document.getElementById(`diasExternosLista_${id}`);
+    if (!lista) return;
+    const row = document.createElement('div');
+    row.className = 'dia-externo-row rounded-xl border border-gray-200 bg-gray-50/50 p-3';
+    let dataPadrao = dataLocalISO();
+    if (!dadosDia && lista.lastElementChild) {
+        const ultimaData = lista.lastElementChild.querySelector('.dia-ext-data')?.value || '';
+        if (dataISOValida(ultimaData)) {
+            const [ano, mes, dia] = ultimaData.split('-').map(Number);
+            const seguinte = new Date(Date.UTC(ano, mes - 1, dia + 1));
+            dataPadrao = seguinte.toISOString().slice(0,10);
+        }
+    }
+    const data = dadosDia?.data || dataPadrao;
+    const chegada = dadosDia?.chegada || '';
+    const inicio = dadosDia?.inicio || '';
+    const fim = dadosDia?.fim || '';
+    row.innerHTML = `
+        <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="dia-externo-titulo text-[11px] font-black text-gray-600 uppercase tracking-wider">Dia ${lista.children.length + 1}</span>
+            <button type="button" onclick="removerDiaExterno(${id}, this)" class="dia-externo-remover w-8 h-8 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 inline-flex items-center justify-center" title="Remover este dia" aria-label="Remover este dia">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+            <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Data</label><input type="date" class="dia-ext-data w-full border border-gray-200 bg-white p-2 rounded-lg text-sm font-mono" value="${escapeHTML(data)}" onchange="recalcularResumoDiasExternos(${id})"></div>
+            <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chegada ao cliente</label><input type="time" class="dia-ext-chegada native-time-safe w-full border border-gray-200 bg-white p-2 rounded-lg text-sm font-mono" value="${escapeHTML(chegada)}" onchange="recalcularResumoDiasExternos(${id})"></div>
+            <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Início do trabalho</label><input type="time" class="dia-ext-inicio native-time-safe w-full border border-gray-200 bg-white p-2 rounded-lg text-sm font-mono" value="${escapeHTML(inicio)}" onchange="recalcularResumoDiasExternos(${id})"></div>
+            <div><label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Finalização</label><input type="time" class="dia-ext-fim native-time-safe w-full border border-gray-200 bg-white p-2 rounded-lg text-sm font-mono" value="${escapeHTML(fim)}" onchange="recalcularResumoDiasExternos(${id})"></div>
+        </div>`;
+    lista.appendChild(row);
+    renumerarDiasExternos(id);
+    recalcularResumoDiasExternos(id);
+    if (!restaurandoDocumento && !salvamentoManualEmAndamento) marcarFormularioAlterado();
+}
+
+function removerDiaExterno(id, botao) {
+    const lista = document.getElementById(`diasExternosLista_${id}`);
+    const row = botao?.closest('.dia-externo-row');
+    if (!lista || !row) return;
+    if (lista.children.length <= 1) {
+        row.querySelectorAll('input').forEach(input => input.value = input.type === 'date' ? dataLocalISO() : '');
+    } else {
+        row.remove();
+    }
+    renumerarDiasExternos(id);
+    recalcularResumoDiasExternos(id);
+    if (!restaurandoDocumento && !salvamentoManualEmAndamento) marcarFormularioAlterado();
+}
+
+function renumerarDiasExternos(id) {
+    const lista = document.getElementById(`diasExternosLista_${id}`);
+    if (!lista) return;
+    [...lista.querySelectorAll('.dia-externo-row')].forEach((row, idx) => {
+        const titulo = row.querySelector('.dia-externo-titulo');
+        if (titulo) titulo.textContent = `Dia ${idx + 1}`;
+    });
+}
+
+function restaurarDiasExternos(id, dias) {
+    const lista = document.getElementById(`diasExternosLista_${id}`);
+    if (!lista) return;
+    lista.innerHTML = '';
+    const validos = Array.isArray(dias) && dias.length ? dias : [{ data: dataLocalISO(), chegada:'', inicio:'', fim:'' }];
+    validos.forEach(d => adicionarDiaExterno(id, d));
+    recalcularResumoDiasExternos(id);
+}
+
+function recalcularResumoDiasExternos(id) {
+    const dias = obterDiasExternosDoBloco(id);
+    const datasUnicas = new Set(dias.map(d => d.data).filter(Boolean));
+    const minutosTotais = dias.reduce((soma, d) => soma + minutosIntervaloHoras(d.chegada, d.fim), 0);
+    const totalDias = document.getElementById(`totalDiasExternos_${id}`);
+    const totalHoras = document.getElementById(`totalHorasExternas_${id}`);
+    const qtdDias = datasUnicas.size || (dias.length ? 1 : 0);
+    if (totalDias) totalDias.textContent = `${qtdDias} ${qtdDias === 1 ? 'dia' : 'dias'}`;
+    if (totalHoras) totalHoras.textContent = formatarDuracaoMinutos(minutosTotais);
+
+    // Espelha o primeiro dia nos campos legados para Histórico/backup/compatibilidade.
+    const primeiro = dias[0] || {};
+    const mapa = { dt: primeiro.data || '', hc: primeiro.chegada || '', hi: primeiro.inicio || '', hs: primeiro.fim || '', th: primeiro.total || '' };
+    Object.entries(mapa).forEach(([campo, valor]) => {
+        const el = document.getElementById(`${campo}_${id}`);
+        if (el) el.value = valor;
+    });
+    return { dias, qtdDias, minutosTotais, totalHoras: formatarDuracaoMinutos(minutosTotais) };
 }
 
 function calcH(id) {
@@ -4589,19 +4679,17 @@ function validarCamposObrigatorios() {
 }
 
 async function salvarDocumento(silencioso = false) {
-    if (salvamentoManualEmAndamento || restaurandoDocumento) return false;
     const btnSalvar = document.getElementById('btnSalvarOs');
     if (!silencioso && btnSalvar && btnSalvar.disabled) return false;
     cancelarAutoSavePendente();
     if (!silencioso && btnSalvar) btnSalvar.disabled = true;
-    salvamentoManualEmAndamento = true;
 
     // v87: antes de validar ou tentar o salvamento oficial, protege o estado atual em rascunho.
     // Assim, mesmo que um único campo obrigatório esteja vazio, o trabalho longo não fica desprotegido.
     if (!silencioso) {
-        if (typeof localforage === 'undefined') { mostrarToast('Armazenamento local indisponível. Não foi possível proteger o trabalho.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
+        if (typeof localforage === 'undefined') { mostrarToast('Armazenamento local indisponível. Não foi possível proteger o trabalho.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
         const rascunhoProtegido = await protegerRascunhoAtualAntesDeValidar();
-        if (!rascunhoProtegido) { mostrarToast('Não foi possível proteger o rascunho antes de salvar. O salvamento foi cancelado por segurança.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
+        if (!rascunhoProtegido) { mostrarToast('Não foi possível proteger o rascunho antes de salvar. O salvamento foi cancelado por segurança.', true); if (btnSalvar) btnSalvar.disabled = false; return false; }
     }
 
     salvamentoManualEmAndamento = true;
@@ -4609,12 +4697,9 @@ async function salvarDocumento(silencioso = false) {
     if (typeof localforage === 'undefined') { if(!silencioso) mostrarToast('Armazenamento local indisponível.', true); if (btnSalvar) btnSalvar.disabled = false; salvamentoManualEmAndamento = false; return false; }
     let dados = null; let documentoAnterior = null; let historicoAnterior = null;
     let salvamentoConfirmado = false;
-    let revisaoSalva = null;
     try {
         await aprenderPecasDaOS();
-        await aguardarAssinaturas();
         dados = recolherDadosDoFormulario();
-        revisaoSalva = revisaoFormulario;
         const integridadeMidias = await verificarIntegridadeMidiasDocumento(dados, { contexto:'salvamento_oficial', registrar:true });
         ultimoResultadoIntegridadeMidias = integridadeMidias; ultimaVerificacaoMidiasTs = Date.now(); atualizarIndicadorIntegridadeMidias(integridadeMidias);
         if (!integridadeMidias.ok) throw new Error(`Salvamento oficial cancelado: ${integridadeMidias.faltantes[0] || 'há mídia ausente'}. O rascunho foi preservado.`);
@@ -4638,24 +4723,10 @@ async function salvarDocumento(silencioso = false) {
         }
 
         salvamentoConfirmado = true;
-        if (documentoAtualId !== dados.id || revisaoFormulario !== revisaoSalva) {
-            // O snapshot antigo foi salvo; preserva também a edição que chegou durante a gravação.
-            formularioSujo = true;
-            await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
-            atualizarIndicadorRascunho('Alterações recentes protegidas em rascunho; salve novamente.', 'rascunho');
-            if (!silencioso) mostrarToast('A versão anterior foi salva. Suas novas alterações estão em rascunho; clique em Salvar novamente.');
-            return false;
-        }
         formularioSujo = false;
         // A remoção do rascunho é pós-confirmação: se falhar, não transforma um salvamento válido em falha.
         try { await removerRascunhoPersistente(dados.id); }
         catch (e) { console.warn('O.S. salva, mas o rascunho antigo não pôde ser removido:', e); registrarErroApp('removerRascunhoAposSalvar', e); }
-        if (documentoAtualId !== dados.id || revisaoFormulario !== revisaoSalva) {
-            formularioSujo = true;
-            await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
-            atualizarIndicadorRascunho('Alterações recentes protegidas em rascunho; salve novamente.', 'rascunho');
-            return false;
-        }
         atualizarIndicadorRascunho(`O.S. salva no Histórico: ${new Date().toLocaleTimeString('pt-BR')}`, 'historico');
         if(!silencioso) mostrarToast('O.S. salva e confirmada no Histórico!');
         void solicitarPersistenciaArmazenamento();
@@ -4667,12 +4738,6 @@ async function salvarDocumento(silencioso = false) {
         try { if(!silencioso) await carregarHistorico(); }
         catch (e) { console.warn('O.S. salva, mas a atualização visual do Histórico falhou:', e); registrarErroApp('atualizarHistoricoAposSalvar', e); }
         agendarLimpezaMidiasOrfas(1200);
-        if (documentoAtualId !== dados.id || revisaoFormulario !== revisaoSalva) {
-            formularioSujo = true;
-            await salvarRascunhoPersistente(recolherDadosDoFormulario(), true);
-            atualizarIndicadorRascunho('Alterações recentes protegidas em rascunho; salve novamente.', 'rascunho');
-            return false;
-        }
         return true;
     } catch(e) {
         console.error('Erro ao salvar documento:', e); registrarErroApp('salvarDocumento', e);
@@ -4682,11 +4747,7 @@ async function salvarDocumento(silencioso = false) {
                 await localforage.setItem('historico_os', historicoAnterior);
             } catch (rollbackErr) { console.error('Falha no rollback do salvamento:', rollbackErr); registrarErroApp('rollbackSalvarDocumento', rollbackErr); }
         }
-        if(!silencioso && salvamentoConfirmado) {
-            formularioSujo = true;
-            atualizarIndicadorRascunho('Falha ao proteger as alterações recentes. Não feche esta O.S.', 'erro');
-            mostrarToast('A versão anterior foi salva, mas não foi possível proteger as alterações recentes. Não feche esta O.S.; tente salvar novamente.', true);
-        } else if(!silencioso) {
+        if(!silencioso) {
             atualizarIndicadorRascunho('Rascunho preservado; O.S. não confirmada no Histórico', 'rascunho');
             mostrarToast(`Não foi possível confirmar a O.S. no Histórico. O rascunho foi preservado. ${e?.message || ''}`.trim(), true);
         }
@@ -4855,7 +4916,7 @@ async function abrirRascunhoHistorico(id) {
             await carregarRascunhosHistorico();
             return;
         }
-        await restaurarDadosParaFormulario(draft);
+        restaurarDadosParaFormulario(draft);
         mostrarToast('Rascunho recuperado. Continue o preenchimento normalmente.');
     } catch (e) {
         console.error('Falha ao abrir rascunho:', e);
@@ -4993,12 +5054,11 @@ async function carregarDocumentoParaEdicao(id) {
             if (tDraft > tSalvo && confirm('Existe um rascunho mais recente desta O.S.\n\nDeseja recuperar as alterações não salvas?')) docAbrir = draft;
         }
 
-        await restaurarDadosParaFormulario(docAbrir);
+        restaurarDadosParaFormulario(docAbrir);
         mostrarToast(docAbrir === draft ? 'Rascunho mais recente recuperado.' : (integridadeOk === false ? 'Carregado com alerta de integridade.' : 'Carregado.'));
     } catch(e) { console.error(e); registrarErroApp('carregarDocumentoParaEdicao', e); mostrarToast('Não foi possível abrir esta O.S.', true); }
 }
 async function apagarDocumento(id) {
-    if (salvamentoManualEmAndamento || restaurandoDocumento) { mostrarToast('Aguarde a operação atual antes de excluir uma O.S.', true); return; }
     if(!confirm('Mover esta O.S. para a Lixeira?')) return;
     try { await moverDocumentoParaLixeira(id); if(id === documentoAtualId) await iniciarNovaOS(true); await carregarHistorico(); mostrarToast('O.S. movida para a Lixeira.'); }
     catch(e) { console.error(e); registrarErroApp('apagarDocumento', e); mostrarToast('Não foi possível mover a O.S. para a Lixeira.', true); }
@@ -5056,13 +5116,27 @@ async function construirPDFBytes(onProgressCallback) {
             docOS.text(`DATA FINAL: ${getVal('dtFim', id).split('-').reverse().join('/')}`, 75, cy);
             docOS.text(`TOTAL DE DIAS: ${getVal('totalDias', id)}`, 140, cy);
         } else if (!isItemInterno) {
-            docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy); cy+=10;
-            docOS.text(`DATA: ${getVal('dt', id).split('-').reverse().join('/')}`, 15, cy);
-            docOS.text(`CHEGADA CLIENTE: ${getVal('hc', id)}`, 65, cy);
-            docOS.text(`INÍCIO TRABALHO: ${getVal('hi', id)}`, 130, cy);
-            cy+=6;
-            docOS.text(`FINALIZAÇÃO: ${getVal('hs', id)}`, 15, cy);
-            docOS.text(`TOTAL HORAS: ${getVal('th', id)}`, 75, cy);
+            docOS.text(`Reagendar: ${cb('reSim_'+id)} Sim  ${cb('reNao_'+id)} Não`, 120, cy); cy+=8;
+            const resumoExt = recalcularResumoDiasExternos(id);
+            const diasExt = resumoExt.dias.length ? resumoExt.dias : [{ data:getVal('dt',id), chegada:getVal('hc',id), inicio:getVal('hi',id), fim:getVal('hs',id) }];
+            const corpoDias = diasExt.map(d => [
+                String(d.data || '').split('-').reverse().join('/'), d.chegada || '', d.inicio || '', d.fim || ''
+            ]);
+            docOS.autoTable({
+                startY: cy,
+                margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 },
+                theme: 'grid',
+                head: [['DATA', 'CHEGADA CLIENTE', 'INÍCIO TRABALHO', 'FINALIZAÇÃO']],
+                body: corpoDias,
+                styles: { fontSize: 8, cellPadding: 2.2, lineWidth: 0.2, lineColor: [160,160,160], halign:'center' },
+                headStyles: { fillColor: [71,85,105], textColor: [255,255,255], fontStyle:'bold' }
+            });
+            cy = docOS.lastAutoTable.finalY + 6;
+            if (cy > 268) { docOS.addPage(); cy = margemTopoSegura; }
+            docOS.setFont('helvetica','bold');
+            docOS.text(`TOTAL DE DIAS: ${resumoExt.qtdDias}`, 15, cy);
+            docOS.text(`TOTAL HORAS: ${resumoExt.totalHoras}`, 75, cy);
+            docOS.setFont('helvetica','normal');
         } else {
             cy+=10;
             const dataInterna = getVal('dt', id) || getVal('dtInicio', id);
@@ -5190,7 +5264,7 @@ async function construirPDFBytes(onProgressCallback) {
                 anexoPages.forEach((p) => masterPdf.addPage(p));
             } catch (e) {
                 console.error('Falha ao incorporar PDF anexo:', e);
-                throw new Error(`PDF cancelado: o anexo da O.S. ${getVal('osNum', id) || id} não pôde ser incorporado. Substitua ou remova o anexo antes de gerar o relatório.`, { cause: e });
+                mostrarToast(`Aviso: O PDF Anexo da OS #${id} não pôde ser incorporado.`, true);
             }
         }
     }
@@ -5590,5 +5664,3 @@ async function gerarPDFConsolidado() {
         btn.disabled = false; btnTxt.innerText = "Gerar PDF & Partilhar";
     }
 }
-
-

@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v109';
+const CACHE_NAME = 'multios-pro-v108';
 
 // v81: todos os recursos necessários ao funcionamento do Multi-OS ficam no próprio projeto.
 // A nova versão só instala se TODOS estes arquivos existirem. Isso evita instalar uma versão
@@ -31,27 +31,20 @@ const ASSETS_CRITICOS = [
   './vendor/pdf.worker.min.js'
 ];
 
-// Cada versão é instalada por completo e permanece imutável enquanto estiver em uso.
 function respostaCacheavel(response) {
   return Boolean(response) && response.ok;
 }
 
+async function cachearAssetObrigatorio(cache, asset) {
+  const resposta = await fetch(asset, { cache: 'no-store' });
+  if (!respostaCacheavel(resposta)) throw new Error(`Asset crítico indisponível: ${asset}`);
+  await cache.put(asset, resposta.clone());
+}
+
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
-    const respostas = await Promise.all(ASSETS_CRITICOS.map(async asset => {
-      const url = new URL(asset, self.location.href);
-      url.searchParams.set('v', '109');
-      const resposta = await fetch(url.href, { cache: 'no-store' });
-      if (!respostaCacheavel(resposta)) throw new Error(`Asset crítico indisponível: ${asset}`);
-      return [asset, resposta];
-    }));
     const cache = await caches.open(CACHE_NAME);
-    try {
-      for (const [asset, resposta] of respostas) await cache.put(asset, resposta);
-    } catch (erro) {
-      await caches.delete(CACHE_NAME);
-      throw erro;
-    }
+    await Promise.all(ASSETS_CRITICOS.map(asset => cachearAssetObrigatorio(cache, asset)));
   })());
 });
 
@@ -59,34 +52,91 @@ self.addEventListener('message', event => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
-// Preserva caches anteriores: abas ainda abertas podem pedir scripts da versão anterior.
-// Não assume controle de páginas abertas antes da primeira instalação.
 self.addEventListener('activate', event => {
-  event.waitUntil(Promise.resolve());
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+        .map(key => caches.delete(key))
+    );
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
+
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  const mesmaOrigem = url.origin === self.location.origin;
+  const navegacao = request.mode === 'navigate';
 
-  const base = new URL('./', self.location.href);
-  const asset = ASSETS_CRITICOS.find(item => new URL(item, base).pathname === url.pathname);
-  if (request.mode !== 'navigate' && !asset) return;
-  if (request.mode === 'navigate' && url.pathname !== base.pathname && asset !== './index.html') return;
+  // Navegação: tenta a rede para descobrir atualizações; se estiver offline, abre o index cacheado.
+  if (navegacao) {
+    event.respondWith((async () => {
+      try {
+        const resposta = await fetch(request);
+        if (respostaCacheavel(resposta)) {
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put('./index.html', resposta.clone());
+        }
+        return resposta;
+      } catch (_) {
+        const cacheado = await caches.match('./index.html', { ignoreSearch: true });
+        if (cacheado) return cacheado;
+        return new Response(
+          '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Multi-OS Pro</title><body><h1>Multi-OS Pro</h1><p>Sem conexão e o aplicativo ainda não concluiu a instalação offline.</p></body></html>',
+          { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
+      }
+    })());
+    return;
+  }
 
+  // v81 não usa bibliotecas de terceiros em tempo de execução. Só intercepta recursos do próprio app.
+  if (!mesmaOrigem) return;
+
+  // Arquivos com ?v=95: rede primeiro para não misturar versões; cache local como fallback offline.
+  if (url.searchParams.has('v')) {
+    event.respondWith((async () => {
+      try {
+        const resposta = await fetch(request);
+        if (respostaCacheavel(resposta)) {
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put(request, resposta.clone());
+        }
+        return resposta;
+      } catch (_) {
+        const cacheado = await caches.match(request, { ignoreSearch: true });
+        return cacheado || new Response('', { status: 504, statusText: 'Gateway Timeout' });
+      }
+    })());
+    return;
+  }
+
+  // Demais arquivos locais: cache-first + atualização silenciosa em segundo plano.
   event.respondWith((async () => {
-    const versao = url.searchParams.get('v');
-    const nomeCache = request.mode !== 'navigate' && /^\d+$/.test(versao || '')
-      ? CACHE_PREFIX + 'v' + versao : CACHE_NAME;
-    const cache = await caches.open(nomeCache);
-    const resposta = await cache.match(request.mode === 'navigate' ? './index.html' : asset);
-    // Nunca preenche um snapshot antigo com arquivos da publicação atual.
-    return resposta || new Response('Versão offline indisponível. Reabra o aplicativo para atualizar.', {
-      status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-    });
+    const cacheado = await caches.match(request, { ignoreSearch: true });
+
+    const atualizar = async () => {
+      try {
+        const resposta = await fetch(request);
+        if (!respostaCacheavel(resposta)) return null;
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put(request, resposta.clone());
+        return resposta;
+      } catch (_) {
+        return null;
+      }
+    };
+
+    if (cacheado) {
+      event.waitUntil(atualizar());
+      return cacheado;
+    }
+
+    const rede = await atualizar();
+    return rede || new Response('', { status: 504, statusText: 'Gateway Timeout' });
   })());
 });
-
-
