@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v110';
-const CACHE_VERSION = '110';
+const CACHE_NAME = 'multios-pro-v111';
+const CACHE_VERSION = '111';
 
 const ASSETS_CRITICOS = [
   './index.html','./app.js','./style.css','./bancoPecas.js',
