@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=112">
+    <link rel="manifest" href="./manifest.json?v=113">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=112"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=112"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=112"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=112"></script>
-    <script src="./vendor/pdf-lib.min.js?v=112"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=112"></script>
-    <script src="./vendor/localforage.min.js?v=112"></script>
-    <script src="./vendor/pdf.min.js?v=112"></script>
+    <script src="./vendor/tailwindcss.js?v=113"></script>
+    <script src="./vendor/jspdf.umd.min.js?v=113"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js?v=113"></script>
+    <script src="./vendor/signature_pad.umd.min.js?v=113"></script>
+    <script src="./vendor/pdf-lib.min.js?v=113"></script>
+    <script src="./vendor/fontkit.umd.min.js?v=113"></script>
+    <script src="./vendor/localforage.min.js?v=113"></script>
+    <script src="./vendor/pdf.min.js?v=113"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=112').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=113').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=112';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=113';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=112">
+    <link rel="stylesheet" href="style.css?v=113">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -463,6 +463,8 @@
 
         /* v96: tela inicial de acesso local. Usa o mesmo app_pin das versões anteriores. */
         body.login-locked { overflow:hidden !important; }
+        /* v113: estados da tela de acesso não dependem do Tailwind para ficar ocultos durante atualização. */
+        #loginGate[hidden], #loginGate [hidden] { display:none !important; }
         .login-gate {
             position:fixed; inset:0; z-index:300; display:flex; align-items:center; justify-content:center;
             padding:22px; overflow:auto; background:
@@ -611,7 +613,7 @@
                     </div>
                     <div><div class="login-brand-title">Multi-OS <span style="color:#60a5fa">PRO</span></div><div class="login-brand-sub">Enterprise</div></div>
                 </div>
-                <span class="login-version">v103</span>
+                <span class="login-version">v113</span>
             </div>
 
             <div class="login-avatar-wrap">
@@ -629,7 +631,7 @@
                 <p class="login-copy">Verificando a segurança local do aplicativo…</p>
             </div>
 
-            <div id="loginEntrar" class="hidden">
+            <div id="loginEntrar" class="hidden" hidden>
                 <h2 class="login-heading">Bem-vindo de volta</h2>
                 <p class="login-copy">Digite a mesma senha que você já utilizava para proteger o Histórico.</p>
                 <label class="login-label" for="loginSenha">Senha de acesso</label>
@@ -637,7 +639,7 @@
                 <button type="button" class="login-primary" onclick="entrarTelaAcesso()">Entrar no aplicativo</button>
             </div>
 
-            <div id="loginCriar" class="hidden">
+            <div id="loginCriar" class="hidden" hidden>
                 <h2 class="login-heading">Criar senha de acesso</h2>
                 <p class="login-copy">Ainda não existe uma senha neste aparelho. Crie uma senha numérica de 4 a 12 dígitos. Ela ficará salva localmente.</p>
                 <div class="login-create-grid">
@@ -647,12 +649,12 @@
                 <button type="button" class="login-primary" onclick="criarSenhaTelaAcesso()">Criar senha e entrar</button>
             </div>
 
-            <div id="loginRecuperar" class="hidden">
+            <div id="loginRecuperar" class="hidden" hidden>
                 <h2 class="login-heading">Proteção de dados ativada</h2>
                 <p class="login-copy">O aplicativo detectou que este aparelho já possuía dados ou senha, mas o armazenamento local não respondeu como esperado.</p>
                 <div id="loginRecuperarTexto" class="login-recovery-box">Não crie uma nova senha agora. Tente recuperar o armazenamento primeiro.</div>
                 <button type="button" class="login-primary" onclick="tentarRecuperarAcesso()">Tentar recuperar dados</button>
-                <button id="loginCriarComDados" type="button" class="login-secondary hidden" onclick="autorizarCriarSenhaComDados()">Criar senha mantendo os dados encontrados</button>
+                <button id="loginCriarComDados" type="button" class="login-secondary hidden" hidden onclick="autorizarCriarSenhaComDados()">Criar senha mantendo os dados encontrados</button>
             </div>
             <div id="loginStatus" class="login-status" aria-live="polite"></div>
             <div class="login-security-note">A senha protege o acesso pela interface do Multi-OS neste dispositivo. Seus dados continuam armazenados localmente para funcionamento offline.</div>
@@ -1297,8 +1299,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=112"></script>
-    <script src="bancoPecas.js?v=112"></script>
-    <script src="app.js?v=112"></script>
+    <script src="checklists/checklists.js?v=113"></script>
+    <script src="bancoPecas.js?v=113"></script>
+    <script src="app.js?v=113"></script>
 </body>
 </html>

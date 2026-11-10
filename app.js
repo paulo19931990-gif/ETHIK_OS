@@ -875,7 +875,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 112;
+const APP_VERSION = 113;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
 const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
@@ -1464,10 +1464,17 @@ function mostrarModoTelaAcesso(modo) {
     const entrar = document.getElementById('loginEntrar');
     const criar = document.getElementById('loginCriar');
     const recuperar = document.getElementById('loginRecuperar');
-    carregar?.classList.toggle('hidden', modo !== 'carregando');
-    entrar?.classList.toggle('hidden', modo !== 'entrar');
-    criar?.classList.toggle('hidden', modo !== 'criar');
-    recuperar?.classList.toggle('hidden', modo !== 'recuperar');
+    const estados = [
+        [carregar, modo === 'carregando'],
+        [entrar, modo === 'entrar'],
+        [criar, modo === 'criar'],
+        [recuperar, modo === 'recuperar']
+    ];
+    estados.forEach(([el, ativo]) => {
+        if (!el) return;
+        el.hidden = !ativo;
+        el.classList.toggle('hidden', !ativo);
+    });
     setStatusTelaAcesso('');
     setTimeout(() => {
         if (modo === 'entrar') document.getElementById('loginSenha')?.focus();
@@ -1480,7 +1487,10 @@ function mostrarRecuperacaoAcesso(mensagem, permitirCriarComDados = false) {
     const texto = document.getElementById('loginRecuperarTexto');
     if (texto) texto.textContent = mensagem;
     const btn = document.getElementById('loginCriarComDados');
-    if (btn) btn.classList.toggle('hidden', !permitirCriarComDados);
+    if (btn) {
+        btn.hidden = !permitirCriarComDados;
+        btn.classList.toggle('hidden', !permitirCriarComDados);
+    }
 }
 
 async function tentarRecuperarAcesso() {
@@ -1557,6 +1567,9 @@ async function salvarFotoPerfilAcesso(event) {
 async function inicializarTelaAcesso() {
     const gate = document.getElementById('loginGate');
     if (!gate) return;
+    gate.hidden = false;
+    gate.classList.remove('hidden');
+    gate.removeAttribute('aria-hidden');
     document.body.classList.add('login-locked');
     mostrarModoTelaAcesso('carregando');
     if (typeof localforage === 'undefined') {
@@ -1595,7 +1608,7 @@ async function inicializarTelaAcesso() {
 
 function liberarTelaAcesso() {
     const gate = document.getElementById('loginGate');
-    if (gate) { gate.classList.add('hidden'); gate.setAttribute('aria-hidden','true'); }
+    if (gate) { gate.hidden = true; gate.classList.add('hidden'); gate.setAttribute('aria-hidden','true'); }
     document.body.classList.remove('login-locked');
     const senha = document.getElementById('loginSenha'); if (senha) senha.value = '';
     const nova = document.getElementById('loginNovaSenha'); if (nova) nova.value = '';
