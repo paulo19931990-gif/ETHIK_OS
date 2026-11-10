@@ -875,7 +875,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 109;
+const APP_VERSION = 110;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
 const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
@@ -4061,55 +4061,39 @@ function formatarKm(valor) {
 }
 
 function atualizarTotalKm() {
-    const saidaEl = document.getElementById('kmSaida');
-    const chegadaEl = document.getElementById('kmChegada');
+    // v110: o técnico informa diretamente o KM total. Os campos de saída/chegada
+    // permanecem apenas ocultos para preservar O.S. antigas.
     const totalEl = document.getElementById('kmTotal');
     const avisoEl = document.getElementById('kmAviso');
-    if (!saidaEl || !chegadaEl || !totalEl) return null;
-
-    const saida = parseKmSeguro(saidaEl.value);
-    const chegada = parseKmSeguro(chegadaEl.value);
-    let mensagem = '';
-    let total = null;
-
-    if (saida === null || chegada === null) {
-        totalEl.value = '';
-    } else if (!Number.isFinite(saida) || !Number.isFinite(chegada)) {
-        totalEl.value = '';
-        mensagem = 'Informe os quilômetros somente com números.';
-    } else if (chegada < saida) {
-        totalEl.value = '';
-        mensagem = 'KM de chegada não pode ser menor que o KM de saída.';
-    } else {
-        total = Math.round((chegada - saida) * 10) / 10;
-        totalEl.value = formatarKm(total);
-    }
-
+    if (!totalEl) return null;
+    const total = parseKmSeguro(totalEl.value);
+    const invalido = total !== null && !Number.isFinite(total);
+    const mensagem = invalido ? 'Informe o KM total somente com números.' : '';
+    if (!invalido && total !== null) totalEl.value = formatarKm(total);
     if (avisoEl) {
         avisoEl.textContent = mensagem;
         avisoEl.classList.toggle('hidden', !mensagem);
     }
-    chegadaEl.classList.toggle('ring-2', Boolean(mensagem));
-    chegadaEl.classList.toggle('ring-red-500', Boolean(mensagem));
-    return total;
+    totalEl.classList.toggle('ring-2', Boolean(mensagem));
+    totalEl.classList.toggle('ring-red-500', Boolean(mensagem));
+    return Number.isFinite(total) ? total : null;
+}
+
+function calcularKmTotalLegado(saidaValor, chegadaValor) {
+    const saida = parseKmSeguro(saidaValor);
+    const chegada = parseKmSeguro(chegadaValor);
+    if (!Number.isFinite(saida) || !Number.isFinite(chegada) || chegada < saida) return '';
+    return formatarKm(Math.round((chegada - saida) * 10) / 10);
 }
 
 function obterResumoKmRodape() {
     // Serviço 100% interno não exige deslocamento: placa/KM não aparecem no PDF.
     if (verificarServicoInternoGlobal()) return '';
     const placa = (document.getElementById('placaVeiculo')?.value || '').trim().toUpperCase();
-    const saidaEl = document.getElementById('kmSaida');
-    const chegadaEl = document.getElementById('kmChegada');
+    const total = parseKmSeguro(document.getElementById('kmTotal')?.value || '');
     const partes = [];
     if (placa) partes.push(`Placa: ${placa}`);
-    if (saidaEl && chegadaEl) {
-        const saida = parseKmSeguro(saidaEl.value);
-        const chegada = parseKmSeguro(chegadaEl.value);
-        if (Number.isFinite(saida) && Number.isFinite(chegada) && chegada >= saida) {
-            const total = Math.round((chegada - saida) * 10) / 10;
-            partes.push(`KM saída: ${formatarKm(saida)}`, `KM chegada: ${formatarKm(chegada)}`, `Total: ${formatarKm(total)} km`);
-        }
-    }
+    if (Number.isFinite(total)) partes.push(`KM total: ${formatarKm(total)} km`);
     return partes.join(' | ');
 }
 
@@ -4154,7 +4138,9 @@ async function restaurarDadosParaFormulario(doc) {
         if (padTecnico) padTecnico.clear();
         if (padCliente) padCliente.clear();
         if (doc.ordens) for (const o of doc.ordens) adicionarBlocoOS(o);
-        ['tecnico','nomeClienteFinal','cargo','setor','placaVeiculo','kmSaida','kmChegada'].forEach(k => { const el = document.getElementById(k); if (el) el.value = doc[k] || ''; });
+        ['tecnico','nomeClienteFinal','cargo','setor','placaVeiculo','kmSaida','kmChegada','kmTotal'].forEach(k => { const el = document.getElementById(k); if (el) el.value = doc[k] || ''; });
+        const kmTotalEl = document.getElementById('kmTotal');
+        if (kmTotalEl && !kmTotalEl.value) kmTotalEl.value = calcularKmTotalLegado(doc.kmSaida, doc.kmChegada);
         atualizarTotalKm();
         await switchTab('novaOs');
         await new Promise(resolve => setTimeout(resolve, 100));
