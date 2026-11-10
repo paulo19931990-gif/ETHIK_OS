@@ -14,7 +14,7 @@ function backupContext(extra = {}) {
     console: quiet, Blob, URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
     document: { getElementById: () => ({ value: 'backup' }),
       createElement: () => ({ click: () => downloads.push(true) }), body: { appendChild() {}, removeChild() {} } },
-    APP_VERSION: 109, registosBancoHoras: [], urlDownloadGerado: null,
+    APP_VERSION: 110, registosBancoHoras: [], urlDownloadGerado: null,
     obterHistoricoSalvo: async () => [{ id: 'os1' }],
     localforage: { getItem: async () => null }, prepararDocumentoParaBackup: async doc => doc,
     fecharModalExportar() {}, mostrarToast: message => messages.push(message), registrarErroApp() {},
@@ -72,7 +72,7 @@ test('successful rollback reports that imported data was not retained', async ()
 
 function workerContext(failAsset = false) {
   const listeners = {}, stores = new Map(), requests = [];
-  const base = 'https://example.test/ETHIK_OS/sw.js?v=109';
+  const base = 'https://example.test/ETHIK_OS/sw.js?v=110';
   const key = value => new URL(typeof value === 'string' ? value : value.url, base).href;
   const caches = {
     open: async name => {
@@ -99,7 +99,7 @@ test('failed installation never publishes a partial new cache or removes the pre
   const worker = workerContext(true);
   await worker.caches.open('multios-pro-v107');
   await assert.rejects(worker.dispatch('install'), /Asset crítico indisponível/);
-  assert.equal(worker.stores.has('multios-pro-v109'), false);
+  assert.equal(worker.stores.has('multios-pro-v110'), false);
   assert.equal(worker.stores.has('multios-pro-v107'), true);
 });
 
@@ -112,12 +112,11 @@ test('navigation and versioned assets use immutable matching snapshots without n
   const before = worker.requests.length;
   const request = (url, mode = 'cors') => ({ method: 'GET', url: 'https://example.test/ETHIK_OS/' + url, mode });
   assert.equal(await (await worker.dispatch('fetch', request('app.js?v=107'))).text(), 'old-script');
-  assert.match(await (await worker.dispatch('fetch', request('app.js?v=109'))).text(), /app.js\?v=109/);
-  assert.match(await (await worker.dispatch('fetch', request('index.html', 'navigate'))).text(), /index.html\?v=109/);
+  assert.match(await (await worker.dispatch('fetch', request('app.js?v=110'))).text(), /app.js\?v=110/);
+  assert.match(await (await worker.dispatch('fetch', request('index.html', 'navigate'))).text(), /index.html\?v=110/);
   assert.equal((await worker.dispatch('fetch', request('app.js?v=106'))).status, 503);
   assert.equal(worker.requests.length, before);
 });
-
 
 {
 const fs = require('node:fs');
@@ -144,7 +143,6 @@ function storage(entries = []) {
     setItem: async (k, v) => { data.set(k, structuredClone(v)); }, removeItem: async k => data.delete(k) };
 }
 
-// Regression checks for the audit findings, requiring corrected behavior.
 test('trash deletion preserves media still referenced by drafts', async () => {
   const doc = { id: 'os1', ordens: [{ fotos: [{ mediaId: 'photo1' }] }] };
   const db = storage([['trash_os_doc_os1', doc], ['draft_doc_os1', doc], ['photo_photo1', 'bytes']]);
@@ -306,7 +304,6 @@ test('edits arriving while the old draft is removed are protected again', async 
   assert.equal(db.data.get('draft_doc_os1').ordens[0].descricao, 'edited while saving');
   assert.match(source, /if \(!restaurandoDocumento\) marcarFormularioAlterado/);
 });
-
 
 test('invalid restored data is rejected before clearing the current form', async () => {
   const c=context(['validarEstruturaDocumento','restaurarDadosParaFormulario'], {
