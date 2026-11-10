@@ -1,6 +1,14 @@
 const CACHE_PREFIX = 'multios-pro-';
-const CACHE_NAME = 'multios-pro-v111';
-const CACHE_VERSION = '111';
+const FALLBACK_CACHE_VERSION = '112';
+const CACHE_VERSION = (() => {
+  try {
+    const versaoUrl = new URL(self.location.href).searchParams.get('v');
+    return /^\d+$/.test(String(versaoUrl || '')) ? String(versaoUrl) : FALLBACK_CACHE_VERSION;
+  } catch (_) {
+    return FALLBACK_CACHE_VERSION;
+  }
+})();
+const CACHE_NAME = `${CACHE_PREFIX}v${CACHE_VERSION}`;
 
 const ASSETS_CRITICOS = [
   './index.html','./app.js','./style.css','./bancoPecas.js',
