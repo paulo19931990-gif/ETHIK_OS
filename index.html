@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=113">
+    <link rel="manifest" href="./manifest.json?v=114">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -32,14 +32,14 @@
         })();
     </script>
 
-    <script src="./vendor/tailwindcss.js?v=113"></script>
-    <script src="./vendor/jspdf.umd.min.js?v=113"></script>
-    <script src="./vendor/jspdf.plugin.autotable.min.js?v=113"></script>
-    <script src="./vendor/signature_pad.umd.min.js?v=113"></script>
-    <script src="./vendor/pdf-lib.min.js?v=113"></script>
-    <script src="./vendor/fontkit.umd.min.js?v=113"></script>
-    <script src="./vendor/localforage.min.js?v=113"></script>
-    <script src="./vendor/pdf.min.js?v=113"></script>
+    <script src="./vendor/tailwindcss.js"></script>
+    <script src="./vendor/jspdf.umd.min.js"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js"></script>
+    <script src="./vendor/signature_pad.umd.min.js"></script>
+    <script src="./vendor/pdf-lib.min.js"></script>
+    <script src="./vendor/fontkit.umd.min.js"></script>
+    <script src="./vendor/localforage.min.js"></script>
+    <script src="./vendor/pdf.min.js"></script>
     
     <script>
         if ('serviceWorker' in navigator) {
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=113').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=114').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -88,12 +88,12 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof pdfjsLib !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js?v=113';
+                pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
             }
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=113">
+    <link rel="stylesheet" href="style.css?v=114">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -463,7 +463,7 @@
 
         /* v96: tela inicial de acesso local. Usa o mesmo app_pin das versões anteriores. */
         body.login-locked { overflow:hidden !important; }
-        /* v113: estados da tela de acesso não dependem do Tailwind para ficar ocultos durante atualização. */
+        /* v114: estados da tela de acesso não dependem do Tailwind para ficar ocultos durante atualização. */
         #loginGate[hidden], #loginGate [hidden] { display:none !important; }
         .login-gate {
             position:fixed; inset:0; z-index:300; display:flex; align-items:center; justify-content:center;
@@ -613,7 +613,7 @@
                     </div>
                     <div><div class="login-brand-title">Multi-OS <span style="color:#60a5fa">PRO</span></div><div class="login-brand-sub">Enterprise</div></div>
                 </div>
-                <span class="login-version">v113</span>
+                <span class="login-version">v114</span>
             </div>
 
             <div class="login-avatar-wrap">
@@ -622,7 +622,7 @@
                     <span id="loginFotoPlaceholder" class="login-avatar-placeholder" aria-hidden="true"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.1a7.5 7.5 0 0115 0A17.93 17.93 0 0112 21.75c-2.676 0-5.216-.584-7.5-1.65z"></path></svg></span>
                     <span class="login-avatar-edit" aria-hidden="true"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg></span>
                 </button>
-                <input id="loginFotoInput" type="file" accept="image/*" class="hidden" onchange="salvarFotoPerfilAcesso(event)">
+                <input id="loginFotoInput" type="file" accept="image/*" class="hidden" hidden onchange="salvarFotoPerfilAcesso(event)">
                 <div class="login-photo-text">Toque na foto para adicionar ou trocar</div>
             </div>
 
@@ -1299,8 +1299,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=113"></script>
-    <script src="bancoPecas.js?v=113"></script>
-    <script src="app.js?v=113"></script>
+    <script src="checklists/checklists.js?v=114"></script>
+    <script src="bancoPecas.js?v=114"></script>
+    <script src="app.js?v=114"></script>
 </body>
 </html>

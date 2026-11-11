@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'multios-pro-';
-const FALLBACK_CACHE_VERSION = '113';
+const FALLBACK_CACHE_VERSION = '114';
 const CACHE_VERSION = (() => {
   try {
     const versaoUrl = new URL(self.location.href).searchParams.get('v');
@@ -79,7 +79,14 @@ self.addEventListener('fetch', event => {
     // Navegação sempre abre o snapshot completo da versão ativa, sem buscar uma mistura nova na rede.
     if (request.mode === 'navigate') {
       const cache = await caches.open(CACHE_NAME);
-      return await cache.match('./index.html') || new Response('', { status:503, statusText:'App snapshot unavailable' });
+      const salvo = await cache.match('./index.html');
+      if (salvo) return salvo;
+      // Se o snapshot ativo ficou incompleto, tenta a rede sem apagar nenhum cache/dado local.
+      try {
+        const rede = await fetch(request, { cache:'no-store' });
+        if (respostaCacheavel(rede)) return rede;
+      } catch (_) {}
+      return new Response('', { status:503, statusText:'App snapshot unavailable' });
     }
 
     // Arquivos versionados são resolvidos exclusivamente pelo cache correspondente à versão solicitada.
@@ -87,11 +94,32 @@ self.addEventListener('fetch', event => {
     const versaoPedida = url.searchParams.get('v');
     if (versaoPedida) {
       const cache = await caches.open(`${CACHE_PREFIX}v${versaoPedida}`);
-      return await cache.match(path) || new Response('', { status:503, statusText:'Version snapshot unavailable' });
+      const salvo = await cache.match(path);
+      if (salvo) return salvo;
+
+      // Handoff seguro: uma página nova pode começar a pedir v114 enquanto a versão anterior
+      // ainda controla a aba por alguns instantes. Para versões FUTURAS, busca exatamente a URL
+      // solicitada na rede. Versões antigas ausentes continuam bloqueadas para não misturar snapshots.
+      const atualNum = Number(CACHE_VERSION);
+      const pedidaNum = Number(versaoPedida);
+      if (Number.isFinite(atualNum) && Number.isFinite(pedidaNum) && pedidaNum > atualNum) {
+        try {
+          const rede = await fetch(request, { cache:'no-store' });
+          if (respostaCacheavel(rede)) return rede;
+        } catch (_) {}
+      }
+      return new Response('', { status:503, statusText:'Version snapshot unavailable' });
     }
 
-    // Recursos sem ?v pertencem ao snapshot ativo e também são cache-only.
+    // Bibliotecas estáticas sem ?v podem ser servidas do snapshot ativo. Se o cache tiver
+    // sido corrompido/incompleto, tenta a rede sem remover o snapshot anterior.
     const cache = await caches.open(CACHE_NAME);
-    return await cache.match(path) || new Response('', { status:503, statusText:'Resource unavailable' });
+    const salvo = await cache.match(path);
+    if (salvo) return salvo;
+    try {
+      const rede = await fetch(request, { cache:'no-store' });
+      if (respostaCacheavel(rede)) return rede;
+    } catch (_) {}
+    return new Response('', { status:503, statusText:'Resource unavailable' });
   })());
 });

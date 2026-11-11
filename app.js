@@ -1,9 +1,52 @@
 /* app.js */
-if (typeof localforage !== 'undefined') {
-    localforage.config({ name: 'MultiOSProDB', storeName: 'app_data', description: 'Armazenamento offline robusto' });
-} else {
-    console.warn("Aviso: localforage indisponível. Cache offline falhou.");
+function configurarLocalforageMultiOS() {
+    if (typeof localforage === 'undefined') return false;
+    try {
+        localforage.config({ name: 'MultiOSProDB', storeName: 'app_data', description: 'Armazenamento offline robusto' });
+        return true;
+    } catch (e) {
+        console.warn('Não foi possível configurar o armazenamento local:', e);
+        return false;
+    }
 }
+
+let promessaRecuperacaoLocalforage = null;
+function carregarScriptRecuperacao(src, teste, timeoutMs = 8000) {
+    if (teste()) return Promise.resolve(true);
+    return new Promise(resolve => {
+        const script = document.createElement('script');
+        let terminou = false;
+        const finalizar = ok => {
+            if (terminou) return;
+            terminou = true;
+            clearTimeout(timer);
+            try { script.remove(); } catch (_) {}
+            resolve(Boolean(ok && teste()));
+        };
+        script.src = src;
+        script.async = false;
+        script.onload = () => finalizar(true);
+        script.onerror = () => finalizar(false);
+        const timer = setTimeout(() => finalizar(false), timeoutMs);
+        (document.head || document.documentElement).appendChild(script);
+    });
+}
+
+async function garantirLocalforageDisponivel() {
+    if (configurarLocalforageMultiOS()) return true;
+    if (promessaRecuperacaoLocalforage) return promessaRecuperacaoLocalforage;
+    promessaRecuperacaoLocalforage = (async () => {
+        // URL sem ?v é deliberada: se uma versão antiga ainda controla a página,
+        // ela consegue servir a biblioteca estática do próprio cache em vez de devolver 503.
+        const ok = await carregarScriptRecuperacao('./vendor/localforage.min.js', () => typeof localforage !== 'undefined');
+        if (!ok) return false;
+        return configurarLocalforageMultiOS();
+    })();
+    try { return await promessaRecuperacaoLocalforage; }
+    finally { promessaRecuperacaoLocalforage = null; }
+}
+
+if (!configurarLocalforageMultiOS()) console.warn('Aviso: localforage indisponível na primeira carga; recuperação automática será tentada.');
 
 // === SISTEMA INTELIGENTE DE PEÇAS ===
 // v73: separa catálogo oficial (somente leitura), peças aprendidas e aliases locais.
@@ -875,7 +918,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 113;
+const APP_VERSION = 114;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
 const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
@@ -1498,6 +1541,13 @@ async function tentarRecuperarAcesso() {
     mostrarModoTelaAcesso('carregando');
     setStatusTelaAcesso('Tentando acessar novamente os dados locais…');
     await new Promise(r => setTimeout(r, 180));
+    if (typeof localforage === 'undefined') {
+        const recuperouBiblioteca = await garantirLocalforageDisponivel();
+        if (recuperouBiblioteca) {
+            try { await iniciarBancoPecas(); } catch (_) {}
+            try { await carregarLogoDoArmazenamento(); } catch (_) {}
+        }
+    }
     await inicializarTelaAcesso();
 }
 
@@ -1573,8 +1623,11 @@ async function inicializarTelaAcesso() {
     document.body.classList.add('login-locked');
     mostrarModoTelaAcesso('carregando');
     if (typeof localforage === 'undefined') {
-        mostrarRecuperacaoAcesso('Armazenamento local indisponível. Não crie uma nova senha; feche e abra o aplicativo e tente novamente.', false);
-        return;
+        const recuperouBiblioteca = await garantirLocalforageDisponivel();
+        if (!recuperouBiblioteca) {
+            mostrarRecuperacaoAcesso('A biblioteca de armazenamento não carregou corretamente. Não crie uma nova senha. Mantenha a internet ligada e toque em Tentar recuperar dados.', false);
+            return;
+        }
     }
     try {
         await verificarArmazenamentoOperacional(3);
