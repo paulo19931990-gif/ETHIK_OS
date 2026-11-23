@@ -11,7 +11,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Link para o MANIFESTO e ÍCONES CORRIGIDOS -->
-    <link rel="manifest" href="./manifest.json?v=114">
+    <link rel="manifest" href="./manifest.json?v=115">
     <link rel="icon" type="image/png" href="./icon-192.png">
     <link rel="apple-touch-icon" href="./icon-192.png">
     
@@ -54,7 +54,7 @@
                 location.reload();
             });
 
-            navigator.serviceWorker.register('./sw.js?v=114').then(reg => {
+            navigator.serviceWorker.register('./sw.js?v=115').then(reg => {
                 const oferecerAtualizacao = worker => {
                     if (!worker || !navigator.serviceWorker.controller || workerJaOferecido === worker) return;
                     workerJaOferecido = worker;
@@ -93,7 +93,7 @@
         });
     </script>
     
-    <link rel="stylesheet" href="style.css?v=114">
+    <link rel="stylesheet" href="style.css?v=115">
 
     <!-- v81: tema claro/escuro consistente + Histórico; sem alterar PDF ou dados -->
     <style id="multiOsThemeStyles">
@@ -613,7 +613,7 @@
                     </div>
                     <div><div class="login-brand-title">Multi-OS <span style="color:#60a5fa">PRO</span></div><div class="login-brand-sub">Enterprise</div></div>
                 </div>
-                <span class="login-version">v114</span>
+                <span class="login-version">v115</span>
             </div>
 
             <div class="login-avatar-wrap">
@@ -1299,8 +1299,8 @@
     </div>
 
     <!-- Modelos de checklist fixos + banco de peças + aplicação -->
-    <script src="checklists/checklists.js?v=114"></script>
-    <script src="bancoPecas.js?v=114"></script>
-    <script src="app.js?v=114"></script>
+    <script src="checklists/checklists.js?v=115"></script>
+    <script src="bancoPecas.js?v=115"></script>
+    <script src="app.js?v=115"></script>
 </body>
 </html>

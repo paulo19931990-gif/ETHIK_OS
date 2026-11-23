@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'multios-pro-';
-const FALLBACK_CACHE_VERSION = '114';
+const FALLBACK_CACHE_VERSION = '115';
 const CACHE_VERSION = (() => {
   try {
     const versaoUrl = new URL(self.location.href).searchParams.get('v');

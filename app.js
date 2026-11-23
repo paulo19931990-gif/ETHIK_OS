@@ -918,7 +918,7 @@ let ultimoResultadoIntegridadeMidias = null;
 let ultimoResumoDiagnostico = '';
 const thumbnailsEmCriacao = new Set();
 
-const APP_VERSION = 114;
+const APP_VERSION = 115;
 const LOGIN_PROFILE_PHOTO_KEY = 'app_profile_photo';
 const STORAGE_GUARD_KEY = 'multi_os_storage_guard_v105';
 const STORAGE_PROBE_KEY = '__multi_os_storage_probe_v105';
@@ -2733,7 +2733,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         pdfContainer.addEventListener('touchcancel', finalizarPinch, {passive: true});
     }
 
-    adicionarBlocoOS(); atualizarVisibilidadeCamposPorBloco();
+    // v115: montar a O.S. inicial não é uma edição do técnico.
+    // A lista de dias externos cria o primeiro dia automaticamente; durante a inicialização
+    // isso deve ocorrer em modo de restauração para não gerar um rascunho fantasma.
+    const restaurandoAntesDaInicializacao = restaurandoDocumento;
+    restaurandoDocumento = true;
+    try {
+        adicionarBlocoOS();
+        atualizarVisibilidadeCamposPorBloco();
+    } finally {
+        restaurandoDocumento = restaurandoAntesDaInicializacao;
+    }
+    formularioSujo = false;
+    cancelarAutoSavePendente();
+    atualizarIndicadorRascunho('Nova O.S. — ainda não salva', 'edicao');
+
     const recuperouCamera = await verificarRetornoCapturaPendente();
     if (!recuperouCamera) await verificarRascunhoPendente();
 
@@ -2764,9 +2778,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (typeof localforage !== 'undefined') agendarLimpezaMidiasOrfas(4500);
 });
 
-// Ao Android colocar a PWA em segundo plano, tenta preservar o estado atual sem interromper a interface.
+function formularioTemConteudoUtilParaRascunho() {
+    const gerais = ['tecnico','nomeClienteFinal','cargo','setor','placaVeiculo','kmTotal'];
+    if (gerais.some(id => String(document.getElementById(id)?.value || '').trim())) return true;
+    if ((padTecnico && !padTecnico.isEmpty()) || (padCliente && !padCliente.isEmpty())) return true;
+
+    return [...document.querySelectorAll('.os-bloco')].some(bloco => {
+        const id = bloco.getAttribute('data-id');
+        const campos = ['cliente','osNum','equipamento','modelo','serie','tag','op','descricao'];
+        if (campos.some(campo => String(document.getElementById(`${campo}_${id}`)?.value || '').trim())) return true;
+
+        if ([...bloco.querySelectorAll('.peca-row-item input')].some(el => String(el.value || '').trim())) return true;
+        if (bloco.querySelector('.foto-item')) return true;
+        if (String(document.getElementById(`anexoMediaId_${id}`)?.value || '').trim() || String(document.getElementById(`anexoBase64_${id}`)?.value || '').trim()) return true;
+        if (String(document.getElementById(`checklistData_${id}`)?.value || '').trim()) return true;
+
+        const horarios = [
+            `hc_${id}`, `hi_${id}`, `hs_${id}`, `hiInterno_${id}`, `hfInterno_${id}`
+        ];
+        if (horarios.some(campoId => String(document.getElementById(campoId)?.value || '').trim())) return true;
+        if ([...bloco.querySelectorAll('.dia-externo-row input[type="time"]')].some(el => String(el.value || '').trim())) return true;
+
+        const naturezaExtra = ['cbOrcamento','cbInstalacao','cbServExterno','cbGarantia','cbMontagemSala','cbContrato','cbQualificacao','cbServicoGarantia'];
+        if (naturezaExtra.some(chave => document.getElementById(`${chave}_${id}`)?.checked)) return true;
+        if (!document.getElementById(`cbServInterno_${id}`)?.checked) return true;
+        return false;
+    });
+}
+
+// Ao Android colocar a PWA em segundo plano, tenta preservar apenas trabalho realmente iniciado.
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && formularioSujo && typeof localforage !== 'undefined' && document.querySelector('.os-bloco')) {
+    if (document.visibilityState === 'hidden' && formularioSujo && typeof localforage !== 'undefined' && document.querySelector('.os-bloco') && formularioTemConteudoUtilParaRascunho()) {
         try { void salvarRascunhoPersistente(recolherDadosDoFormulario(), true).catch(() => {}); } catch (_) {}
     }
 });
@@ -5269,9 +5311,12 @@ async function construirPDFBytes(onProgressCallback) {
         cy += 6; docOS.text(`EQUIP: ${truncarStr(getVal('equipamento', id), 45)}`, 15, cy); docOS.text(`MODELO: ${truncarStr(getVal('modelo', id), 25)}`, 140, cy);
         cy += 6; docOS.text(`SÉRIE: ${truncarStr(getVal('serie', id), 45)}`, 15, cy); docOS.text(`TAG: ${truncarStr(getVal('tag', id), 25)}`, 140, cy);
         const numeroOp = getVal('op', id).trim(); cy += 6; docOS.text(`NÚMERO DE OP: ${truncarStr(numeroOp, 55)}`, 15, cy);
-        cy += 8; docOS.text(`${cb('cbOrcamento_'+id)} ORÇAMENTO`, 15, cy); docOS.text(`${cb('cbInstalacao_'+id)} INSTALAÇÃO`, 65, cy); docOS.text(`${cb('cbServInterno_'+id)} SERV INTERNO`, 115, cy);
-        cy += 6; docOS.text(`${cb('cbGarantia_'+id)} EQUIPAMENTO EM GARANTIA`, 15, cy); docOS.text(`${cb('cbMontagemSala_'+id)} MONTAGEM SALA`, 65, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 115, cy);
-        cy += 6; docOS.text(`${cb('cbContrato_'+id)} CONTRATO`, 15, cy); docOS.text(`${cb('cbQualificacao_'+id)} QUALIFICAÇÃO`, 65, cy); docOS.text(`${cb('cbServicoGarantia_'+id)} SERVIÇO EM GARANTIA`, 115, cy);
+        // v115: opções em três colunas mais largas para textos longos não se sobreporem.
+        cy += 8; docOS.setFontSize(8);
+        docOS.text(`${cb('cbOrcamento_'+id)} ORÇAMENTO`, 15, cy); docOS.text(`${cb('cbInstalacao_'+id)} INSTALAÇÃO`, 80, cy); docOS.text(`${cb('cbServInterno_'+id)} SERV INTERNO`, 145, cy);
+        cy += 6; docOS.text(`${cb('cbGarantia_'+id)} EQUIPAMENTO EM GARANTIA`, 15, cy); docOS.text(`${cb('cbMontagemSala_'+id)} MONTAGEM SALA`, 80, cy); docOS.text(`${cb('cbServExterno_'+id)} SERV EXTERNO`, 145, cy);
+        cy += 6; docOS.text(`${cb('cbContrato_'+id)} CONTRATO`, 15, cy); docOS.text(`${cb('cbQualificacao_'+id)} QUALIFICAÇÃO`, 80, cy); docOS.text(`${cb('cbServicoGarantia_'+id)} SERVIÇO EM GARANTIA`, 145, cy);
+        docOS.setFontSize(9);
         cy += 8; docOS.setFont("helvetica", "bold"); docOS.text("DESCRIÇÃO", 15, cy); docOS.setFont("helvetica", "normal"); cy += 4; 
         docOS.autoTable({ startY: cy, margin: { left: 15, right: 15, top: margemTopoSegura, bottom: 20 }, body: [[getVal('descricao', id) || ' ']], theme: 'plain', styles: { lineWidth: 0.2, lineColor: [150, 150, 150], textColor: [0, 0, 0], fontSize: 9, cellPadding: 4, valign: 'middle' } });
         cy = docOS.lastAutoTable.finalY + 8; if (cy > 270) { docOS.addPage(); cy = margemTopoSegura; }
